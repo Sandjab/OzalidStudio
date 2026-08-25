@@ -1,0 +1,2356 @@
+//! Commandes exposées à l'interface. Aucune logique métier ici : elles orchestrent
+//! les modules, tiennent le projet ouvert et traduisent les erreurs en messages
+//! affichables.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use serde::Serialize;
+use tauri::Manager;
+use tauri::State;
+
+use crate::couverture::{self, Couverture, Ressource};
+use crate::ebook;
+use crate::epreuve;
+use crate::import;
+use crate::interieur::{self, Interieur, Reglage};
+use crate::manuscrit;
+use crate::maquettes;
+use crate::package;
+use crate::planche;
+use crate::preferences;
+use crate::projet::{Destinataire, Livraison, Livre, Mesure, Projet};
+use crate::providers::{self, Provider};
+use crate::typst::Typst;
+
+/// Le projet ouvert. Un seul à la fois : c'est un éditeur de document, pas une
+/// bibliothèque. `chemin` est absent tant que le projet n'a pas été enregistré.
+#[derive(Default)]
+pub struct Atelier {
+    ouvert: Mutex<Option<Ouvert>>,
+}
+
+struct Ouvert {
+    chemin: Option<PathBuf>,
+    projet: Projet,
+    /// Vrai dès qu'une commande a touché au projet sans qu'il ait été réécrit.
+    /// C'est lui, et lui seul, qui décide si fermer perd du travail.
+    modifie: bool,
+    /// La dernière image générée pour un envoi, tant qu'elle n'a pas été acceptée.
+    ///
+    /// Elle vit **hors du projet** : un modèle de diffusion rend rarement une écriture
+    /// lisible du premier coup, et l'archive n'a pas à conserver la suite des essais.
+    /// Accepter la fait entrer dans le `.ozalid` ; fermer le projet la laisse là où elle
+    /// était, c'est-à-dire nulle part.
+    candidat: Option<(usize, Vec<u8>)>,
+}
+
+/// Vue d'un prestataire pour l'interface.
+#[derive(Serialize)]
+pub struct ProviderVue {
+    cle: String,
+    libelle: String,
+    largeur: f64,
+    hauteur: f64,
+    fond_perdu: Option<f64>,
+    /// Vrai quand le prestataire publie de quoi calculer le dos. Faux, l'interface
+    /// réclame un relevé plutôt que de laisser croire à un chiffre.
+    dos_publie: bool,
+    papiers: Vec<PapierVue>,
+}
+
+#[derive(Serialize)]
+pub struct PapierVue {
+    cle: String,
+    libelle: String,
+    /// La couleur du papier, telle que le canevas des envois la peint. Elle traverse
+    /// jusqu'ici parce que c'est l'écran qui s'en sert, jamais la composition.
+    teinte: String,
+}
+
+impl From<&Provider> for ProviderVue {
+    fn from(p: &Provider) -> Self {
+        Self {
+            cle: p.cle.into(),
+            libelle: p.libelle.into(),
+            largeur: p.format.0,
+            hauteur: p.format.1,
+            fond_perdu: p.fond_perdu,
+            // Une pagination quelconque suffit à savoir si une formule existe.
+            dos_publie: p.papier_defaut().dos.mm(100).is_some(),
+            papiers: p
+                .papiers
+                .iter()
+                .map(|pa| PapierVue {
+                    cle: pa.cle.into(),
+                    libelle: pa.libelle.into(),
+                    teinte: pa.teinte.into(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Ce que l'interface affiche d'un projet ouvert.
+#[derive(Serialize)]
+pub struct ProjetVue {
+    pub chemin: Option<String>,
+    pub livre: Livre,
+    pub manuscrit_source: Option<String>,
+    /// Chapitres réellement trouvés dans le manuscrit embarqué.
+    pub chapitres_trouves: u32,
+    pub mots: u32,
+    /// Vrai quand le projet ne porte aucun texte. Distinct de « zéro chapitre » :
+    /// un manuscrit présent mais non composable en trouve zéro aussi, et ce n'est
+    /// pas la même chose à corriger.
+    pub manuscrit_absent: bool,
+    /// Modifications non enregistrées.
+    pub modifie: bool,
+    /// Maquette de couverture du projet, si le projet en porte une.
+    pub couverture: Option<Couverture>,
+    pub couverture_importee: bool,
+    pub images: Vec<String>,
+    pub interieur: Interieur,
+    /// Le PDF de l'intérieur composé pour le destinataire visé, s'il est sur le disque.
+    ///
+    /// **Dérivé, jamais retenu.** Un `.ozalid` déplacé — ou ouvert sur une autre machine,
+    /// ce pour quoi il est fait — porterait un chemin absolu qui ne mène nulle part. Il
+    /// se recalcule à chaque vue, et l'existence du fichier est vérifiée : un lien vers
+    /// un PDF effacé à la main est pire que pas de lien.
+    ///
+    /// Absent tant que la mesure l'est. Un PDF qui traîne d'une composition périmée n'est
+    /// pas celui du livre qu'on regarde, et le montrer ferait relire une pagination que
+    /// le pied vient de déclarer fausse.
+    pub interieur_pdf: Option<String>,
+    /// Les destinataires du livre et celui qu'on vise. Le front les joint à la table des
+    /// gabarits par leur clé : les libellés, les formats et les papiers viennent de là.
+    pub livraison: Livraison,
+    /// La main du livre et ses envois. Toujours sérialisée, même vide : le front y
+    /// lit la liste sans avoir à se demander si la section existe.
+    pub envois: crate::envoi::Envois,
+}
+
+#[derive(Serialize)]
+pub struct Composition {
+    /// Le projet tel qu'il ressort de la composition : c'est lui qui porte désormais la
+    /// mesure, rangée chez le destinataire visé. Les quatre chiffres ci-dessous en sont
+    /// une copie de lecture, issue du même calcul — le compte rendu de l'écran les lit
+    /// sans avoir à retrouver le destinataire.
+    pub projet: ProjetVue,
+    pub pages: u32,
+    pub gouttiere: f64,
+    pub blanche: bool,
+    pub chapitres: u32,
+    /// Épaisseur du dos en mm, ou `null` chez un prestataire à gabarit. C'est cette
+    /// valeur qui alimentera la planche : elle n'est jamais ressaisie.
+    pub dos: Option<f64>,
+    pub pdf: String,
+    /// Familles que Typst n'a pas trouvées et a remplacées par une écriture de repli
+    /// — sans échouer, donc sans que rien d'autre ne le dise. Vide, tout va bien.
+    pub polices_introuvables: Vec<String>,
+}
+
+#[tauri::command]
+pub fn providers_liste() -> Vec<ProviderVue> {
+    providers::PROVIDERS.iter().map(ProviderVue::from).collect()
+}
+
+/// Importe un répertoire de travail de l'ancienne chaîne (son `livre.toml`).
+/// Le projet devient le projet ouvert, sans être enregistré : l'utilisateur choisit
+/// où poser le `.ozalid`.
+#[tauri::command]
+pub fn projet_importer(livre_toml: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let projet = import::depuis_livre_toml(Path::new(&livre_toml))?;
+    poser(&atelier, None, projet, true)
+}
+
+/// Un projet vide, à remplir.
+///
+/// Ni assistant ni sélecteur de fichiers : c'est un document neuf, comme dans un
+/// traitement de texte. Le manuscrit se choisit quand on veut, l'enregistrement se
+/// fait quand on veut. Le projet n'est pas « modifié » : il n'y a encore rien à
+/// perdre, et le premier champ saisi lèvera le drapeau.
+#[tauri::command]
+pub fn projet_nouveau(atelier: State<Atelier>, app: tauri::AppHandle) -> Result<ProjetVue, String> {
+    poser(&atelier, None, projet_neuf(gabarit_de_depart(&app)), false)
+}
+
+/// Le projet neuf que sert `projet_nouveau`, gabarit de départ compris.
+///
+/// À part de la commande pour être vérifiable : une commande Tauri réclame un `State` et
+/// un `AppHandle` qu'aucun test ne fabrique, et la ligne qui pose le gabarit serait alors
+/// la seule du chantier que rien ne protège.
+fn projet_neuf(gabarit: String) -> Projet {
+    let mut p = Projet::nouveau(Livre::vide(), String::new());
+    p.meta.envois.gabarit = gabarit;
+    p
+}
+
+/// Le gabarit de départ tel que les préférences le portent, celui de la maison à défaut.
+///
+/// Un répertoire de configuration introuvable ne fait pas échouer la création d'un
+/// projet : on part alors du gabarit de la maison, ce qui est exactement l'état d'un
+/// poste où rien n'a encore été réglé.
+fn gabarit_de_depart(app: &tauri::AppHandle) -> String {
+    config(app)
+        .map(|d| preferences::charger(&d).gabarit_defaut)
+        .unwrap_or_else(|| crate::diffusion::GABARIT_DEFAUT.into())
+}
+
+/// Referme le projet sans rien écrire.
+///
+/// La garde des modifications appartient à l'appelant : cette commande ne demande
+/// rien, elle exécute. Les séparer permet à l'interface de poser la même question
+/// avant Nouveau, Ouvrir, Importer et la fermeture de la fenêtre.
+#[tauri::command]
+pub fn projet_fermer(atelier: State<Atelier>) {
+    *atelier.ouvert.lock().unwrap() = None;
+}
+
+/// Réécrit le projet là où il a déjà été enregistré.
+///
+/// Sans chemin mémorisé, l'interface bascule sur « Enregistrer sous… » : elle seule
+/// possède le sélecteur de fichiers.
+#[tauri::command]
+pub fn projet_enregistrer(
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let (vue, chemin) = {
+        let mut garde = atelier.ouvert.lock().unwrap();
+        let o = garde.as_mut().ok_or_else(aucun_projet)?;
+        let chemin = o
+            .chemin
+            .clone()
+            .ok_or_else(|| "projet jamais enregistré : choisir où le poser.".to_string())?;
+        (enregistrer_a(o, &chemin)?, chemin)
+    };
+    memoriser(&app, &chemin);
+    Ok(vue)
+}
+
+#[tauri::command]
+pub fn projet_ouvrir(
+    chemin: String,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let c = PathBuf::from(&chemin);
+    let projet = Projet::ouvrir(&c)?;
+    let vue = poser(&atelier, Some(c.clone()), projet, false)?;
+    memoriser(&app, &c);
+    Ok(vue)
+}
+
+#[tauri::command]
+pub fn projet_enregistrer_sous(
+    chemin: String,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let c = PathBuf::from(&chemin);
+    let vue = {
+        let mut garde = atelier.ouvert.lock().unwrap();
+        let o = garde.as_mut().ok_or_else(aucun_projet)?;
+        enregistrer_a(o, &c)?
+    };
+    memoriser(&app, &c);
+    Ok(vue)
+}
+
+/// Les projets récents dont le fichier existe encore.
+///
+/// L'écran d'accueil et le sous-menu « Ouvrir un récent » lisent cette même liste :
+/// il n'y a pas deux inventaires à tenir d'accord.
+#[tauri::command]
+pub fn recents_liste(app: tauri::AppHandle) -> Vec<String> {
+    config(&app)
+        .map(|d| preferences::charger(&d).recents_existants())
+        .unwrap_or_default()
+}
+
+/// Libellés des trois boutons de la garde.
+///
+/// Ce sont eux qui font foi au retour : avec une variante personnalisée, le plugin
+/// rend `MessageDialogResult::Custom(libellé)` et non un `Yes`/`No`. Les garder en
+/// constantes évite que la comparaison et l'affichage divergent.
+const ENREGISTRER: &str = "Enregistrer";
+const IGNORER: &str = "Ne pas enregistrer";
+const ANNULER: &str = "Annuler";
+
+/// Demande quoi faire des modifications non enregistrées.
+///
+/// Rend `"enregistrer"`, `"ignorer"` ou `"annuler"`, et `"ignorer"` d'emblée quand
+/// il n'y a rien à perdre. La commande **ne fait rien** de la réponse : c'est
+/// l'interface qui agit, parce qu'elle seule possède le sélecteur de fichiers dont
+/// « Enregistrer sous… » a besoin.
+///
+/// `async` par nécessité : `blocking_show_with_result` bloque son fil jusqu'au clic,
+/// et le plugin interdit de l'appeler depuis le fil principal — ce qui serait le cas
+/// d'une commande synchrone, dont le corps s'exécute en ligne dans le gestionnaire
+/// de protocole de la webview.
+#[tauri::command]
+pub async fn garde_modifications(
+    app: tauri::AppHandle,
+    atelier: State<'_, Atelier>,
+) -> Result<String, String> {
+    // Le verrou est relâché avant la boîte : la tenir pendant que l'utilisateur
+    // réfléchit condamnerait toute autre commande.
+    let modifie = {
+        let garde = atelier.ouvert.lock().unwrap();
+        garde.as_ref().is_some_and(|o| o.modifie)
+    };
+    if !modifie {
+        return Ok("ignorer".into());
+    }
+
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let reponse = app
+        .dialog()
+        .message("Ce projet porte des modifications qui ne sont pas enregistrées.")
+        .title("Enregistrer avant de continuer ?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            ENREGISTRER.into(),
+            IGNORER.into(),
+            ANNULER.into(),
+        ))
+        .blocking_show_with_result();
+
+    Ok(reponse_garde(reponse).to_string())
+}
+
+/// Ce que le clic de l'utilisateur veut dire.
+///
+/// Séparé de la boîte parce que la boîte ne se simule pas, alors que cette
+/// traduction, elle, se teste — et qu'une erreur ici perdrait du travail.
+fn reponse_garde(r: tauri_plugin_dialog::MessageDialogResult) -> &'static str {
+    use tauri_plugin_dialog::MessageDialogResult;
+    match r {
+        MessageDialogResult::Custom(s) if s == ENREGISTRER => "enregistrer",
+        MessageDialogResult::Custom(s) if s == IGNORER => "ignorer",
+        // Filet : si une plateforme rendait les valeurs canoniques plutôt que les
+        // libellés, le sens resterait le même. Tout le reste — fermeture de la
+        // boîte comprise — est un refus, parce que c'est le choix qui ne perd rien.
+        MessageDialogResult::Yes => "enregistrer",
+        MessageDialogResult::No => "ignorer",
+        _ => "annuler",
+    }
+}
+
+/// L'interface a-t-elle posé ses écouteurs ?
+///
+/// Tant qu'elle ne l'a pas fait, retenir la fermeture rendrait l'application
+/// inquittable : personne n'écouterait la demande. Un front qui n'a jamais démarré
+/// n'a rien à perdre non plus — on le laisse donc partir sans question.
+///
+/// Ce que ce filet suppose, et qui le rend sûr : le seul chemin vers
+/// `modifie = true` passe par `vue_modifiee`, elle-même appelée uniquement par des
+/// commandes qui exigent un projet déjà ouvert — et un projet ne s'ouvre que par une
+/// commande du front. `Atelier` naît vide (`Default`), donc tant que l'interface n'a
+/// pas tourné, il n'y a rien à perdre. **Si un jour `setup()` restaure ou reprend un
+/// projet automatiquement, cet invariant casse** : le filet laisserait alors partir
+/// un projet modifié sans le demander.
+#[derive(Default)]
+pub struct Interface {
+    pub prete: std::sync::atomic::AtomicBool,
+}
+
+/// L'interface annonce qu'elle écoute. Appelée une fois, au chargement.
+#[tauri::command]
+pub fn interface_prete(interface: State<Interface>) {
+    // `Relaxed` suffit : ce drapeau ne publie rien d'autre que lui-même — l'état
+    // partagé qui compte, `Atelier.ouvert`, a son propre `Mutex`. Les lecteurs ne
+    // font que décider d'émettre ou non, jamais lire une valeur posée à côté.
+    interface
+        .prete
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Relit le manuscrit à sa source d'origine et remplace la copie embarquée.
+///
+/// Le `.ozalid` est auto-portant : le manuscrit y est copié, donc une correction faite
+/// dans l'éditeur de texte n'y entre que par ce geste. Le chemin d'origine est
+/// mémorisé pour que ce soit un bouton et non une navigation.
+#[tauri::command]
+pub fn manuscrit_reimporter(atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let source = o.projet.meta.manuscrit.source.clone().ok_or_else(|| {
+        "ce projet ne mémorise aucune source de manuscrit — en choisir une.".to_string()
+    })?;
+    let texte = std::fs::read_to_string(&source)
+        .map_err(|e| format!("manuscrit introuvable ({source}) : {e}"))?;
+    o.projet.remplacer_texte(texte);
+    vue_modifiee(o)
+}
+
+/// Remplace le manuscrit par un fichier choisi, et mémorise son chemin.
+#[tauri::command]
+pub fn manuscrit_choisir(chemin: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let texte =
+        std::fs::read_to_string(&chemin).map_err(|e| format!("manuscrit illisible : {e}"))?;
+    o.projet.remplacer_texte(texte);
+    o.projet.meta.manuscrit.source = Some(chemin);
+    vue_modifiee(o)
+}
+
+#[tauri::command]
+pub fn livre_modifier(livre: Livre, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.modifier_livre(livre);
+    vue_modifiee(o)
+}
+
+/// Les jetons que les champs dérivés du livre peuvent citer.
+#[tauri::command]
+pub fn jetons_liste() -> Vec<&'static str> {
+    crate::gabarit::jetons()
+}
+
+#[tauri::command]
+pub fn polices_texte_liste() -> Vec<&'static str> {
+    interieur::POLICES_TEXTE.to_vec()
+}
+
+/// L'écriture d'intérieur choisie, en donnée `data:`, pour l'échantillon de l'onglet
+/// Livre. Comme les aperçus : la fenêtre ne lit pas les fichiers, une police n'y entre
+/// pas autrement.
+///
+/// Les octets sont ceux que Typst composera, pris dans les mêmes répertoires. Un
+/// échantillon rendu dans la police du poste montrerait une écriture que le livre
+/// n'aura pas — et c'est un mensonge qu'aucune fenêtre ne rattrape : le repli d'un
+/// navigateur est muet, comme celui de Typst.
+///
+/// Le romain seul : l'échantillon montre une écriture, pas ses coupes. La lecture
+/// parcourt les répertoires de polices en entier — c'est le prix de `polices_du_livre`,
+/// et il se paie une fois par famille, la fenêtre gardant ce qu'elle a reçu.
+#[tauri::command]
+pub fn police_texte_donnee(famille: String) -> Result<String, String> {
+    let typst = typst()?;
+    let polices = crate::ebook::polices_du_livre(&famille, typst.polices()).ok_or_else(|| {
+        format!("police d'intérieur « {famille} » introuvable dans les polices embarquées")
+    })?;
+    Ok(format!(
+        "data:font/ttf;base64,{}",
+        base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &polices.romain.octets
+        )
+    ))
+}
+
+#[tauri::command]
+pub fn interieur_modifier(
+    interieur: Interieur,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    interieur.verifie()?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.modifier_interieur(interieur);
+    vue_modifiee(o)
+}
+
+/* ---------- destinataires ---------- */
+
+/// Le destinataire visé, avec le gabarit et le papier de la table qui vont avec.
+///
+/// Le point de passage unique de tout ce qui a besoin d'un prestataire : composer,
+/// apercevoir, mesurer un dos. Il n'y a plus de second endroit où le choisir.
+fn vise(
+    o: &Ouvert,
+) -> Result<(&'static Provider, &'static providers::Papier, &Destinataire), String> {
+    let d = o
+        .projet
+        .meta
+        .livraison
+        .courant()
+        .ok_or("aucun destinataire : en déclarer un à l'étape Livraison.")?;
+    let pr = providers::provider(&d.provider)
+        .ok_or_else(|| format!("prestataire inconnu : {}", d.provider))?;
+    Ok((pr, papier(pr, Some(&d.papier))?, d))
+}
+
+/// Ajoute un prestataire à la liste des destinataires, avec son papier par défaut.
+#[tauri::command]
+pub fn destinataire_ajouter(
+    provider_cle: String,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let pr = providers::provider(&provider_cle)
+        .ok_or_else(|| format!("prestataire inconnu : {provider_cle}"))?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let l = &mut o.projet.meta.livraison;
+    if l.destinataires.iter().any(|d| d.provider == pr.cle) {
+        return Err(format!("{} est déjà destinataire de ce livre.", pr.libelle));
+    }
+    l.destinataires.push(Destinataire::pour(pr));
+    vue_modifiee(o)
+}
+
+/// Retire un destinataire — sauf le dernier : c'est lui qui donne son format à
+/// l'aperçu, et une liste vide rendrait la Couverture inutilisable.
+#[tauri::command]
+pub fn destinataire_retirer(
+    provider_cle: String,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let l = &mut o.projet.meta.livraison;
+    if l.destinataires.len() < 2 {
+        return Err(
+            "un livre garde au moins un destinataire : c'est lui qui donne le format \
+             sous lequel on regarde la couverture."
+                .into(),
+        );
+    }
+    let avant = l.destinataires.len();
+    l.destinataires.retain(|d| d.provider != provider_cle);
+    if l.destinataires.len() == avant {
+        return Err(format!(
+            "{provider_cle} n'est pas destinataire de ce livre."
+        ));
+    }
+    // Retirer celui qu'on visait laisse le pointeur en l'air : il retombe sur le
+    // premier, plutôt que de désigner un absent jusqu'au prochain geste.
+    if l.courant().is_none() {
+        l.courant = l.destinataires[0].provider.clone();
+    }
+    vue_modifiee(o)
+}
+
+/// Le papier d'un destinataire et, chez ceux qui ne publient rien, ses relevés.
+#[tauri::command]
+pub fn destinataire_regler(
+    destinataire: Destinataire,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let pr = providers::provider(&destinataire.provider)
+        .ok_or_else(|| format!("prestataire inconnu : {}", destinataire.provider))?;
+    papier(pr, Some(&destinataire.papier))?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let place = o
+        .projet
+        .meta
+        .livraison
+        .destinataires
+        .iter_mut()
+        .find(|d| d.provider == destinataire.provider)
+        .ok_or_else(|| format!("{} n'est pas destinataire de ce livre.", pr.libelle))?;
+    *place = destinataire;
+    // Le papier change l'épaisseur d'une page, le relevé change le dos directement :
+    // dans les deux cas la mesure retenue ne vaut plus. Effacée ici plutôt que de faire
+    // confiance à ce que l'interface a envoyé — elle rebâtit le destinataire depuis ses
+    // contrôles, et n'a aucune raison de porter une mesure.
+    place.compose = None;
+    vue_modifiee(o)
+}
+
+/// Déplace le pointeur : pour qui l'on compose, et sous quel format on regarde.
+///
+/// Le geste modifie le projet, parce que le pointeur est enregistré avec lui : rouvrir
+/// un livre le rend tel qu'on l'avait laissé, visé sur le même destinataire.
+#[tauri::command]
+pub fn destinataire_viser(
+    provider_cle: String,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let l = &mut o.projet.meta.livraison;
+    if !l.destinataires.iter().any(|d| d.provider == provider_cle) {
+        return Err(format!(
+            "{provider_cle} n'est pas destinataire de ce livre."
+        ));
+    }
+    l.courant = provider_cle;
+    vue_modifiee(o)
+}
+
+/// Compose l'intérieur du projet ouvert pour le destinataire visé, et rend le compte
+/// de pages avec le dos qui en découle.
+#[tauri::command]
+pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let (pr, papier, _) = vise(o)?;
+
+    let livre = &o.projet.meta.livre;
+    let int = &o.projet.meta.interieur;
+    // `interieur::source` interpole la police sans échappement : la validation est ici.
+    int.verifie()?;
+    let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
+
+    let dossier = sorties_dossier(o, pr.cle)?;
+    std::fs::create_dir_all(&dossier).map_err(|e| {
+        format!(
+            "répertoire de sortie inutilisable ({}) : {e}",
+            dossier.display()
+        )
+    })?;
+
+    let typst = typst()?;
+    let src = dossier.join(format!("interieur-{}.typ", pr.cle));
+
+    // La convergence ne mesure que le compte de pages : aucun PDF n'est produit tant
+    // que le réglage n'est pas stable.
+    let r = interieur::converge(pr, |reglage| {
+        ecrire(
+            &src,
+            &interieur::source(livre, int, pr, reglage, &chapitres, None),
+        )?;
+        typst.pages(&src)
+    })?;
+
+    let reglage = Reglage {
+        gouttiere: r.gouttiere,
+        blanche: r.blanche,
+    };
+    ecrire(
+        &src,
+        &interieur::source(livre, int, pr, &reglage, &chapitres, None),
+    )?;
+    let pdf = interieur_pdf(&dossier, pr.cle);
+    let polices_introuvables = typst.compile(&src, &pdf)?;
+
+    // Le compte rendu dit « Chapitres » : une préface ou une page de partie n'en est
+    // pas un, et l'onglet Livre en affiche déjà le compte juste.
+    let chapitres = chapitres.iter().filter(|p| p.est_chapitre()).count() as u32;
+    let dos = papier.dos.mm(r.pages);
+
+    // La mesure entre dans le projet, chez le destinataire pour qui elle a été faite :
+    // revenir à ce prestataire, ou rouvrir le livre, ne la fera plus recalculer. Le
+    // repli de police y entre avec elle : il décrit le PDF qui vient d'être écrit, et
+    // ce PDF ne redevient pas juste en refermant le livre.
+    o.projet.meta.livraison.retenir_mesure(
+        pr.cle,
+        Mesure {
+            pages: r.pages,
+            gouttiere: r.gouttiere,
+            blanche: r.blanche,
+            dos,
+            polices_introuvables: polices_introuvables.clone(),
+        },
+    );
+
+    Ok(Composition {
+        projet: vue_modifiee(o)?,
+        pages: r.pages,
+        gouttiere: r.gouttiere,
+        blanche: r.blanche,
+        chapitres,
+        dos,
+        pdf: pdf.to_string_lossy().into_owned(),
+        polices_introuvables,
+    })
+}
+
+/// Tire l'épreuve de relecture à la racine des sorties : elle ne vise aucun éditeur,
+/// elle ne descend donc pas dans un répertoire de prestataire.
+#[tauri::command]
+pub fn epreuve_tirer(corps_pt: f64, atelier: State<Atelier>) -> Result<String, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let livre = &o.projet.meta.livre;
+    let int = &o.projet.meta.interieur;
+    // `epreuve::source` interpole la police sans échappement : la validation est ici.
+    int.verifie()?;
+    let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
+
+    let dossier = sorties_racine(o)?;
+    std::fs::create_dir_all(&dossier).map_err(|e| {
+        format!(
+            "répertoire de sortie inutilisable ({}) : {e}",
+            dossier.display()
+        )
+    })?;
+    let src = dossier.join("epreuve.typ");
+    ecrire(&src, &epreuve::source(livre, int, &chapitres, corps_pt))?;
+    let pdf = dossier.join("epreuve.pdf");
+    // Les substitutions de police ne sont pas remontées ici : l'épreuve se lit pour
+    // son texte, et composer l'intérieur — qui emploie les mêmes polices — les
+    // signale déjà dans son compte rendu.
+    typst()?.compile(&src, &pdf)?;
+    Ok(pdf.to_string_lossy().into_owned())
+}
+
+/* ---------- couverture ---------- */
+
+#[derive(Serialize)]
+pub struct MaquetteVue {
+    cle: String,
+    libelle: String,
+    /// Ni renommable, ni effaçable. La fenêtre s'en sert pour ne pas offrir des gestes
+    /// que le Rust refuserait de toute façon — l'interface est une politesse, le refus
+    /// est ailleurs.
+    fournie: bool,
+}
+
+#[tauri::command]
+pub fn maquettes_liste(app: tauri::AppHandle) -> Vec<MaquetteVue> {
+    maquettes::toutes(config(&app).as_deref())
+        .into_iter()
+        .map(|m| MaquetteVue {
+            cle: m.cle,
+            libelle: m.nom,
+            fournie: m.fournie,
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn polices_liste() -> Vec<&'static str> {
+    couverture::POLICES.to_vec()
+}
+
+/// Charge une maquette de départ. Elle remplace la mise en page **et les images**,
+/// jamais l'identité du livre : le titre et l'auteur imprimés restent ceux du projet.
+///
+/// Les images se posent rôle par rôle : une maquette qui porte une photo de 1ère la
+/// pose, une maquette qui n'en porte pas laisse celle du livre où elle est. Sans quoi
+/// charger une maquette purement typographique effacerait la photo du livre.
+#[tauri::command]
+pub fn maquette_choisir(
+    cle: String,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let m = maquettes::par_cle(config(&app).as_deref(), &cle)
+        .ok_or_else(|| format!("maquette inconnue : {cle}"))?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.meta.couverture.maquette = Some(m.couverture);
+    for (nom, octets) in m.images {
+        poser_image(&mut o.projet.images, nom, octets);
+    }
+    vue_modifiee(o)
+}
+
+/// Enregistre la couverture du projet ouvert comme maquette personnalisée.
+///
+/// Le projet n'est pas touché : ce geste écrit à côté, dans le répertoire de
+/// configuration, et ne rend donc aucune `ProjetVue`. La fenêtre rafraîchit sa liste en
+/// rappelant `maquettes_liste`, seule source de vérité.
+#[tauri::command]
+pub fn maquette_enregistrer(
+    nom: String,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<(), String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let cv = o
+        .projet
+        .meta
+        .couverture
+        .maquette
+        .as_ref()
+        .ok_or("aucune maquette : en choisir une avant de l'enregistrer.")?;
+    maquettes::ecrire(&dir, &nom, cv, &o.projet.images)
+}
+
+/// Clone une maquette, fournie ou non, sous un nom que le Rust fabrique.
+///
+/// Aucun nom n'est demandé : « Bandeau (copie) » convient neuf fois sur dix, et
+/// « Renommer » est à côté pour la dixième. Faire saisir ce nom aurait obligé le
+/// dialogue à se donner un mode — un champ qui veut dire tantôt « enregistrer », tantôt
+/// « cloner ceci ».
+#[tauri::command]
+pub fn maquette_cloner(cle: String, app: tauri::AppHandle) -> Result<(), String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    let m =
+        maquettes::par_cle(Some(&dir), &cle).ok_or_else(|| format!("maquette inconnue : {cle}"))?;
+    let nom = maquettes::nom_de_copie(Some(&dir), &m.nom);
+    maquettes::ecrire(&dir, &nom, &m.couverture, &m.images)
+}
+
+/// Renomme une personnalisée. Le refus sur une fournie est dans `maquettes`, pas ici :
+/// c'est lui la garantie, l'interface ne fait que ne pas offrir le bouton.
+#[tauri::command]
+pub fn maquette_renommer(cle: String, nom: String, app: tauri::AppHandle) -> Result<(), String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    maquettes::renommer(&dir, &cle, &nom)
+}
+
+#[tauri::command]
+pub fn maquette_effacer(cle: String, app: tauri::AppHandle) -> Result<(), String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    maquettes::effacer(&dir, &cle)
+}
+
+#[tauri::command]
+pub fn couverture_modifier(
+    couverture: Couverture,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.meta.couverture.maquette = Some(couverture);
+    vue_modifiee(o)
+}
+
+/// Nom sous lequel une image entre dans le projet, selon la face qu'elle sert.
+///
+/// Le nom porte le rôle — c'est ainsi que la composition le lit — et l'extension
+/// vient du fichier choisi, parce que Typst distingue le PNG du JPEG.
+fn nom_image(face: &str, ext: &str) -> Result<String, String> {
+    match face {
+        "une" => Ok(format!("couverture.{ext}")),
+        "quatre" => Ok(format!("quatrieme.{ext}")),
+        autre => Err(format!("face inconnue : {autre}")),
+    }
+}
+
+/// Remplace l'image d'une face par un fichier choisi.
+///
+/// Le projet est auto-portant : l'image y est copiée, comme le manuscrit. Elle est
+/// refusée ici plutôt qu'à la composition — une image dont Typst ne saura rien faire
+/// n'a pas à entrer dans un `.ozalid` qui l'emporterait partout ensuite.
+#[tauri::command]
+pub fn image_choisir(
+    face: String,
+    chemin: String,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let source = Path::new(&chemin);
+    let ext = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .filter(|e| matches!(e.as_str(), "jpg" | "jpeg" | "png"))
+        .ok_or("image refusée : seuls le JPEG et le PNG se composent.")?;
+    let nom = nom_image(&face, &ext)?;
+    let octets = std::fs::read(source).map_err(|e| format!("image illisible : {e}"))?;
+    Ressource::depuis(&nom, &octets)
+        .ok_or_else(|| format!("{nom} : dimensions illisibles (ni PNG ni JPEG)."))?;
+
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    poser_image(&mut o.projet.images, nom, octets);
+    vue_modifiee(o)
+}
+
+/// Pose l'image d'une face et retire celle qui tenait déjà ce rôle.
+///
+/// Le remplacement se fait par rôle, pas par nom : une image importée s'appelle comme
+/// elle veut, et deux images qui servent la même face laisseraient l'ordre alphabétique
+/// décider laquelle se compose.
+fn poser_image(images: &mut BTreeMap<String, Vec<u8>>, nom: String, octets: Vec<u8>) {
+    let quatre = package::sert_la_quatrieme(&nom);
+    images.retain(|n, _| package::sert_la_quatrieme(n) != quatre);
+    images.insert(nom, octets);
+}
+
+/// Retire du projet la photo que ce nom désigne.
+///
+/// Par nom et non par rôle, contrairement à [`poser_image`] : la fenêtre montre les noms
+/// que cette même vue vient de lui servir, et c'est l'un d'eux qu'on clique. Un nom
+/// absent est refusé plutôt qu'ignoré — il dit une liste périmée, donc un geste qui a
+/// porté sur autre chose que ce qu'on voyait.
+fn retirer_image(images: &mut BTreeMap<String, Vec<u8>>, nom: &str) -> Result<(), String> {
+    images
+        .remove(nom)
+        .map(|_| ())
+        .ok_or_else(|| format!("{nom} : le projet ne porte pas cette image."))
+}
+
+/// Retire une photo du projet, et la retire donc du `.ozalid`.
+///
+/// C'est le seul geste qui allège l'archive : régler le fond de la 4ème sur le papier de
+/// la 1ère cesse de composer la photo, mais elle reste embarquée — et une photo
+/// d'appareil pèse plus que le manuscrit.
+///
+/// La maquette n'est pas touchée : un fond réglé sur « Image propre » le reste, et
+/// compose alors son papier seul. Le corriger d'autorité déciderait à la place de qui
+/// remplace une photo par une autre en deux gestes.
+#[tauri::command]
+pub fn image_retirer(nom: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    retirer_image(&mut o.projet.images, &nom)?;
+    vue_modifiee(o)
+}
+
+/// Ce qu'un aperçu de face donne à voir : l'image, et où la planche se coupe et se plie
+/// s'il y a lieu.
+#[derive(Serialize)]
+pub struct Apercu {
+    pub image: String,
+    /// Absents sur les faces qui se composent au format rogné, sans fond perdu — la
+    /// 1ère, la 4ème et le dos. C'est le Rust qui l'affirme plutôt que la fenêtre qui
+    /// le déduise d'un nom de face : le jour où une face gagne du fond perdu, elle
+    /// gagne ses repères sans qu'on y pense.
+    pub reperes: Option<Reperes>,
+    /// Ce que la planche mesure, en millimètres, pour l'écrire sous l'aperçu.
+    ///
+    /// Séparé des repères, avec lesquels il voyage pourtant toujours : les repères sont
+    /// des fractions posées **sur** l'image, ceux-ci des millimètres écrits **sous**
+    /// elle. Les confondre ferait porter à l'habillage une unité qui n'y survit pas.
+    pub mesures: Option<Mesures>,
+}
+
+/// Les quatre mesures d'une planche, en millimètres.
+///
+/// Elles ne se recalculent pas dans la fenêtre : la largeur d'une planche est deux
+/// couvertures, un dos et deux fonds perdus, et cette règle est déjà écrite une fois,
+/// dans `planche::Gabarit`. Redite en JavaScript, elle dériverait le jour où un
+/// prestataire compterait autrement — et le chiffre affiché ne serait plus celui du
+/// fichier remis.
+#[derive(Serialize)]
+pub struct Mesures {
+    pub largeur: f64,
+    pub hauteur: f64,
+    pub dos: f64,
+    pub fond_perdu: f64,
+}
+
+/// Où la planche se coupe et où elle se plie, en fraction de ses propres dimensions.
+///
+/// `x` et `y` sont la part du fond perdu sur la largeur puis sur la hauteur ; `pli_quatre`
+/// et `pli_une` sont les deux plis qui encadrent le dos, comptés depuis le bord gauche.
+/// Les quatre voyagent ensemble parce qu'ils s'affichent ensemble, et qu'aucun n'existe
+/// sans les autres : ce sont les repères d'une planche, ceux-là mêmes que le PDF remis
+/// au prestataire ne porte pas.
+#[derive(Serialize)]
+pub struct Reperes {
+    pub x: f64,
+    pub y: f64,
+    pub pli_quatre: f64,
+    pub pli_une: f64,
+}
+
+/// Aperçu d'une face de couverture ou de la planche entière, en PNG encodé dans une
+/// URL `data:`.
+///
+/// L'aperçu sort du **même** moteur et de la même source que le PDF final : il n'y a
+/// donc pas d'écart écran/export à surveiller, contrairement à l'atelier HTML.
+///
+/// `dos_mm` vient de la dernière composition de l'intérieur ; il n'est jamais saisi.
+/// Sans lui, la planche ne s'aperçoit pas — c'est voulu : une planche dont le dos
+/// serait deviné donnerait à voir un livre qui n'existe pas.
+#[tauri::command]
+pub fn couverture_apercu(
+    face: String,
+    dos_mm: Option<f64>,
+    atelier: State<Atelier>,
+) -> Result<Apercu, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let cv = o
+        .projet
+        .meta
+        .couverture
+        .maquette
+        .as_ref()
+        .ok_or("aucune maquette : en choisir une.")?;
+    // Le format vient du destinataire visé, et le fond perdu de son relevé quand le
+    // prestataire n'en publie pas : les deux sont dans le projet, plus dans un champ.
+    let (pr, _, d) = vise(o)?;
+    let fond_perdu_mm = d.fond_perdu_mm;
+
+    // Répertoire de travail de l'aperçu : temporaire, jamais à côté du projet. Un
+    // aperçu n'est pas une sortie, et il est réécrit à chaque réglage.
+    let dossier = std::env::temp_dir().join("ozalid-apercu");
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("aperçu impossible : {e}"))?;
+
+    let (une, quatre) = ecrire_images(&o.projet, &dossier)?;
+    // Seule la planche se compose avec du fond perdu : les trois autres faces n'ont
+    // rien à faire marquer.
+    let mut reperes = None;
+    let mut mesures = None;
+    let src = match face.as_str() {
+        "une" => couverture::source_une(&o.projet.meta.livre, cv, pr.format, une.as_ref(), dos_mm),
+        "quatre" => couverture::source_quatre(
+            &o.projet.meta.livre,
+            cv,
+            pr.format,
+            quatre.as_ref(),
+            une.as_ref(),
+            dos_mm,
+        )?,
+        // Le dos seul se compose sans fond perdu : il ne réclame donc que la
+        // pagination, là où la planche réclame aussi le gabarit du prestataire.
+        "dos" => {
+            let dos = dos_mm.ok_or(
+                "dos : composer l'intérieur d'abord, c'est la pagination qui donne le dos.",
+            )?;
+            planche::source_dos(&o.projet.meta.livre, cv, pr.format, dos, une.as_ref())
+        }
+        "planche" => {
+            let dos = dos_mm.ok_or(
+                "planche : composer l'intérieur d'abord, c'est la pagination qui donne le dos.",
+            )?;
+            let fp = pr.fond_perdu.or(fond_perdu_mm).ok_or_else(|| {
+                format!(
+                    "{} ne publie pas de fond perdu : le relever sur son gabarit et le saisir.",
+                    pr.libelle
+                )
+            })?;
+            let g = planche::Gabarit {
+                format: pr.format,
+                dos,
+                fond_perdu: fp,
+            };
+            let (x, y) = g.part_fond_perdu();
+            let (pli_quatre, pli_une) = g.plis();
+            reperes = Some(Reperes {
+                x,
+                y,
+                pli_quatre,
+                pli_une,
+            });
+            mesures = Some(Mesures {
+                largeur: g.largeur(),
+                hauteur: g.hauteur(),
+                dos: g.dos,
+                fond_perdu: g.fond_perdu,
+            });
+            planche::source(&o.projet.meta.livre, cv, &g, une.as_ref(), quatre.as_ref())?
+        }
+        autre => return Err(format!("face inconnue : {autre}")),
+    };
+
+    let typ = dossier.join(format!("apercu-{face}.typ"));
+    let png = dossier.join(format!("apercu-{face}.png"));
+    ecrire(&typ, &src)?;
+    typst()?.apercu(&typ, &png, 1, 150)?;
+
+    Ok(Apercu {
+        image: donnee_png(&png)?,
+        reperes,
+        mesures,
+    })
+}
+
+/// De quoi montrer la photo bouger sous la souris sans rien recomposer.
+///
+/// Trois pièces qui, empilées dans cet ordre, refont la face à l'identique : le papier,
+/// la photo dans sa zone, et l'habillage par-dessus. La fenêtre n'a plus qu'à déplacer
+/// la pièce du milieu — et ce qu'elle montre pendant le geste est ce que Typst
+/// composera, pas une approximation.
+///
+/// Le prix est d'une composition de plus, demandée **après** l'aperçu et jamais pendant
+/// un geste : l'habillage ne dépend pas du cadrage, il vaut donc pour le geste entier.
+#[derive(Serialize)]
+pub struct Calques {
+    /// La face composée sans son papier ni sa photo, en PNG à fond transparent : le
+    /// voile, le cadre, les textes, la pastille — tout ce qui se pose *par-dessus*
+    /// l'image, et rien d'autre.
+    ///
+    /// Ce n'est pas une source de plus : c'est la même, composée sur un papier
+    /// transparent et sans photo. Une deuxième façon d'écrire une couverture finirait
+    /// par montrer autre chose que ce qui s'imprime.
+    pub habillage: String,
+    /// La photo telle que le projet la porte, en donnée `data:`.
+    pub photo: String,
+    pub naturel_l: u32,
+    pub naturel_h: u32,
+    /// La zone où la photo se compose, en fraction de la face — la seule unité qui
+    /// survive à un aperçu affiché à la taille que la fenêtre lui laisse.
+    pub zone: Zone,
+    /// Le papier de cette face-là : la 4ème peut avoir le sien.
+    pub papier: String,
+}
+
+#[derive(Serialize)]
+pub struct Zone {
+    pub x: f64,
+    pub y: f64,
+    pub l: f64,
+    pub h: f64,
+}
+
+/// Le papier rendu transparent : c'est ce qui distingue l'habillage de la face entière.
+const PAPIER_TRANSPARENT: &str = "#00000000";
+
+/// Les calques d'une face manipulable, ou `None` s'il n'y a pas de photo à y déplacer.
+///
+/// Deux faces seulement : la 1ère et la 4ème. Le dos ne se cadre pas — sa photo, quand
+/// il en porte une, est la tranche du prolongement de la 1ère, et se règle là-bas —, et
+/// la planche est une vue de contrôle qui ne règle rien.
+#[tauri::command]
+pub fn couverture_calques(
+    face: String,
+    dos_mm: Option<f64>,
+    atelier: State<Atelier>,
+) -> Result<Option<Calques>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let Some(cv) = o.projet.meta.couverture.maquette.as_ref() else {
+        return Ok(None);
+    };
+    let (pr, _, _) = vise(o)?;
+    let format = pr.format;
+    let b = couverture::Boite::rognee(format);
+
+    let dossier = std::env::temp_dir().join("ozalid-apercu");
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("aperçu impossible : {e}"))?;
+    let (une, quatre) = ecrire_images(&o.projet, &dossier)?;
+
+    // La zone et la photo, demandées au moteur de composition plutôt que déduites d'un
+    // nom de mode : c'est ce qui garantit que la souris cadre là où Typst composera.
+    let pano = couverture::panorama_face(format, dos_mm, true);
+    let (zone, r, papier) = match face.as_str() {
+        "une" => {
+            let Some(r) = une.as_ref() else {
+                return Ok(None);
+            };
+            match couverture::image_une(cv, format, Some(r), b, pano) {
+                Some((zone, _)) => (zone, r, cv.papier.clone()),
+                None => return Ok(None),
+            }
+        }
+        // La 4ème ne se cadre à la souris que lorsqu'elle porte sa propre image. En
+        // prolongement, son cadrage est celui de la 1ère — le panneau le dit déjà, et
+        // offrir ici une poignée qui déplacerait la photo de l'autre face serait un
+        // piège. Papier hérité et couleur distincte n'ont, eux, rien à déplacer.
+        "quatre" if cv.quatrieme.fond == couverture::FondQuatre::Image => {
+            match couverture::photo_quatre(cv, format, quatre.as_ref(), None, None, b)? {
+                Some((zone, _, r)) => (zone, r, couverture::papier_quatre(cv).to_string()),
+                None => return Ok(None),
+            }
+        }
+        _ => return Ok(None),
+    };
+
+    // Les octets de la photo, retrouvés par le nom que la composition vient d'employer :
+    // le projet ne range pas ses images sous un rôle mais sous leur nom de fichier.
+    let octets = o
+        .projet
+        .images
+        .get(&r.fichier)
+        .ok_or_else(|| format!("{} : image absente du projet.", r.fichier))?;
+
+    let mut nu = cv.clone();
+    nu.papier = PAPIER_TRANSPARENT.to_string();
+    nu.quatrieme.couleur = PAPIER_TRANSPARENT.to_string();
+    // La 4ème s'assemble à la main, préambule et corps séparés, pour y glisser son
+    // voile : celui-ci suit désormais la photo réellement composée, et l'habillage se
+    // compose sans photo — c'est tout son objet, la laisser bouger dessous. Sans cette
+    // reprise, le direct montrerait une photo nue et l'aperçu une photo voilée.
+    //
+    // Entre les deux et non avant : un `#set page` qui suit du contenu ouvre une page de
+    // plus. Et entre les deux met bien le voile sous les textes et sous le rectangle de
+    // fond — lequel est transparent ici, et une couleur d'alpha nul ne masque rien.
+    //
+    // La 1ère n'a rien à reprendre : son voile suit le mode de la page, qui vaut pour
+    // l'habillage comme pour la face entière.
+    let corps = match face.as_str() {
+        "une" => couverture::source_une(&o.projet.meta.livre, &nu, format, None, dos_mm),
+        _ => {
+            let pano = couverture::panorama_face(format, dos_mm, false);
+            couverture::preambule(b.largeur, b.hauteur)
+                + &couverture::bloc_voile(b, nu.quatrieme.voile, nu.quatrieme.voile_opacite)
+                + &couverture::corps_quatre(&o.projet.meta.livre, &nu, format, None, None, pano, b)?
+        }
+    };
+    // `#set page(fill: none)` en tête : une règle posée avant le préambule vaut avec
+    // lui, et c'est elle qui rend le PNG transparent là où le papier ne peint plus.
+    let src = format!("#set page(fill: none)\n{corps}");
+    let typ = dossier.join(format!("habillage-{face}.typ"));
+    let png = dossier.join(format!("habillage-{face}.png"));
+    ecrire(&typ, &src)?;
+    typst()?.apercu(&typ, &png, 1, 150)?;
+
+    Ok(Some(Calques {
+        habillage: donnee_png(&png)?,
+        photo: donnee_image(octets),
+        naturel_l: r.largeur,
+        naturel_h: r.hauteur,
+        zone: Zone {
+            x: zone.0 / b.largeur,
+            y: zone.1 / b.hauteur,
+            l: zone.2 / b.largeur,
+            h: zone.3 / b.hauteur,
+        },
+        papier,
+    }))
+}
+
+/// Où chaque élément du dos tombe sur l'aperçu couché, pour pouvoir l'y saisir.
+///
+/// Vide quand le dos ne porte aucun texte — un dos nu n'a rien à réorganiser. Séparé de
+/// l'aperçu parce qu'il coûte une évaluation de plus et qu'il ne sert qu'une face : le
+/// demander à chaque composition ferait payer la mesure du dos à la planche, qui n'en
+/// fait rien.
+#[tauri::command]
+pub fn couverture_dos_boites(
+    dos_mm: Option<f64>,
+    atelier: State<Atelier>,
+) -> Result<Vec<planche::BoiteDos>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let Some(cv) = o.projet.meta.couverture.maquette.as_ref() else {
+        return Ok(Vec::new());
+    };
+    // Le dos ne change pas les longueurs mesurées — elles suivent la largeur de
+    // couverture — mais l'aperçu qu'on habille n'existe pas sans lui, et la fenêtre ne
+    // doit pas poser de prises sur une face qu'elle n'a pas pu composer.
+    if dos_mm.is_none() {
+        return Ok(Vec::new());
+    }
+    let (pr, _, _) = vise(o)?;
+    let livre = &o.projet.meta.livre;
+    let src = planche::source_mesures(livre, cv, pr.format);
+    // Aucun texte à mesurer : Typst rendrait un objet vide, autant ne pas le déranger.
+    if !src.contains("measure(") {
+        return Ok(Vec::new());
+    }
+    let dossier = std::env::temp_dir().join("ozalid-apercu");
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("aperçu impossible : {e}"))?;
+    let typ = dossier.join("mesures-dos.typ");
+    ecrire(&typ, &src)?;
+    let mesures = typst()?.mesures(&typ)?;
+    Ok(planche::boites_dos(livre, cv, pr.format, &mesures))
+}
+
+/// Un PNG du disque, en donnée `data:` : la fenêtre ne lit pas les fichiers, une image
+/// n'y entre pas autrement.
+fn donnee_png(chemin: &Path) -> Result<String, String> {
+    let octets = std::fs::read(chemin).map_err(|e| format!("aperçu illisible : {e}"))?;
+    Ok(donnee_image(&octets))
+}
+
+/// Des octets d'image, prêts à poser dans une balise `img`.
+///
+/// Le type est relevé sur le contenu : la fenêtre affiche d'après lui, et un JPEG
+/// annoncé en PNG resterait un cadre vide.
+fn donnee_image(octets: &[u8]) -> String {
+    let type_mime = match crate::image::extension(octets) {
+        Some("jpg") => "image/jpeg",
+        _ => "image/png",
+    };
+    format!(
+        "data:{type_mime};base64,{}",
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, octets)
+    )
+}
+
+/* ---------- packages ---------- */
+
+/// Ce que rend la génération pour un prestataire : le package, ou l'erreur qui l'a
+/// empêché. Un prestataire en échec n'interrompt pas les autres — mais il est dit.
+#[derive(Serialize)]
+pub struct Resultat {
+    pub provider: String,
+    pub libelle: String,
+    pub package: Option<package::Package>,
+    /// La planche du package, en PNG, prête à poser dans une balise `img`.
+    ///
+    /// Le chemin du fichier ne suffirait pas : la fenêtre ne lit pas le disque, et
+    /// c'est déjà par une donnée en clair que l'aperçu de la Couverture voyage.
+    pub vignette: Option<String>,
+    pub erreur: Option<String>,
+}
+
+/// Génère le package de chaque destinataire du livre, chacun dans son répertoire.
+///
+/// Une seule maquette, N destinataires, aucun réglage retouché entre eux : chacun
+/// compose son propre intérieur, donc sa propre pagination, donc son propre dos. C'est
+/// la promesse de l'étape Livraison, et la liste vient du projet — plus de cases à
+/// cocher qui désigneraient les prestataires une seconde fois.
+#[tauri::command]
+pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let destinataires = o.projet.meta.livraison.destinataires.clone();
+    if destinataires.is_empty() {
+        return Err("aucun destinataire : en déclarer un.".into());
+    }
+    let typst = typst()?;
+
+    let mut sorties = Vec::with_capacity(destinataires.len());
+    for d in &destinataires {
+        let Some(pr) = providers::provider(&d.provider) else {
+            sorties.push(Resultat {
+                provider: d.provider.clone(),
+                libelle: d.provider.clone(),
+                package: None,
+                vignette: None,
+                erreur: Some(format!("prestataire inconnu : {}", d.provider)),
+            });
+            continue;
+        };
+        let r = papier(pr, Some(&d.papier)).and_then(|pa| {
+            let dossier = sorties_dossier(o, pr.cle)?;
+            package::assembler(
+                &o.projet,
+                pr,
+                pa,
+                planche::Releve {
+                    dos: d.dos_mm,
+                    fond_perdu: d.fond_perdu_mm,
+                },
+                &dossier,
+                &typst,
+            )
+        });
+        sorties.push(match r {
+            Ok(p) => Resultat {
+                provider: pr.cle.into(),
+                libelle: pr.libelle.into(),
+                // La vignette manquante ne perd pas le package : les PDF sont écrits,
+                // et c'est eux que l'imprimeur reçoit.
+                vignette: donnee_png(Path::new(&p.vignette)).ok(),
+                package: Some(p),
+                erreur: None,
+            },
+            Err(e) => Resultat {
+                provider: pr.cle.into(),
+                libelle: pr.libelle.into(),
+                package: None,
+                vignette: None,
+                erreur: Some(e),
+            },
+        });
+    }
+    Ok(sorties)
+}
+
+/// Génère les ebooks locaux dans `<projet>/ebook/`.
+///
+/// Une livraison, mais locale : elle ne vise aucun prestataire, elle emprunte seulement
+/// le gabarit de celui qui est visé — c'est de là que viennent le format, le corps et
+/// l'interligne, faute d'un format d'écran qui voudrait dire quelque chose.
+#[tauri::command]
+pub fn ebook_generer(atelier: State<Atelier>) -> Result<ebook::Ebooks, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (pr, _, d) = vise(o)?;
+    let dossier = sorties_racine(o)?.join("ebook");
+    ebook::generer(&o.projet, pr, d.dos_mm, &dossier, &typst()?)
+}
+
+/* ---------- envois ---------- */
+
+/// Ce qu'un envoi produit, du point de vue de l'interface.
+#[derive(Serialize)]
+pub struct ResultatEnvoi {
+    pub dedicataire: String,
+    /// Nom du répertoire écrit sous `envois/` — assaini, donc pas toujours celui du
+    /// dédicataire. C'est celui-là qu'il faut ouvrir, et donc celui-là qu'on montre.
+    pub dossier: String,
+    pub package: package::Package,
+    pub vignette: Option<String>,
+}
+
+/// Remplace un envoi par lui-même modifié : sa main, son mot, son placement.
+///
+/// Un envoi et non la liste entière, contrairement à `envois_modifier` qui l'a
+/// précédée : celle-ci recevait l'objet entier, si bien que ce que le front n'envoyait
+/// pas était effacé — une main omise revenait au défaut, et vingt exemplaires
+/// changeaient d'écriture sans que personne ne l'ait demandé. Ici le rang désigne, et
+/// le reste ne bouge pas.
+#[tauri::command]
+pub fn envoi_regler(
+    index: usize,
+    envoi: crate::envoi::Envoi,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let mut envois = o.projet.meta.envois.clone();
+    *envois
+        .liste
+        .get_mut(index)
+        .ok_or("envoi introuvable : la liste a changé.")? = envoi;
+    o.projet.regler_envois(envois)?;
+    vue_modifiee(o)
+}
+
+/// Ajoute un envoi, qui naît comme le précédent.
+///
+/// La règle vit dans `Envois::ajouter`, avec le modèle : c'est une propriété du livre,
+/// et non de la façon dont l'interface la demande.
+#[tauri::command]
+pub fn envoi_ajouter(dedicataire: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let mut envois = o.projet.meta.envois.clone();
+    envois.ajouter(dedicataire);
+    o.projet.regler_envois(envois)?;
+    vue_modifiee(o)
+}
+
+/// Retire un envoi.
+///
+/// Son image s'en va avec lui : c'est `regler_envois` qui élague ce que plus aucun
+/// envoi ne nomme, sans quoi l'archive garderait le mot manuscrit d'une personne à qui
+/// l'on n'envoie plus rien.
+#[tauri::command]
+pub fn envoi_retirer(index: usize, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let mut envois = o.projet.meta.envois.clone();
+    if index >= envois.liste.len() {
+        return Err("envoi introuvable : la liste a changé.".into());
+    }
+    envois.liste.remove(index);
+    o.projet.regler_envois(envois)?;
+    vue_modifiee(o)
+}
+
+/// Le gabarit de diffusion, partagé par tous les envois du livre.
+///
+/// Au livre et non à l'envoi : c'est le style d'écriture du tirage, dans lequel le mot
+/// de chacun s'insère. Le réécrire pour chaque personne n'aurait pas d'usage.
+#[tauri::command]
+pub fn envois_gabarit(gabarit: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    regler_style(&atelier, |e| e.gabarit = gabarit)
+}
+
+/// La couleur de l'encre que `{couleur}` nomme au modèle.
+///
+/// Au livre comme le gabarit : un auteur signe ses vingt exemplaires du même stylo.
+#[tauri::command]
+pub fn envois_couleur(couleur: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    regler_style(&atelier, |e| e.couleur = couleur)
+}
+
+/// Le paraphe de l'auteur, que `{paraphe}` nomme au modèle.
+///
+/// À ne pas confondre avec le `monogramme` du livre, qui nomme la **maison** et figure
+/// au pied de la couverture. Celui-ci est une signature manuscrite.
+#[tauri::command]
+pub fn envois_paraphe(paraphe: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    regler_style(&atelier, |e| e.paraphe = paraphe)
+}
+
+/// Applique une retouche au style d'écriture du livre, et rend la vue.
+///
+/// Les trois réglages ne diffèrent que par le champ qu'ils touchent : les écrire trois
+/// fois en entier ferait diverger leurs contrôles au premier ajout.
+fn regler_style(
+    atelier: &State<Atelier>,
+    retouche: impl FnOnce(&mut crate::envoi::Envois),
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let mut envois = o.projet.meta.envois.clone();
+    retouche(&mut envois);
+    o.projet.regler_envois(envois)?;
+    vue_modifiee(o)
+}
+
+/// Le gabarit de départ des projets neufs, tel que les préférences le portent.
+#[tauri::command]
+pub fn gabarit_defaut_lire(app: tauri::AppHandle) -> String {
+    gabarit_de_depart(&app)
+}
+
+/// Retient ce gabarit comme départ des projets neufs.
+///
+/// **Ne touche pas au livre ouvert** : c'est un réglage de la machine, et le gabarit qui
+/// compose reste celui du `.ozalid`. Les deux se règlent au même endroit à l'écran, ils
+/// ne vivent pas au même endroit sur le disque.
+#[tauri::command]
+pub fn gabarit_defaut_poser(gabarit: String, app: tauri::AppHandle) -> Result<(), String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    let mut p = preferences::charger(&dir);
+    p.gabarit_defaut = gabarit;
+    preferences::enregistrer(&dir, &p)
+}
+
+/// Les mains offertes par l'application.
+///
+/// La police personnelle n'y est pas : elle appartient au livre ouvert, pas à
+/// l'application, et le front la lit dans `envois.personnelle`.
+#[tauri::command]
+pub fn mains_liste() -> Vec<&'static str> {
+    crate::envoi::MAINS.to_vec()
+}
+
+/// Embarque la police manuscrite de l'auteur dans le projet, et en fait sa main.
+///
+/// Le fichier est copié dans le `.ozalid`, comme le manuscrit et les photos : le projet
+/// doit composer à l'identique sur une machine où cette écriture n'est installée nulle
+/// part. C'est aussi pourquoi la famille est relevée dans le fichier plutôt que déduite
+/// de son nom.
+#[tauri::command]
+pub fn police_choisir(chemin: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let source = Path::new(&chemin);
+    // Typst ne charge d'un répertoire de polices que les fichiers dont l'extension le
+    // dit. Une écriture rangée sous un autre nom n'y serait jamais lue, et l'envoi
+    // partirait dans la police de repli sans qu'aucun message ne le signale.
+    let nom = source
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| {
+            let bas = n.to_lowercase();
+            bas.ends_with(".ttf") || bas.ends_with(".otf")
+        })
+        .ok_or("police refusée : seuls les fichiers .ttf et .otf se composent.")?;
+    let octets = std::fs::read(source).map_err(|e| format!("police illisible : {e}"))?;
+
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.poser_police(&nom, octets)?;
+    vue_modifiee(o)
+}
+
+/// Embarque l'image écrite à la main pour un envoi.
+///
+/// Elle entre dans le `.ozalid` sous `envois/`, et non avec les photos de couverture :
+/// là-bas, une image dont le nom ne commence pas par `quatrieme` devient la première de
+/// couverture — le mot manuscrit d'un lecteur remplacerait la couverture du livre.
+#[tauri::command]
+pub fn envoi_image_choisir(
+    index: usize,
+    chemin: String,
+    atelier: State<Atelier>,
+) -> Result<ProjetVue, String> {
+    // Aucun contrôle sur l'extension du fichier choisi : c'est le contenu qui décide,
+    // et `poser_image_envoi` le relève. Une photo d'appareil renommée en `.png` reste
+    // un JPEG, et Typst la lirait à son nom.
+    let octets = std::fs::read(Path::new(&chemin)).map_err(|e| format!("image illisible : {e}"))?;
+
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.poser_image_envoi(index, octets)?;
+    vue_modifiee(o)
+}
+
+/// Ce que l'interface sait de l'accès au modèle de diffusion.
+///
+/// **La clé n'y est pas.** Elle est en clair dans `preferences.toml`, avec les
+/// permissions du fichier ; la renvoyer au front la ferait entrer dans une page, donc
+/// dans une capture d'écran, donc dans un message. Savoir qu'elle est posée suffit à
+/// régler l'accès.
+#[derive(Serialize)]
+pub struct AccesVue {
+    pub url: String,
+    pub cle_posee: bool,
+    /// Le nom du modèle, quand le fournisseur l'attend dans le corps. Contrairement à
+    /// la clé, il revient à l'interface : ce n'est pas un secret, et un champ qui se
+    /// rouvre vide se ressaisit de travers.
+    pub modele: String,
+}
+
+#[tauri::command]
+pub fn diffusion_lire(app: tauri::AppHandle) -> AccesVue {
+    let d = config(&app).map(|c| preferences::charger(&c).diffusion);
+    AccesVue {
+        url: d.as_ref().map(|d| d.url.clone()).unwrap_or_default(),
+        modele: d.as_ref().map(|d| d.modele.clone()).unwrap_or_default(),
+        cle_posee: d.is_some_and(|d| !d.cle.trim().is_empty()),
+    }
+}
+
+/// Règle l'accès au modèle. `cle` absente laisse en place celle qui est enregistrée.
+///
+/// Sans cela, corriger l'adresse effacerait la clé — le champ de saisie est vide à
+/// l'écran, puisqu'on ne la lui redonne jamais.
+#[tauri::command]
+pub fn diffusion_regler(
+    url: String,
+    modele: String,
+    cle: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<AccesVue, String> {
+    let dir = config(&app).ok_or("répertoire de configuration introuvable.")?;
+    let mut p = preferences::charger(&dir);
+    p.diffusion.url = url;
+    p.diffusion.modele = modele;
+    if let Some(c) = cle {
+        p.diffusion.cle = c;
+    }
+    preferences::enregistrer(&dir, &p)?;
+    Ok(diffusion_lire(app))
+}
+
+/// Demande au modèle l'image d'un envoi, et la garde de côté sans la figer.
+///
+/// Rendue en PNG encodé pour l'aperçu, et **pas** écrite dans le projet : un modèle de
+/// diffusion rend rarement une écriture lisible du premier coup. On regarde, on
+/// regénère, et c'est `envoi_accepter` qui fait entrer l'image dans l'archive.
+#[tauri::command]
+pub fn envoi_generer(
+    index: usize,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<String, String> {
+    let acces = config(&app)
+        .map(|c| preferences::charger(&c).diffusion)
+        .unwrap_or_default();
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let e = o
+        .projet
+        .meta
+        .envois
+        .liste
+        .get(index)
+        .ok_or("envoi introuvable : la liste a changé.")?;
+    // La main appartient à l'exemplaire depuis la v4 : c'est celle de **cet** envoi qui
+    // décide, et non plus celle du livre. Le gabarit, lui, est resté au livre — c'est le
+    // style d'écriture du tirage, pas le mot d'une personne.
+    if !matches!(e.main, crate::envoi::Main::Diffusion) {
+        return Err("la main de cet envoi n'est pas une image générée.".into());
+    }
+    let gabarit = &o.projet.meta.envois.gabarit;
+    // Le titre vient du livre et non de l'envoi : il est le même pour tout le tirage.
+    let mots = crate::diffusion::Mots {
+        envoi: &e.contenu,
+        dedicataire: &e.dedicataire,
+        titre: &o.projet.meta.livre.titre,
+        couleur: &o.projet.meta.envois.couleur,
+        paraphe: &o.projet.meta.envois.paraphe,
+    };
+
+    let octets = crate::diffusion::genere(
+        &acces,
+        &crate::diffusion::prompt(gabarit, &mots),
+        &crate::diffusion::Reseau,
+    )?;
+    let donnee = donnee_image(&octets);
+    o.candidat = Some((index, octets));
+    Ok(donnee)
+}
+
+/// Fige l'image générée : elle entre dans l'archive, et n'en bouge plus.
+///
+/// À partir d'ici, composer ne rappelle jamais le réseau — le package se refait des mois
+/// plus tard, hors ligne, à l'identique.
+#[tauri::command]
+pub fn envoi_accepter(index: usize, atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let (_, octets) = o
+        .candidat
+        .take()
+        // Le candidat porte son index : accepter après avoir changé de ligne poserait
+        // sinon l'image d'une personne sur l'exemplaire d'une autre.
+        .filter(|(pour, _)| *pour == index)
+        .ok_or("aucune image en attente pour cet envoi : en générer une.")?;
+    o.projet.poser_image_envoi(index, octets)?;
+    vue_modifiee(o)
+}
+
+/// Retire la police de l'auteur du projet.
+#[tauri::command]
+pub fn police_retirer(atelier: State<Atelier>) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    o.projet.retirer_police();
+    vue_modifiee(o)
+}
+
+/* ---------- ce que le canevas de placement regarde ---------- */
+
+/// 120 px de large sur une page de 127 mm : de quoi reconnaître une page dans un rail.
+const VIGNETTE_PPI: u32 = 24;
+/// 750 px sur la même page : de quoi placer un envoi à la souris.
+const PAGE_PPI: u32 = 150;
+/// L'objet est agrandi par le canevas, et une signature pixelisée sous la souris ferait
+/// douter du rendu.
+const OBJET_PPI: u32 = 300;
+
+/// La source de l'intérieur **sans envoi**, et le répertoire où elle est écrite.
+///
+/// Sans envoi parce qu'un `foreground` ne réordonne rien : la page de fond ne dépend
+/// d'aucun dédicataire, et la même série de rendus sert à tous les exemplaires. C'est
+/// aussi ce qui permet de glisser l'objet sans rappeler Typst — le fond ne bouge pas.
+///
+/// Le répertoire est nommé par l'empreinte de la source. Une composition qui change
+/// change l'empreinte, donc le répertoire : il n'y a pas d'invalidation à écrire,
+/// seulement un nom à calculer. Ce qui reste dort dans le temporaire du système, qui
+/// est fait pour cela.
+fn source_de_fond(o: &Ouvert) -> Result<(PathBuf, PathBuf), String> {
+    let (pr, _, d) = vise(o)?;
+    let int = &o.projet.meta.interieur;
+    int.verifie()?;
+    let livre = &o.projet.meta.livre;
+    let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
+    // La mesure du tirage, et non un réglage d'aperçu : les pages que le canevas montre
+    // doivent être celles que le dédicataire recevra, numéros compris.
+    let mesure = d
+        .compose
+        .as_ref()
+        .ok_or("intérieur non composé : le placement a besoin des pages du tirage.")?;
+    let reglage = Reglage {
+        gouttiere: mesure.gouttiere,
+        blanche: mesure.blanche,
+    };
+    let src = interieur::source(livre, int, pr, &reglage, &chapitres, None);
+    let dossier = std::env::temp_dir()
+        .join("ozalid-pages")
+        .join(empreinte(&src));
+    std::fs::create_dir_all(&dossier)
+        .map_err(|e| format!("répertoire inutilisable ({}) : {e}", dossier.display()))?;
+    let chemin = dossier.join("fond.typ");
+    ecrire(&chemin, &src)?;
+    Ok((chemin, dossier))
+}
+
+/// Une empreinte courte et stable d'une source, pour nommer son répertoire de rendus.
+///
+/// `DefaultHasher` suffit : ce n'est pas un contrôle d'intégrité, seulement un nom qui
+/// change quand la source change. Une collision coûterait des vignettes périmées, pas un
+/// mauvais tirage.
+fn empreinte(s: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// Toutes les pages de l'intérieur en vignettes, pour le destinataire visé.
+///
+/// Aucun cache : les 190 pages du livre témoin coûtent six dixièmes de seconde, et
+/// l'interface ne demande cette série qu'à l'ouverture de l'étape. Un cache achèterait
+/// ce dixième-là au prix d'une invalidation à tenir juste.
+#[tauri::command]
+pub fn envoi_vignettes(atelier: State<Atelier>) -> Result<Vec<String>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (src, dossier) = source_de_fond(o)?;
+    let pages = typst()?.apercus(&src, &dossier.join("v{p}.png"), VIGNETTE_PPI)?;
+    pages.iter().map(|p| donnee_png(p)).collect()
+}
+
+/// Une page de l'intérieur, en grand, pour le canevas de placement.
+#[tauri::command]
+pub fn envoi_page(page: u32, atelier: State<Atelier>) -> Result<String, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (src, dossier) = source_de_fond(o)?;
+    let png = dossier.join(format!("grand-{page}.png"));
+    typst()?.apercu(&src, &png, page, PAGE_PPI)?;
+    donnee_png(&png)
+}
+
+/// L'objet d'un envoi, tel que le canevas le manipule.
+#[derive(Serialize)]
+pub struct Objet {
+    /// Le PNG, fond transparent, prêt à poser dans une balise `img`.
+    pub image: String,
+    /// Hauteur sur largeur : le canevas en a besoin pour dessiner ses prises avant que
+    /// l'image ne soit chargée.
+    pub ratio: f64,
+}
+
+/// L'objet d'un envoi, rendu seul sur fond transparent, avec son rapport.
+///
+/// Le rendre par Typst plutôt que de l'imiter en CSS fait que ce qu'on déplace **est**
+/// ce qui s'imprimera : même police, même corps, mêmes coupures de lignes. La largeur
+/// de rendu est celle que l'objet occupera sur la page — c'est elle qui décide des
+/// coupures, et rendre à une autre largeur donnerait un rapport qui n'est pas celui du
+/// tirage.
+#[tauri::command]
+pub fn envoi_objet(index: usize, atelier: State<Atelier>) -> Result<Objet, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let envois = &o.projet.meta.envois;
+    envois.verifie()?;
+    let e = envois
+        .liste
+        .get(index)
+        .ok_or("envoi introuvable : la liste a changé.")?;
+    let (pr, _, _) = vise(o)?;
+
+    let dossier = std::env::temp_dir().join("ozalid-objet");
+    std::fs::create_dir_all(&dossier)
+        .map_err(|err| format!("répertoire inutilisable ({}) : {err}", dossier.display()))?;
+    let src = dossier.join("objet.typ");
+    let t = package::trace(&o.projet, e, &dossier)?;
+    ecrire(
+        &src,
+        &interieur::source_objet(&t, pr.format.0 * e.place.taille),
+    )?;
+    let png = dossier.join("objet.png");
+    // L'écriture de l'auteur vit dans le `.ozalid` : sans ce dépliage, l'objet
+    // composerait dans la police de repli, et le canevas montrerait autre chose que ce
+    // qui s'imprimera.
+    let typst = typst()?;
+    let typst = match package::ecrire_polices(&o.projet, &dossier)? {
+        Some(d) => typst.avec_polices(d),
+        None => typst,
+    };
+    typst.apercu(&src, &png, 1, OBJET_PPI)?;
+    // `dimensions` rend un `Option` : un PNG que Typst vient d'écrire et qu'on ne sait
+    // pas mesurer est une anomalie, pas un cas ordinaire — elle se dit plutôt que de
+    // rendre un rapport inventé, qui déformerait l'objet sous la souris.
+    let octets = std::fs::read(&png).map_err(|e| format!("objet illisible : {e}"))?;
+    let (l, h) =
+        crate::image::dimensions(&octets).ok_or("l'objet rendu n'est pas une image mesurable.")?;
+    Ok(Objet {
+        image: donnee_png(&png)?,
+        ratio: h as f64 / l as f64,
+    })
+}
+
+/// La page d'un envoi, telle qu'elle sera imprimée.
+///
+/// La source est celle de l'intérieur **entier**, et non plus privée de ses chapitres.
+/// Le raccourci tenait tant que l'envoi se posait sur la page de titre, qui ne dépend
+/// pas du corps ; depuis la v4 il vise n'importe quelle page, et la page 37 n'existe pas
+/// dans un intérieur sans corps. Composer le livre complet coûte deux dixièmes de
+/// seconde sur un manuscrit de 190 pages — moins que la surprise d'un aperçu qui ne
+/// montre pas la bonne page.
+///
+/// C'est la **vérité** du canevas : celui-ci compose la page en fond et l'objet
+/// séparément, puis les superpose en CSS ; ici les deux passent par Typst en une fois.
+#[tauri::command]
+pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (pr, _, d) = vise(o)?;
+    let envois = &o.projet.meta.envois;
+    envois.verifie()?;
+    let e = envois
+        .liste
+        .get(index)
+        .ok_or("envoi introuvable : la liste a changé.")?;
+
+    let int = &o.projet.meta.interieur;
+    int.verifie()?;
+    let livre = &o.projet.meta.livre;
+    let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
+    // La mesure du tirage, et non un réglage d'aperçu : l'aperçu montre la page que le
+    // dédicataire recevra, il doit donc être composé comme elle.
+    let mesure = d
+        .compose
+        .as_ref()
+        .ok_or("intérieur non composé : l'aperçu a besoin des pages du tirage.")?;
+    let dossier = sorties_racine(o)?.join("envois");
+    std::fs::create_dir_all(&dossier)
+        .map_err(|err| format!("répertoire inutilisable ({}) : {err}", dossier.display()))?;
+    let src = dossier.join("apercu.typ");
+    ecrire(
+        &src,
+        &interieur::source(
+            livre,
+            int,
+            pr,
+            &Reglage {
+                gouttiere: mesure.gouttiere,
+                blanche: mesure.blanche,
+            },
+            &chapitres,
+            Some(package::trace(&o.projet, e, &dossier)?),
+        ),
+    )?;
+    let png = dossier.join("apercu.png");
+    // L'écriture de l'auteur vit dans le `.ozalid` : sans ce dépliage, l'aperçu
+    // composerait dans la police de repli, et ce serait un aperçu d'autre chose.
+    let typst = typst()?;
+    let typst = match package::ecrire_polices(&o.projet, &dossier)? {
+        Some(d) => typst.avec_polices(d),
+        None => typst,
+    };
+    typst.apercu(&src, &png, e.place.page, PAGE_PPI)?;
+    donnee_png(&png)
+}
+
+/// Compose un package par envoi, chez le prestataire visé.
+///
+/// Geste distinct de `packager` : l'un prépare le tirage, l'autre prépare des cadeaux,
+/// et les déclencher ensemble composerait des exemplaires que personne n'a demandés.
+#[tauri::command]
+pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (pr, papier, d) = vise(o)?;
+    let typst = typst()?;
+    let racine = sorties_racine(o)?.join("envois");
+
+    let sorties = package::assembler_envois(
+        &o.projet,
+        pr,
+        papier,
+        planche::Releve {
+            dos: d.dos_mm,
+            fond_perdu: d.fond_perdu_mm,
+        },
+        &racine,
+        &typst,
+    )?;
+
+    Ok(sorties
+        .into_iter()
+        .zip(o.projet.meta.envois.liste.iter())
+        .map(|((dossier, p), e)| ResultatEnvoi {
+            dedicataire: e.dedicataire.clone(),
+            dossier,
+            // La vignette manquante ne perd pas le package : les PDF sont écrits.
+            vignette: donnee_png(Path::new(&p.vignette)).ok(),
+            package: p,
+        })
+        .collect())
+}
+
+fn papier(pr: &'static Provider, cle: Option<&str>) -> Result<&'static providers::Papier, String> {
+    match cle {
+        Some(c) => pr
+            .papier(c)
+            .ok_or_else(|| format!("papier inconnu chez {} : {c}", pr.cle)),
+        None => Ok(pr.papier_defaut()),
+    }
+}
+
+/// Écrit les images du projet à côté de la source, et rend leurs descriptions.
+fn ecrire_images(
+    projet: &Projet,
+    dossier: &Path,
+) -> Result<(Option<Ressource>, Option<Ressource>), String> {
+    package::ecrire_images(projet, dossier)
+}
+
+/// Racine des sorties : un répertoire du nom du projet, à côté du `.ozalid`, jamais
+/// dedans. Un projet non enregistré n'a donc pas d'endroit où écrire — c'est voulu,
+/// sinon les sorties atterriraient dans un répertoire temporaire que personne ne
+/// retrouve. L'épreuve s'y range directement : elle ne vise aucun éditeur.
+fn sorties_racine(o: &Ouvert) -> Result<PathBuf, String> {
+    let chemin = o.chemin.as_ref().ok_or_else(|| {
+        "enregistrer le projet avant de composer : les sorties se rangent à côté du \
+         fichier .ozalid."
+            .to_string()
+    })?;
+    let parent = chemin.parent().unwrap_or(Path::new("."));
+    let nom = chemin
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "projet".into());
+    Ok(parent.join(nom))
+}
+
+/// Sorties d'un prestataire : un répertoire par prestataire, sous la racine.
+fn sorties_dossier(o: &Ouvert, provider: &str) -> Result<PathBuf, String> {
+    Ok(sorties_racine(o)?.join(provider))
+}
+
+/// Le PDF de l'intérieur d'un prestataire, là où `composer` l'écrit.
+///
+/// Nommé ici plutôt qu'à deux endroits : `composer` l'écrit, `vue` le cherche pour en
+/// faire un lien, et deux `format!` identiques finissent par diverger — c'est la même
+/// raison qui a fait servir la liste des jetons par le Rust plutôt que la recopier.
+fn interieur_pdf(dossier: &Path, provider: &str) -> PathBuf {
+    dossier.join(format!("interieur-{provider}.pdf"))
+}
+
+/// Répertoire de configuration de l'application, s'il est atteignable.
+fn config(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok()
+}
+
+/// Mémorise un projet dans les récents.
+///
+/// **Au mieux** : un échec s'écrit sur la sortie d'erreur, visible en développement,
+/// invisible pour qui lance le binaire empaqueté. C'est assumé : ce qui se perd ici
+/// est une liste de raccourcis, pas un livre, et faire remonter cet échec jusqu'à
+/// l'interface coûterait plus qu'il ne vaut.
+fn memoriser(app: &tauri::AppHandle, chemin: &Path) {
+    let Some(dir) = config(app) else {
+        eprintln!("préférences : répertoire de configuration introuvable, récents non mémorisés.");
+        return;
+    };
+    let mut p = preferences::charger(&dir);
+    p.ajouter_recent(chemin);
+    if let Err(e) = preferences::enregistrer(&dir, &p) {
+        eprintln!("préférences : {e}");
+        return;
+    }
+    // Le sous-menu des récents vient d'être périmé par cette écriture : le
+    // reconstruire ici évite d'avoir à s'en souvenir à chaque point d'appel.
+    if let Err(e) = crate::menu::poser(app) {
+        eprintln!("menu : reconstruction impossible : {e}");
+    }
+}
+
+fn poser(
+    atelier: &State<Atelier>,
+    chemin: Option<PathBuf>,
+    projet: Projet,
+    modifie: bool,
+) -> Result<ProjetVue, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    *garde = Some(Ouvert {
+        chemin,
+        projet,
+        modifie,
+        candidat: None,
+    });
+    vue(garde.as_ref().unwrap())
+}
+
+fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
+    // Le compte de chapitres affiché est celui du manuscrit embarqué, pas celui que le
+    // projet déclare : c'est l'écart entre les deux qui signale un manuscrit périmé.
+    let chapitres_trouves = manuscrit::decoupe(&o.projet.texte, None)
+        .map(|p| p.iter().filter(|p| p.est_chapitre()).count() as u32)
+        .unwrap_or(0);
+    // Le lien du pied : il n'a de sens qu'avec une mesure — sans elle, le pied ne
+    // montre aucun chiffre, et un PDF sans chiffres se lirait comme une pagination
+    // qu'on aurait le droit de croire. `filter` et non `map` sur l'existence : le
+    // fichier peut avoir été effacé à la main entre deux ouvertures.
+    let interieur_pdf = o
+        .projet
+        .meta
+        .livraison
+        .courant()
+        .filter(|d| d.compose.is_some())
+        .and_then(|d| {
+            let dossier = sorties_dossier(o, &d.provider).ok()?;
+            let pdf = interieur_pdf(&dossier, &d.provider);
+            pdf.is_file().then(|| pdf.to_string_lossy().into_owned())
+        });
+    Ok(ProjetVue {
+        chemin: o.chemin.as_ref().map(|c| c.to_string_lossy().into_owned()),
+        livre: o.projet.meta.livre.clone(),
+        manuscrit_source: o.projet.meta.manuscrit.source.clone(),
+        chapitres_trouves,
+        mots: o.projet.texte.split_whitespace().count() as u32,
+        manuscrit_absent: o.projet.texte.trim().is_empty(),
+        modifie: o.modifie,
+        couverture: o.projet.meta.couverture.maquette.clone(),
+        couverture_importee: o.projet.meta.couverture.maquette.is_some(),
+        images: o.projet.images.keys().cloned().collect(),
+        interieur: o.projet.meta.interieur.clone(),
+        interieur_pdf,
+        livraison: o.projet.meta.livraison.clone(),
+        envois: o.projet.meta.envois.clone(),
+    })
+}
+
+/// La vue d'un projet qu'on vient de modifier.
+///
+/// Deux fonctions plutôt qu'un drapeau posé à la main dans chaque commande : le
+/// point d'appel dit ce qu'il a fait, et oublier de le dire se voit à la lecture.
+fn vue_modifiee(o: &mut Ouvert) -> Result<ProjetVue, String> {
+    o.modifie = true;
+    vue(o)
+}
+
+/// La vue d'un projet qu'on vient d'écrire sur le disque.
+fn vue_enregistree(o: &mut Ouvert) -> Result<ProjetVue, String> {
+    o.modifie = false;
+    vue(o)
+}
+
+/// Écrit le projet à un chemin, et le retient comme le sien.
+///
+/// Le noyau commun d'« Enregistrer » et d'« Enregistrer sous… » : les deux ne
+/// diffèrent que par la façon dont le chemin est trouvé.
+fn enregistrer_a(o: &mut Ouvert, chemin: &Path) -> Result<ProjetVue, String> {
+    o.projet.enregistrer(chemin)?;
+    o.chemin = Some(chemin.to_path_buf());
+    vue_enregistree(o)
+}
+
+fn aucun_projet() -> String {
+    "aucun projet ouvert.".to_string()
+}
+
+fn ecrire(chemin: &Path, contenu: &str) -> Result<(), String> {
+    std::fs::write(chemin, contenu)
+        .map_err(|e| format!("écriture impossible ({}) : {e}", chemin.display()))
+}
+
+/// Binaire Typst à utiliser.
+///
+/// En release, seul le sidecar embarqué fait foi : se rabattre sur un Typst du système
+/// rendrait la pagination dépendante de la machine, exactement ce que l'embarquement
+/// doit empêcher. En développement, le Typst du PATH est accepté pour ne pas imposer
+/// de vendorisation à chaque itération.
+fn binaire_typst() -> Result<PathBuf, String> {
+    let sidecar = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.join(nom_sidecar())))
+        .filter(|p| p.is_file());
+    match sidecar {
+        Some(p) => Ok(p),
+        None if cfg!(debug_assertions) => Ok(PathBuf::from("typst")),
+        None => Err("Typst embarqué introuvable : l'application est mal empaquetée.".into()),
+    }
+}
+
+/// Typst prêt à composer, polices embarquées comprises.
+fn typst() -> Result<Typst, String> {
+    let b = binaire_typst()?;
+    let voisin = b.parent().map(Path::to_path_buf).unwrap_or_default();
+    let candidats = [
+        voisin.join("fonts"),
+        // Empaquetage macOS : les ressources sont dans Contents/Resources, pas à côté
+        // du binaire. Le chemin réel en release se vérifie au jalon 5.
+        voisin.join("../Resources/fonts"),
+        // Développement : les polices vivent dans les sources.
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"),
+    ];
+    let dossier = candidats
+        .into_iter()
+        .find(|p| p.is_dir())
+        .ok_or("polices embarquées introuvables : lancer outils/polices.sh.")?;
+    Ok(Typst::new(b).avec_polices(dossier))
+}
+
+fn nom_sidecar() -> &'static str {
+    if cfg!(windows) {
+        "typst.exe"
+    } else {
+        "typst"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Les libellés des boutons font foi au retour : le plugin rend le texte du
+    /// bouton, pas un `Yes`/`No`. Une comparaison qui dériverait de l'affichage
+    /// enverrait « Enregistrer » sur « ignorer », et le travail serait perdu.
+    #[test]
+    fn la_reponse_de_la_garde_se_lit_par_ses_libelles() {
+        use tauri_plugin_dialog::MessageDialogResult as R;
+        assert_eq!(reponse_garde(R::Custom(ENREGISTRER.into())), "enregistrer");
+        assert_eq!(reponse_garde(R::Custom(IGNORER.into())), "ignorer");
+        assert_eq!(reponse_garde(R::Custom(ANNULER.into())), "annuler");
+        assert_eq!(reponse_garde(R::Yes), "enregistrer");
+        assert_eq!(reponse_garde(R::No), "ignorer");
+        assert_eq!(reponse_garde(R::Cancel), "annuler");
+        // Fermer la boîte sans choisir ne doit rien perdre.
+        assert_eq!(reponse_garde(R::Custom("autre chose".into())), "annuler");
+    }
+
+    /// Tauri ne renomme que les *arguments* d'une commande, jamais les champs d'une
+    /// struct : le destinataire que l'interface renvoie à `destinataire_regler` voyage
+    /// donc en snake_case, comme le `Livre` qu'elle renvoie déjà. Le lire en camelCase
+    /// ferait échouer chaque relevé de gabarit saisi, sans que rien ne dise pourquoi.
+    #[test]
+    fn le_destinataire_de_l_interface_se_lit() {
+        let json = r#"{
+            "provider": "coollibri-148x210",
+            "papier": "mesure",
+            "dos_mm": 18.4,
+            "fond_perdu_mm": 4
+        }"#;
+        let d: Destinataire = serde_json::from_str(json).unwrap();
+        assert_eq!(d.provider, "coollibri-148x210");
+        assert_eq!(d.papier, "mesure");
+        assert_eq!(d.dos_mm, Some(18.4));
+        assert_eq!(d.fond_perdu_mm, Some(4.0));
+    }
+
+    /// Un relevé qu'on n'a pas encore fait est absent, pas nul : le champ vide de
+    /// l'interface doit arriver ici comme une absence, faute de quoi la planche se
+    /// composerait sur un dos de zéro millimètre.
+    #[test]
+    fn un_releve_absent_reste_absent() {
+        let d: Destinataire =
+            serde_json::from_str(r#"{"provider": "lulu", "papier": "standard"}"#).unwrap();
+        assert_eq!(d.dos_mm, None);
+        assert_eq!(d.fond_perdu_mm, None);
+    }
+
+    /// Choisir l'image d'une face remplace celle qui s'y composait, quel que soit le
+    /// nom qu'elle portait — un projet importé nomme ses photos comme il l'entend — et
+    /// laisse l'autre face intacte.
+    #[test]
+    fn une_face_ne_garde_qu_une_image() {
+        let mut images = BTreeMap::from([
+            ("photo.jpg".to_string(), vec![1]),
+            ("quatrieme.jpg".to_string(), vec![2]),
+        ]);
+
+        poser_image(&mut images, "couverture.png".into(), vec![3]);
+        assert_eq!(
+            images.keys().collect::<Vec<_>>(),
+            ["couverture.png", "quatrieme.jpg"],
+            "l'image de 1ère n'a pas été remplacée, ou la 4ème a été emportée"
+        );
+
+        poser_image(&mut images, "quatrieme.png".into(), vec![4]);
+        assert_eq!(
+            images.keys().collect::<Vec<_>>(),
+            ["couverture.png", "quatrieme.png"]
+        );
+    }
+
+    /// Retirer une photo ne retire que celle-là, et un nom que le projet ne porte pas
+    /// est refusé.
+    ///
+    /// Le refus n'est pas une politesse : la fenêtre clique un nom que cette vue-là
+    /// venait de lui servir. Qu'il ait disparu entre les deux dit une liste périmée,
+    /// donc un geste qui a porté sur autre chose que ce qu'on voyait — et réussir en
+    /// silence laisserait croire la photo partie alors qu'une autre est restée.
+    #[test]
+    fn retirer_une_photo_ne_touche_que_celle_la() {
+        let mut images = BTreeMap::from([
+            ("couverture.jpeg".to_string(), vec![1]),
+            ("quatrieme.jpeg".to_string(), vec![2]),
+        ]);
+
+        retirer_image(&mut images, "quatrieme.jpeg").unwrap();
+        assert_eq!(
+            images.keys().collect::<Vec<_>>(),
+            ["couverture.jpeg"],
+            "la 1ère est partie avec la 4ème, ou la 4ème est restée"
+        );
+
+        let refus = retirer_image(&mut images, "quatrieme.jpeg").unwrap_err();
+        assert!(refus.contains("quatrieme.jpeg"), "{refus}");
+    }
+
+    /// Le nom porte le rôle : c'est tout ce que la composition lit pour savoir quelle
+    /// face une image sert.
+    #[test]
+    fn le_nom_d_une_image_dit_la_face_qu_elle_sert() {
+        assert_eq!(nom_image("une", "jpg").unwrap(), "couverture.jpg");
+        assert_eq!(nom_image("quatre", "png").unwrap(), "quatrieme.png");
+        assert!(package::sert_la_quatrieme(
+            &nom_image("quatre", "png").unwrap()
+        ));
+        assert!(!package::sert_la_quatrieme(
+            &nom_image("une", "png").unwrap()
+        ));
+        assert!(nom_image("planche", "png").is_err());
+    }
+
+    /// La clé du modèle est en clair dans `preferences.toml`, avec les permissions du
+    /// fichier : c'est un choix, et il ne tient que si elle ne va nulle part ailleurs.
+    /// Ce test tombe le jour où quelqu'un ajoute le champ à la vue — c'est-à-dire le
+    /// jour où la clé entrerait dans une page, donc dans une capture d'écran.
+    #[test]
+    fn la_vue_de_l_acces_au_modele_ne_porte_pas_la_cle() {
+        let v = AccesVue {
+            url: "https://exemple.test/images".into(),
+            modele: "gemini-3-pro-image".into(),
+            cle_posee: true,
+        };
+        let json = serde_json::to_string(&v).unwrap();
+        assert_eq!(json.matches("cle").count(), 1, "un second « cle » : {json}");
+        assert!(json.contains("cle_posee"), "{json}");
+    }
+
+    fn ouvert_neuf() -> Ouvert {
+        Ouvert {
+            chemin: None,
+            projet: Projet::nouveau(Livre::vide(), String::new()),
+            modifie: false,
+            candidat: None,
+        }
+    }
+
+    /// Le drapeau est ce qui décide si fermer l'application perd du travail. Il ne
+    /// doit se lever que par une mutation, et retomber par une écriture — jamais
+    /// par une simple relecture du projet.
+    #[test]
+    fn le_drapeau_de_modification_suit_les_mutations_et_les_ecritures() {
+        let mut o = ouvert_neuf();
+        assert!(
+            !vue(&o).unwrap().modifie,
+            "un projet neuf n'est pas modifié"
+        );
+        assert!(!vue(&o).unwrap().modifie, "relire ne modifie pas");
+
+        assert!(vue_modifiee(&mut o).unwrap().modifie);
+        assert!(vue(&o).unwrap().modifie, "le drapeau reste levé");
+
+        assert!(!vue_enregistree(&mut o).unwrap().modifie);
+    }
+
+    /// Un manuscrit absent et un manuscrit sans chapitre composable rendent tous
+    /// deux zéro chapitre. L'interface doit pouvoir dire « aucun manuscrit » plutôt
+    /// que « 0 chapitre » : ce n'est pas la même chose à corriger.
+    #[test]
+    fn un_manuscrit_vide_se_declare_absent_et_non_vide_de_chapitres() {
+        let vide = ouvert_neuf();
+        let v = vue(&vide).unwrap();
+        assert!(v.manuscrit_absent);
+        assert_eq!(v.chapitres_trouves, 0);
+
+        let mut plein = ouvert_neuf();
+        plein.projet.texte = "## 01 - Un\n\nTexte.\n".into();
+        let v = vue(&plein).unwrap();
+        assert!(!v.manuscrit_absent);
+        assert_eq!(v.chapitres_trouves, 1);
+
+        // Du texte qui ne porte aucun « ## » : présent, mais sans chapitre.
+        let mut sans_chapitre = ouvert_neuf();
+        sans_chapitre.projet.texte = "juste une phrase\n".into();
+        let v = vue(&sans_chapitre).unwrap();
+        assert!(!v.manuscrit_absent, "présent, même s'il ne compose pas");
+        assert_eq!(v.chapitres_trouves, 0);
+
+        // Des espaces et des sauts de ligne ne sont pas un manuscrit : c'est ce que
+        // `trim` établit, et rien ne le dirait si on le retirait.
+        let mut blancs = ouvert_neuf();
+        blancs.projet.texte = "  \n\n\t \n".into();
+        assert!(vue(&blancs).unwrap().manuscrit_absent);
+    }
+
+    /// Écrire, c'est aussi retenir où : un « Enregistrer » suivant doit réécrire au
+    /// même endroit sans rien redemander.
+    #[test]
+    fn enregistrer_retient_le_chemin_ecrit() {
+        let dir = tempfile::tempdir().unwrap();
+        let chemin = dir.path().join("livre.ozalid");
+        let mut o = ouvert_neuf();
+        o.modifie = true;
+
+        let v = enregistrer_a(&mut o, &chemin).unwrap();
+        assert!(!v.modifie, "le drapeau retombe à l'écriture");
+        assert_eq!(o.chemin.as_deref(), Some(chemin.as_path()));
+        assert!(chemin.is_file(), "l'archive est bien sur le disque");
+        // Relire, et pas seulement écrire : un projet neuf porte un manuscrit vide,
+        // et l'archive doit tout de même le contenir pour être relisible.
+        assert_eq!(Projet::ouvrir(&chemin).unwrap().texte, "");
+    }
+
+    /// Une écriture refusée ne doit ni faire retomber le drapeau, ni faire croire que
+    /// le projet a changé d'adresse. C'est le cas où l'on croirait avoir sauvegardé.
+    #[test]
+    fn une_ecriture_refusee_ne_deplace_ni_le_projet_ni_le_drapeau() {
+        let dir = tempfile::tempdir().unwrap();
+        // Un répertoire existant ne peut pas être ouvert en création de fichier :
+        // c'est un échec d'écriture qui n'exige ni permission ni disque plein.
+        let impossible = dir.path().join("sous-repertoire");
+        std::fs::create_dir(&impossible).unwrap();
+
+        let ancien = dir.path().join("ancien.ozalid");
+        let mut o = ouvert_neuf();
+        o.modifie = true;
+        o.chemin = Some(ancien.clone());
+
+        assert!(enregistrer_a(&mut o, &impossible).is_err());
+        assert!(o.modifie, "le drapeau reste levé");
+        assert_eq!(o.chemin.as_deref(), Some(ancien.as_path()));
+    }
+
+    /// Le genre par défaut ne doit vivre qu'à un endroit : un projet neuf et un
+    /// projet relu d'un TOML sans genre doivent porter le même.
+    #[test]
+    fn un_livre_vide_prend_le_genre_par_defaut() {
+        let l = Livre::vide();
+        assert_eq!(l.genre, "Genre");
+        assert_eq!(l.titre, "Titre");
+        assert_eq!(l.auteur, "Auteur");
+        assert_eq!(l.chapitres, None);
+        assert_eq!(l.titre_page, "%TITRE%");
+    }
+
+    /// Un projet neuf part avec le gabarit que l'utilisateur a posé pour défaut : c'est
+    /// tout l'objet du réglage — ne pas le retaper d'un livre à l'autre.
+    #[test]
+    fn un_projet_neuf_recoit_le_gabarit_de_depart() {
+        let p = projet_neuf("une aquarelle pour {dedicataire}".into());
+        assert_eq!(p.meta.envois.gabarit, "une aquarelle pour {dedicataire}");
+    }
+
+    /// Le défaut n'est qu'une valeur de départ : il ne touche ni la liste des envois, ni
+    /// la couleur, ni le paraphe, qui appartiennent au livre qu'on écrit.
+    #[test]
+    fn le_gabarit_de_depart_ne_pose_rien_d_autre() {
+        let p = projet_neuf("une aquarelle".into());
+        assert!(p.meta.envois.liste.is_empty());
+        assert_eq!(p.meta.envois.couleur, "");
+        assert_eq!(p.meta.envois.paraphe, "");
+    }
+}

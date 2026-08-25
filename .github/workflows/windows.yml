@@ -1,0 +1,207 @@
+# Établit que Windows compile, teste et pagine comme macOS, puis produit sur tag
+# l'installeur NSIS. L'app n'est testable sous Windows que par ici : c'est le second
+# volet du jalon 5 (docs/superpowers/specs/2026-08-20-release-windows-ci-design.md).
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # La compilation Rust d'un projet Tauri dépasse largement le reste du job ; sans
+      # cache, chaque push coûterait une dizaine de minutes.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # Le sidecar et les polices ne sont pas versionnés. La clé porte les scripts
+      # eux-mêmes : relever la version épinglée de Typst ou changer la liste des polices
+      # invalide le cache, ce qui est le comportement voulu.
+      - name: Cache du sidecar et des polices
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/binaries
+            src-tauri/fonts
+          key: typst-polices-${{ hashFiles('outils/typst.sh', 'outils/polices.sh') }}
+
+      - name: Sidecar Typst et polices embarquées
+        run: |
+          outils/typst.sh x86_64-pc-windows-msvc
+          outils/polices.sh
+
+      # `temoin` et `packager` prennent le Typst du PATH, comme en local : la CI ne se
+      # donne pas une procédure à elle.
+      - name: Typst dans le PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp src-tauri/binaries/typst-x86_64-pc-windows-msvc.exe "$RUNNER_TEMP/bin/typst.exe"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Version de Typst
+        run: typst --version
+
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      # `-D warnings` en plus de la commande du README : en local un avertissement se
+      # lit, ici personne ne lit le journal d'un job vert.
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests Rust
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - name: Tests du front
+        run: node --test "tests/*.test.js"
+
+      # L'assertion centrale du volet : la pagination ne dépend pas de la plateforme.
+      - name: Témoin de pagination
+        working-directory: src-tauri
+        run: cargo run --example temoin -- "$RUNNER_TEMP/temoin"
+
+  publier:
+    needs: verifier
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # Une release dont le numéro ment sur son contenu est pire que pas de release.
+      - name: Le tag et la version de l'application doivent coïncider
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$tag" != "$conf" ]; then
+            echo "tag $GITHUB_REF_NAME contre version $conf de tauri.conf.json" >&2
+            exit 1
+          fi
+          echo "version $conf"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache du sidecar et des polices
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/binaries
+            src-tauri/fonts
+          key: typst-polices-${{ hashFiles('outils/typst.sh', 'outils/polices.sh') }}
+
+      - name: Sidecar Typst et polices embarquées
+        run: |
+          outils/typst.sh x86_64-pc-windows-msvc
+          outils/polices.sh
+
+      - name: CLI Tauri
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Construire l'installeur
+        working-directory: src-tauri
+        run: tauri build --bundles nsis
+
+      # Un installeur qui s'installe n'est pas un installeur qui compose : commands.rs
+      # cherche le sidecar à côté de l'exécutable et les polices dans son sous-dossier
+      # `fonts`, mais rien ne garantit encore que le NSIS les y pose vraiment. On installe
+      # en silencieux et on inspecte l'arborescence réelle plutôt que de la supposer.
+      #
+      # En PowerShell, et non en bash : `Start-Process -Wait` attend l'installeur seul,
+      # là où bash attend aussi l'application que celui-ci lance en fin d'installation —
+      # un premier essai a tourné 1 h 40 sur cette seule ligne. `-PassThru` donne en
+      # prime le code de sortie de l'installeur, sans lequel un échec est muet.
+      - name: Vérifier l'installation silencieuse
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $dossier = "src-tauri/target/release/bundle/nsis"
+          $installeur = Get-ChildItem $dossier -Filter "*-setup.exe" | Select-Object -First 1
+          if (-not $installeur) {
+            Write-Error "aucun installeur trouvé sous $dossier"
+            exit 1
+          }
+
+          $p = Start-Process -FilePath $installeur.FullName -ArgumentList "/S" -Wait -PassThru
+          Write-Host "installeur terminé, code de sortie $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) {
+            Write-Error "l'installation silencieuse a échoué"
+            exit 1
+          }
+
+          # L'application que l'installeur vient de lancer tient ses fichiers ouverts.
+          Get-Process -Name "ozalid-studio" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+          # L'exécutable porte le nom du paquet Cargo — « ozalid-studio.exe » — et non le
+          # `productName`, qui ne nomme que le bundle et le dossier d'installation. Le mode
+          # NSIS de Tauri installe par utilisateur (%LOCALAPPDATA%) ou par machine
+          # (%PROGRAMFILES%) : on cherche aux deux endroits plutôt que d'en supposer un.
+          $racines = @($env:LOCALAPPDATA, $env:ProgramFiles)
+          $trouve = Get-ChildItem $racines -Recurse -Depth 2 -Filter "ozalid-studio.exe" `
+            -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $trouve) {
+            Write-Host "répertoires de $env:LOCALAPPDATA :"
+            Get-ChildItem $env:LOCALAPPDATA -Directory | ForEach-Object { $_.Name }
+            Write-Error "« ozalid-studio.exe » introuvable : l'installeur a rendu 0 sans rien poser"
+            exit 1
+          }
+
+          $racine = $trouve.Directory.FullName
+          Write-Host "racine d'installation : $racine"
+          Get-ChildItem $racine -Recurse -Depth 1 | ForEach-Object { $_.FullName }
+
+          if (-not (Test-Path (Join-Path $racine "typst.exe"))) {
+            Write-Error "typst.exe absent de $racine : commands.rs::binaire_typst() le cherche à côté de l'exécutable, l'installeur ne l'y a pas posé."
+            exit 1
+          }
+          if (-not (Get-ChildItem (Join-Path $racine "fonts") -Filter "*.ttf" -ErrorAction SilentlyContinue)) {
+            Write-Error "aucun .ttf dans $racine\fonts : commands.rs::typst() n'y trouvera pas de polices."
+            exit 1
+          }
+
+          Write-Host "sidecar et polices trouvés à leur emplacement attendu"
+
+      - name: Release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          exe=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
+          [ -n "$exe" ] || { echo "aucun installeur produit" >&2; exit 1; }
+          gh release create "$GITHUB_REF_NAME" "$exe" \
+            --draft \
+            --title "Ozalid Studio $GITHUB_REF_NAME" \
+            --notes "L'installeur n'est pas signé : au premier lancement, Windows affiche « Windows a protégé votre PC ». Choisir « Informations complémentaires », puis « Exécuter quand même ». L'installation ne demande pas de droits administrateur."

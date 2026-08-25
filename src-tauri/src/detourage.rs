@@ -1,0 +1,264 @@
+//! Séparer l'encre du papier dans la photo d'un envoi.
+//!
+//! Un envoi écrit à la main est presque toujours la photo d'un mot tracé sur une
+//! feuille. Le papier photographié n'est pas du blanc pur — 230 à 245, teinté, avec le
+//! dégradé de l'éclairage — et ce blanc-là s'encre. Sur un papier crème, il paraît.
+//!
+//! Aucun disque, aucun état : des octets entrent, des octets sortent. C'est la manière
+//! d'`image.rs`, et c'est ce qui rend ce module vérifiable sur des images fabriquées en
+//! mémoire.
+
+/// Les deux seuils qui séparent l'encre du papier, en luminance 0-255.
+///
+/// Deux et non un : sans point d'encre, un trait bien noir ressort délavé — mesuré
+/// (48, 51, 123) contre (28, 32, 105) pour un stylo bleu. Voir la spec, § « Ce qui est
+/// vérifié ».
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Detourage {
+    /// Au-dessus, c'est le papier : alpha 0.
+    pub papier: f64,
+    /// En dessous, c'est l'encre pleine : alpha 1.
+    pub encre: f64,
+}
+
+/// La luminance perçue d'un pixel, 0-255.
+fn luminance(r: u8, g: u8, b: u8) -> f64 {
+    0.2126 * r as f64 + 0.7152 * g as f64 + 0.0722 * b as f64
+}
+
+/// La luminance d'une couleur écrite en `#rrggbb`, quand c'en est une.
+///
+/// Le champ de l'encre accepte deux formes, et c'est voulu : un nom anglais —
+/// « blue-black » — que les modèles lisent mieux qu'un hexadécimal, ou un code que
+/// l'auteur colle depuis un nuancier. Seule la seconde dit une valeur, et c'est ce qui
+/// la rend utile ici : elle pose le point d'encre exactement là où il faut.
+///
+/// Sans elle, une encre claire sort **délavée**. Le point d'encre est estimé sur les
+/// pixels les plus sombres d'une écriture, ce qui vaut ~37 pour du noir ; un rose à ~100
+/// de luminance n'atteint jamais ce seuil, et son trait plafonne à 69 % d'opacité — le
+/// papier transparaît au travers, sur toute la signature.
+///
+/// Ce qui n'est pas un code rend `None` plutôt qu'une valeur inventée : un mot ne dit
+/// aucune luminance, et deviner la sienne poserait un seuil au hasard.
+pub fn luminance_hex(couleur: &str) -> Option<f64> {
+    let c = couleur.trim().strip_prefix('#')?;
+    if c.len() != 6 {
+        return None;
+    }
+    let n = |i: usize| u8::from_str_radix(&c[i..i + 2], 16).ok();
+    Some(luminance(n(0)?, n(2)?, n(4)?))
+}
+
+/// La photo, son fond rendu transparent, en PNG.
+///
+/// **La couleur du pixel n'est pas touchée.** Démultiplier l'encre pour la « retrouver »
+/// derrière le papier a été mesuré : le trait en sort moins fidèle qu'avec un point noir
+/// bien posé, pour un calcul plus compliqué. Seul l'alpha se calcule.
+///
+/// L'alpha calculé **multiplie** celui d'entrée : un PNG déjà détouré par l'auteur ne
+/// doit pas redevenir opaque là où son fond est clair.
+pub fn applique(octets: &[u8], d: &Detourage) -> Result<Vec<u8>, String> {
+    if d.papier <= d.encre {
+        return Err(format!(
+            "détourage impossible : le papier ({:.0}) doit être plus clair que \
+             l'encre ({:.0}).",
+            d.papier, d.encre
+        ));
+    }
+    let mut img = image::load_from_memory(octets)
+        .map_err(|e| format!("image illisible : {e}"))?
+        .to_rgba8();
+    let ecart = d.papier - d.encre;
+    for p in img.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        let f = ((d.papier - luminance(r, g, b)) / ecart).clamp(0.0, 1.0);
+        p.0 = [r, g, b, (f * a as f64).round() as u8];
+    }
+    let mut out = Vec::new();
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .map_err(|e| format!("encodage PNG impossible : {e}"))?;
+    Ok(out)
+}
+
+/// Les seuils que cette image-là appelle.
+///
+/// Le papier au 95e percentile de luminance, l'encre au 0,5e. Deux percentiles très
+/// écartés parce qu'aucun n'est fiable seul : la part encrée d'une image varie du tout
+/// au tout, et un percentile trop haut du côté de l'encre tombe dans le papier dès que
+/// le mot est court. C'est une estimation de départ, que l'écran laisse reprendre.
+pub fn estime(octets: &[u8]) -> Result<Detourage, String> {
+    let img = image::load_from_memory(octets)
+        .map_err(|e| format!("image illisible : {e}"))?
+        .to_rgba8();
+    let mut l: Vec<f64> = img.pixels().map(|p| luminance(p[0], p[1], p[2])).collect();
+    if l.is_empty() {
+        return Err("image vide : rien à détourer.".into());
+    }
+    l.sort_by(|a, b| a.total_cmp(b));
+    let au = |q: f64| l[((q * (l.len() - 1) as f64).round() as usize).min(l.len() - 1)];
+    Ok(Detourage {
+        papier: au(0.95),
+        encre: au(0.005),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Une image unie de la couleur donnée, en PNG.
+    fn uni(r: u8, g: u8, b: u8) -> Vec<u8> {
+        let img = image::RgbaImage::from_pixel(4, 4, image::Rgba([r, g, b, 255]));
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    /// L'alpha du premier pixel d'un PNG.
+    fn alpha(octets: &[u8]) -> u8 {
+        image::load_from_memory(octets)
+            .unwrap()
+            .to_rgba8()
+            .get_pixel(0, 0)[3]
+    }
+
+    const SEUILS: Detourage = Detourage {
+        papier: 240.0,
+        encre: 40.0,
+    };
+
+    /// Les deux bouts de la rampe. Sans eux, un détourage qui ne ferait rien passerait.
+    #[test]
+    fn le_papier_disparait_et_l_encre_reste() {
+        assert_eq!(alpha(&applique(&uni(250, 250, 250), &SEUILS).unwrap()), 0);
+        assert_eq!(alpha(&applique(&uni(10, 10, 10), &SEUILS).unwrap()), 255);
+    }
+
+    /// La rampe elle-même : un seuil binaire ferait tomber ce test, et c'est tout son
+    /// objet — il hacherait le trait en escalier là où la photo l'a lissé.
+    #[test]
+    fn un_pixel_a_mi_chemin_sort_a_mi_alpha() {
+        // Luminance 140, à mi-chemin de 240 et 40 : un gris neutre suffit, la luminance
+        // d'un gris vaut sa composante.
+        let a = alpha(&applique(&uni(140, 140, 140), &SEUILS).unwrap());
+        assert!((a as i32 - 128).abs() <= 2, "alpha {a}, attendu 128 ± 2");
+    }
+
+    /// `papier <= encre` divise par zéro ou inverse la rampe : l'image sortirait
+    /// entièrement opaque sans qu'on sache pourquoi. On refuse en nommant les deux
+    /// valeurs — c'est un réglage que l'écran laisse atteindre.
+    #[test]
+    fn un_papier_plus_sombre_que_l_encre_se_refuse() {
+        let d = Detourage {
+            papier: 40.0,
+            encre: 240.0,
+        };
+        let err = applique(&uni(200, 200, 200), &d).unwrap_err();
+        assert!(err.contains("240"), "le message ne dit pas l'encre : {err}");
+        assert!(
+            err.contains("40"),
+            "le message ne dit pas le papier : {err}"
+        );
+    }
+
+    /// Une image faite d'une part d'encre sur du papier, en PNG.
+    ///
+    /// Cent lignes et non vingt : à vingt, une part de 2 % arrondit à zéro ligne, et le
+    /// test vérifierait l'estimation sur une image sans une goutte d'encre.
+    fn encre_sur_papier(part: f64) -> Vec<u8> {
+        let mut img = image::RgbaImage::from_pixel(20, 100, image::Rgba([242, 240, 235, 255]));
+        let lignes = (100.0 * part).round() as u32;
+        for y in 0..lignes {
+            for x in 0..20 {
+                img.put_pixel(x, y, image::Rgba([30, 36, 118, 255]));
+            }
+        }
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgba8(img)
+            .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    /// L'estimation vise le papier haut et l'encre bas, et elle tient quand le mot est
+    /// court : la part encrée d'une image va de moins de 1 % pour une signature à plus
+    /// de 10 % pour un paragraphe. C'est ce qui a fait écarter un percentile unique —
+    /// sur la photo d'essai de la spec, le 5e percentile tombait déjà dans le papier.
+    #[test]
+    fn les_seuils_s_estiment_sur_une_signature_comme_sur_un_paragraphe() {
+        for part in [0.02, 0.30] {
+            let d = estime(&encre_sur_papier(part)).unwrap();
+            assert!(
+                d.papier > 200.0,
+                "papier {} pour une part de {part}",
+                d.papier
+            );
+            assert!(d.encre < 100.0, "encre {} pour une part de {part}", d.encre);
+            assert!(d.papier > d.encre);
+        }
+    }
+
+    /// La couleur ne se retouche pas : seul l'alpha se calcule. C'est la décision du
+    /// § 2 de la spec — la démultiplication a été mesurée moins fidèle qu'un point noir
+    /// bien posé — et rien d'autre ne la protège.
+    #[test]
+    fn la_couleur_de_l_encre_ne_bouge_pas() {
+        let px = image::load_from_memory(&applique(&uni(30, 36, 118), &SEUILS).unwrap())
+            .unwrap()
+            .to_rgba8();
+        let [r, g, b, a] = px.get_pixel(0, 0).0;
+        assert_eq!((r, g, b), (30, 36, 118), "la couleur a été retouchée");
+        assert!(
+            a > 200,
+            "un bleu franc devrait être quasi opaque, alpha {a}"
+        );
+    }
+
+    /// Les photos d'appareil sont des JPEG : les refuser viderait le chantier de son
+    /// objet. Le format se relève sur le contenu, comme partout ailleurs dans
+    /// l'application.
+    #[test]
+    fn un_jpeg_se_detoure_comme_un_png() {
+        let mut jpeg = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            4,
+            4,
+            image::Rgb([248, 246, 241]),
+        ))
+        .write_to(
+            &mut std::io::Cursor::new(&mut jpeg),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
+        assert_eq!(alpha(&applique(&jpeg, &SEUILS).unwrap()), 0);
+    }
+
+    /// Un code couleur dit exactement où poser le point d'encre. La luminance de
+    /// `#F532AC` vaut ~100 : sur un seuil relevé pour du noir (~37), ce rose sortirait
+    /// à 69 % d'opacité, délavé par le papier qui transparaît au travers.
+    #[test]
+    fn un_code_couleur_donne_son_point_d_encre() {
+        let l = luminance_hex("#F532AC").expect("code refusé");
+        assert!((l - 100.3).abs() < 0.5, "luminance {l}");
+        assert!((luminance_hex("#191917").unwrap() - 24.9).abs() < 0.5);
+    }
+
+    /// Ce qui n'est pas un code reste un mot : le champ accepte les deux, et
+    /// « blue-black » est un terme que les modèles lisent mieux qu'un hexadécimal.
+    #[test]
+    fn ce_qui_n_est_pas_un_code_ne_dit_aucun_point() {
+        for c in ["blue-black", "", "#GGGGGG", "#12345", "F532AC", "#F532ACF"] {
+            assert_eq!(luminance_hex(c), None, "« {c} » a été pris pour un code");
+        }
+    }
+
+    /// La casse et les blancs ne décident de rien : un code collé depuis un nuancier
+    /// arrive souvent en majuscules, parfois avec une espace.
+    #[test]
+    fn un_code_se_lit_quelle_que_soit_sa_casse() {
+        assert_eq!(luminance_hex(" #f532ac "), luminance_hex("#F532AC"));
+    }
+}
