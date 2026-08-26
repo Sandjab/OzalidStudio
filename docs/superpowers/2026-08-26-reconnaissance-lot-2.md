@@ -12,12 +12,20 @@ copie (`git archive HEAD | tar -x`) dans le scratchpad ; **le dépôt n'a pas é
 > citées pour eux tiennent. Trois décalages et deux faits neufs sont notés au § 8 en fin
 > de rapport. Relève-les avant d'écrire le plan : l'un d'eux change une conclusion.
 
-Les copies de travail :
+**Comment les expériences ont été montées** — elles vivaient dans un scratchpad de session
+qui ne survit pas ; le dispositif est décrit ici pour être refait, et le code des esquisses
+est reproduit en clair dans les verdicts plutôt que cité par un chemin mort.
 
-- l'arbre : `…/scratchpad/copie/` (+ `binaries/` et `fonts/`, non trackés, recopiés à la
-  main — sans eux `cargo check` échoue au `build.rs` de `tauri-build`) ;
-- le `target` : `…/scratchpad/target/` (`CARGO_TARGET_DIR`, jamais celui du dépôt) ;
-- un crate serde/toml isolé : `…/scratchpad/essai/`.
+- L'arbre : `git archive HEAD | tar -x -C <ailleurs>`, **plus `src-tauri/binaries/` et
+  `src-tauri/fonts/` recopiés à la main**. Ces deux répertoires ne sont pas trackés, et
+  sans eux `cargo check` échoue au `build.rs` de `tauri-build` :
+  `resource path 'binaries/typst-aarch64-apple-darwin' doesn't exist`, puis
+  `glob pattern fonts/* path not found`. C'est le premier obstacle et il coûte deux
+  compilations complètes si on ne le sait pas.
+- Le `target` : un `CARGO_TARGET_DIR` à part, **jamais celui du dépôt** — le `target/` du
+  dépôt fait 6,5 Go et son verrou aurait bloqué la tâche qui travaillait en parallèle.
+- Un crate `serde` + `toml 0.8` + `serde_json` isolé pour les essais de sérialisation :
+  ils ne demandent pas Tauri, et compilent en secondes au lieu de minutes.
 
 ---
 
@@ -344,14 +352,49 @@ Tout ce qui suit a été **compilé et exécuté**. Les messages sont ceux du co
 
 ### 1a. Les quatre `&'static` s'extraient sans peine — ✅ compile
 
-Fichier d'essai : `…/scratchpad/copie/src-tauri/src/esquisse.rs`, branché dans `lib.rs`.
-`cargo check --lib` : **Finished, aucune erreur.**
+L'esquisse a été posée en `src-tauri/src/esquisse.rs`, branchée dans `lib.rs`.
+`cargo check --lib` : **Finished, aucune erreur.** La voici **en entier** — c'est elle qui
+porte le verdict, et le fichier d'origine ne survit pas à la session :
 
 ```rust
-static PODS: OnceLock<Vec<Pod>> = OnceLock::new();
-pub fn pods() -> &'static [Pod] { PODS.get_or_init(|| catalogue::fournis().expect(…)) }
+use std::sync::OnceLock;
+use crate::catalogue::{Format, Papier, Pod, Reliure};
 
-#[derive(Debug, Clone, Copy)]              // Copy : rien n'est possédé
+/* ---------- 1. le catalogue à cinq axes derrière un OnceLock ---------- */
+
+static PODS: OnceLock<Vec<Pod>> = OnceLock::new();
+
+pub fn pods() -> &'static [Pod] {
+    PODS.get_or_init(|| crate::catalogue::fournis().expect("catalogue fourni illisible"))
+}
+
+/* ---------- 2. l'identité, telle que le .ozalid la porte ---------- */
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct Fabrication {
+    pub pod: String,
+    pub format: String,
+    pub reliure: String,
+    pub papier: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Livrable {
+    #[serde(flatten)]
+    pub fabrication: Fabrication,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finition: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dos_mm: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fond_perdu_mm: Option<f64>,
+}
+
+/* ---------- 3. le livrable résolu contre le catalogue ---------- */
+
+/// Quatre références dans une table qui vit aussi longtemps que le processus.
+/// `Copy` : rien ici n'est possédé.
+#[derive(Debug, Clone, Copy)]
 pub struct Resolu {
     pub pod: &'static Pod,
     pub format: &'static Format,
@@ -359,10 +402,61 @@ pub struct Resolu {
     pub papier: &'static Papier,
 }
 
-pub fn resout(f: &Fabrication) -> Result<Resolu, String> { … }
+impl Resolu {
+    pub fn fond_perdu(&self) -> Option<f64> {
+        self.format.fond_perdu.or(self.pod.fond_perdu)
+    }
 
-// et un emprunt court peut cohabiter avec les quatre 'static :
-pub fn vise(l: &Livraison) -> Result<(Resolu, &Livrable), String> { todo!() }
+    pub fn libelle(&self) -> String {
+        format!("{} — {}", self.pod.nom, self.format.nom)
+    }
+
+    /// Le nom du répertoire de package. Voir le verdict 4 : le `replace` est arbitraire.
+    pub fn dossier(&self) -> String {
+        format!(
+            "{}-{}-{}-{}",
+            self.pod.cle, self.format.cle, self.reliure.cle,
+            self.papier.cle.replace('-', "")
+        )
+    }
+}
+
+pub fn resout(f: &Fabrication) -> Result<Resolu, String> {
+    let pod = pods().iter().find(|p| p.cle == f.pod)
+        .ok_or_else(|| format!("POD inconnu : {}", f.pod))?;
+    let format = pod.formats.iter().find(|x| x.cle == f.format)
+        .ok_or_else(|| format!("{} ne fait pas le format {}", pod.nom, f.format))?;
+    let reliure = pod.reliures.iter().find(|x| x.cle == f.reliure)
+        .ok_or_else(|| format!("{} ne fait pas la reliure {}", pod.nom, f.reliure))?;
+    // Le refus par le Rust d'une reliure non outillée, que la spec § 9 réclame.
+    if reliure.geometrie.is_none() {
+        return Err(match &reliure.non_outille {
+            Some(raison) => format!("{} : {raison}", reliure.nom),
+            None => format!("{} n'est pas composable.", reliure.nom),
+        });
+    }
+    let papier = pod.papiers.iter().find(|x| x.cle == f.papier)
+        .ok_or_else(|| format!("papier inconnu chez {} : {}", pod.cle, f.papier))?;
+    Ok(Resolu { pod, format, reliure, papier })
+}
+
+/* ---------- 4. ce que `vise` devient : quatre 'static + un emprunt court ---------- */
+
+pub fn vise(l: &crate::projet::Livraison) -> Result<(Resolu, &Livrable), String> {
+    let _ = l;
+    todo!("le lot 2 l'écrira")
+}
+
+/* ---------- 5. ce que `converge` réclame, porté sur le format ---------- */
+
+impl crate::catalogue::Format {
+    pub fn gouttiere_de(&self, pages: u32) -> Result<f64, String> {
+        self.gouttieres.iter()
+            .find(|t| t.de <= pages && pages <= t.a)
+            .map(|t| t.mm)
+            .ok_or_else(|| format!("{pages} pages : tranche absente du format {}", self.cle))
+    }
+}
 ```
 
 Trois faits établis :
