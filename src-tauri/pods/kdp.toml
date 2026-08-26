@@ -46,7 +46,8 @@ cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
 pages = { min = 24, max = 828 }
-# KDP ne publie pas de règle de parité ; « paire » est ce que la composition fait partout.
+# Aucune règle de parité relevée chez KDP ; « paire » est ce que la composition fait
+# partout.
 parite = "paire"
 source = "options d'impression KDP"
 

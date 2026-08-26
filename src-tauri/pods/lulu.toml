@@ -26,7 +26,8 @@ cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
 pages = { min = 32, max = 800 }
-# Lulu ne publie pas de règle de parité ; « paire » est ce que la composition fait partout.
+# Aucune règle de parité relevée chez Lulu ; « paire » est ce que la composition fait
+# partout.
 parite = "paire"
 source = "bornes reprises de la table historique du dépôt, sans relevé au guide"
 

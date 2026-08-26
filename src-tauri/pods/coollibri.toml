@@ -46,7 +46,7 @@ cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
 pages = { min = 60, max = 700 }
-# CoolLibri ne publie pas de règle de parité ; « paire » est ce que la composition fait
+# Aucune règle de parité relevée chez CoolLibri ; « paire » est ce que la composition fait
 # partout.
 parite = "paire"
 source = "pagination admise en dos carré collé, selon le papier"

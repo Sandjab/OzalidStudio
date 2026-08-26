@@ -1,10 +1,10 @@
 //! Le catalogue des POD : ce que chaque imprimeur offre, et d'où chaque chiffre vient.
 //!
-//! Un fichier TOML par POD. Les fournis seront incorporés au binaire par `include_str!` —
-//! il n'y aura donc aucun chemin à résoudre pour eux, aucun mode dégradé, aucun écart
-//! entre développement et livraison. Le poste pourra en déposer d'autres, qui
-//! remplaceront le fourni de même clé. Ce module ne porte pour l'instant que les types et
-//! leur lecture : ni fichier fourni, ni chargement, ni vue plate.
+//! Un fichier TOML par POD. Les fournis sont incorporés au binaire par `include_str!` —
+//! il n'y a donc aucun chemin à résoudre pour eux, aucun mode dégradé, aucun écart entre
+//! développement et livraison. Le poste pourra en déposer d'autres, qui remplaceront le
+//! fourni de même clé. Ce module porte pour l'instant les types, leur lecture et les six
+//! fichiers fournis : ni chargement depuis le poste, ni vue plate.
 //!
 //! Cinq axes : le POD, ses formats, ses reliures, ses finitions, ses papiers. Le cas
 //! courant — tout compatible avec tout — ne s'écrit pas ; seules les exceptions se
