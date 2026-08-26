@@ -48,7 +48,7 @@ Quatre formes d'en-tête `## `, et rien d'autre :
 |---|---|---|
 | `## 01 - Vingt centimes` | chapitre numéroté | corps |
 | `## Préface` · `## Avant-propos` · `## Prologue` | liminaire | avant le corps |
-| `## Épilogue` · `## Postface` · `## Remerciements` | annexe | après le corps |
+| `## Épilogue` · `## Postface` · `## Remerciements` · `## Biographie` | annexe | après le corps |
 | `## Partie III - Avant Clément` | page de partie | corps |
 
 Le manuscrit est donc **trois zones, dans cet ordre** : liminaires, corps, annexes.
