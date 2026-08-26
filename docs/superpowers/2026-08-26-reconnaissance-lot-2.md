@@ -561,7 +561,8 @@ Deux réserves à porter au plan si tu prends cette voie :
 
 ## Verdict 2 — la forme sérialisée de la `Mesure` déplacée
 
-Essais : `…/scratchpad/essai/src/main.rs` et `…/essai/src/bin/formes.rs`.
+Essais menés dans le crate `serde` + `toml 0.8` isolé, chaque forme sérialisée puis
+relue.
 
 | forme | verdict |
 |---|---|
@@ -618,7 +619,7 @@ Trois pièges vérifiés :
    accepté sans un mot. Si le plan met `deny_unknown_fields` sur `Livrable`, `flatten` le
    rendra inopérant.
 
-**La forme de `courant`** (essai `…/essai/src/bin/courant.rs`) : les trois se sérialisent
+**La forme de `courant`**, les trois essayées : les trois se sérialisent
 et se relisent — une clé composée (`courant = "bod-135x215-broche-creme-90"`), un index
 (`courant = 0`), une table à quatre axes (`[courant]`). L'index est le plus fragile : un
 livrable retiré décale le pointeur en silence, et `normalise` doit le rattraper. Vu le
@@ -627,8 +628,8 @@ risque de boucle infinie décrit au § 6, **`courant` doit être une clé, pas u
 
 ## Verdict 3 — la migration : ✅ compile et tourne sur le Candide réel
 
-Essai : `…/scratchpad/essai/src/bin/migration.rs`, lancé sur le `projet.toml` extrait de
-`build/travail/candide.ozalid`.
+Essai lancé sur le `projet.toml` réellement extrait de `build/travail/candide.ozalid`, puis
+sur un ancien fabriqué à trois destinataires.
 
 Le code tient en une fonction sur le `toml::Value`, dans l'esprit exact de `migre`
 (`projet.rs:458`) :
@@ -745,7 +746,8 @@ visibles, aucune transformation), soit changer la clé du papier en `creme90` da
 
 `est_un_nom` (`catalogue.rs:235`) ne s'applique **qu'à `cle_heritee`** (`catalogue.rs:302`).
 Les quatre clés qui vont nommer le répertoire au lot 2 ne passent que par `cle_non_vide`.
-Sonde exécutée (`…/copie/src-tauri/examples/sonde.rs`) :
+Sonde exécutée sur la copie — trois `Pod::depuis_toml` avec un socle valide et une seule
+clé de travers chacun :
 
 ```
 pod.cle = "../evade"          -> ACCEPTÉ (cle = "../evade", papier = "creme-90", format = "135x215")
