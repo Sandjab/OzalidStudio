@@ -2631,9 +2631,11 @@ nom = "Pelliculage mat"
 
     /// Le relevé de dos suit le **papier**, jamais le premier de la liste. Aucun POD fourni
     /// ne le vérifie : KDP publie une formule pour ses deux papiers, CoolLibri pour aucun —
-    /// la mutation qui calculerait `dos_publie` sur le papier d'office du POD plutôt que
-    /// sur `pa` resterait donc invisible à `dos_publie_est_porte_par_chaque_papier`. Cette
-    /// fixture mélange exprès les deux formes dans le même POD pour que la règle rougisse.
+    /// la mutation qui calculerait `dos_publie` sur le papier d'office du POD plutôt que sur
+    /// chaque papier resterait donc invisible à `dos_publie_est_porte_par_chaque_papier`.
+    /// Cette fixture mélange exprès les deux formes dans le même POD pour que la règle
+    /// rougisse, et passe par `PodVue::from` — le site d'appel réel, celui qu'une régression
+    /// toucherait — plutôt que par `PapierVue::from` en direct, qui ne voit pas le POD.
     #[test]
     fn la_conversion_d_un_papier_suit_sa_propre_formule_de_dos() {
         let pod = catalogue::Pod::depuis_toml(
@@ -2670,10 +2672,12 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         )
         .unwrap();
 
-        let mesure = PapierVue::from(&pod.papiers[0]);
-        let creme = PapierVue::from(&pod.papiers[1]);
-        assert!(!mesure.dos_publie, "« mesure » ne publie aucune formule");
-        assert!(creme.dos_publie, "« multiplie » en publie une");
+        let vue = PodVue::from(&pod);
+        assert!(
+            !vue.papiers[0].dos_publie,
+            "« mesure » ne publie aucune formule"
+        );
+        assert!(vue.papiers[1].dos_publie, "« multiplie » en publie une");
     }
 
     /// Choisir l'image d'une face remplace celle qui s'y composait, quel que soit le

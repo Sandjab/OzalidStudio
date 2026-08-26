@@ -60,7 +60,7 @@ impl Dos {
         }
     }
 
-    /// Vrai quand ce papier publie de quoi calculer son dos.
+    /// Vrai quand cette épaisseur se calcule, faux quand elle se relève sur un gabarit.
     ///
     /// La question porte sur la **forme**, pas sur une pagination : `mm` interrogé sur un
     /// nombre de pages arbitraire y répondait, au prix d'un chiffre sans signification à
