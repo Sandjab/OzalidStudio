@@ -220,18 +220,12 @@ fn fini_non_negatif(v: f64) -> bool {
     v.is_finite() && v >= 0.0
 }
 
-/// Une clé vide ne se choisit pas dans l'interface et ne se retrouve pas dans un
-/// `.ozalid` : elle ne désigne rien.
-fn cle_non_vide(pod: &str, quoi: &str, cle: &str) -> Result<(), String> {
-    if cle.trim().is_empty() {
-        return Err(format!("{pod} : {quoi} sans clé."));
-    }
-    Ok(())
-}
-
-/// La clé héritée nomme un répertoire de package : elle doit être un nom de fichier et
-/// rien d'autre. `../../ailleurs` s'écrit sans peine dans un TOML, et `package` en ferait
-/// un chemin.
+/// Une clé du catalogue — POD, format, reliure, finition ou papier, la clé héritée
+/// comprise — nomme un répertoire de package ou un identifiant : elle doit être un nom de
+/// fichier et rien d'autre. Une clé vide ne se choisit pas dans l'interface et ne se
+/// retrouve pas dans un `.ozalid` : elle ne désigne rien, et n'est donc pas davantage un
+/// nom. `../../ailleurs` ou `C:nul*` s'écrivent sans peine dans un TOML, et `package` en
+/// ferait un chemin.
 fn est_un_nom(cle: &str) -> bool {
     !cle.is_empty()
         && cle
@@ -264,6 +258,13 @@ impl Pod {
     }
 
     fn verifie(&self) -> Result<(), String> {
+        if !est_un_nom(&self.cle) {
+            return Err(format!(
+                "clé de POD « {} » : minuscules, chiffres et tirets, rien d'autre — elle \
+                 nomme des répertoires et des identifiants.",
+                self.cle
+            ));
+        }
         for (quoi, vide) in [
             ("format", self.formats.is_empty()),
             ("reliure", self.reliures.is_empty()),
@@ -278,9 +279,6 @@ impl Pod {
             }
         }
 
-        if self.cle.trim().is_empty() {
-            return Err("un POD sans clé : rien ne pourrait le désigner.".to_string());
-        }
         for (quoi, cle) in self
             .formats
             .iter()
@@ -297,7 +295,13 @@ impl Pod {
             )
             .chain(self.papiers.iter().map(|p| ("un papier", p.cle.as_str())))
         {
-            cle_non_vide(&self.cle, quoi, cle)?;
+            if !est_un_nom(cle) {
+                return Err(format!(
+                    "{} : {quoi} à la clé « {cle} ». Minuscules, chiffres et tirets, rien \
+                     d'autre — elle nomme des répertoires et des identifiants.",
+                    self.cle
+                ));
+            }
         }
         for f in &self.formats {
             if !est_un_nom(&f.cle_heritee) {
@@ -1404,7 +1408,7 @@ non_outille = "géométrie du casewrap non relevée"
                 .map(|b| if *b == bloc { ampute.as_str() } else { *b })
                 .collect();
             let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
-            let attendu = format!("{quoi} sans clé");
+            let attendu = format!("{quoi} à la clé");
             assert!(e.contains(&attendu), "attendu « {attendu} », reçu : {e}");
         }
 
@@ -1417,6 +1421,56 @@ non_outille = "géométrie du casewrap non relevée"
             let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
             assert!(e.contains("clé héritée"), "{cle_heritee} : {e}");
         }
+    }
+
+    /// Le trou du verdict 4 : une clé de POD qui n'est pas un nom se lisait sans erreur,
+    /// alors qu'elle nomme un répertoire de package à partir du lot 2.
+    #[test]
+    fn une_cle_de_pod_qui_n_est_pas_un_nom_est_refusee() {
+        let e = Pod::depuis_toml(&format!(
+            r##"cle = "../evade"
+nom = "Essai"
+{FORMAT}{RELIURE}{PAPIER}"##
+        ))
+        .unwrap_err();
+        assert!(e.contains("../evade"), "{e}");
+    }
+
+    /// Même trou côté papier : `../../ailleurs` s'écrit sans peine dans un TOML.
+    #[test]
+    fn une_cle_de_papier_qui_n_est_pas_un_nom_est_refusee() {
+        let e = Pod::depuis_toml(&format!(
+            r##"cle = "essai"
+nom = "Essai"
+{FORMAT}{RELIURE}
+[[papier]]
+cle = "../../ailleurs"
+nom = "Papier"
+teinte = "#ffffff"
+dos = {{ forme = "multiplie", par = 0.06, plus = 0.0 }}
+"##
+        ))
+        .unwrap_err();
+        assert!(e.contains("../../ailleurs"), "{e}");
+    }
+
+    /// Et côté format : `C:nul*` n'est ni un nom de répertoire, ni un nom de fichier.
+    #[test]
+    fn une_cle_de_format_qui_n_est_pas_un_nom_est_refusee() {
+        let e = Pod::depuis_toml(&format!(
+            r##"cle = "essai"
+nom = "Essai"
+[[format]]
+cle = "C:nul*"
+nom = "Format"
+cle_heritee = "essai"
+mm = {{ largeur = 100.0, hauteur = 100.0 }}
+marges = {{ haut = 10.0, bas = 10.0, exterieur = 10.0 }}
+gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
+{RELIURE}{PAPIER}"##
+        ))
+        .unwrap_err();
+        assert!(e.contains("C:nul*"), "{e}");
     }
 
     /// Un champ que le catalogue ne connaît pas est refusé, jamais ignoré. `fond-perdu`
