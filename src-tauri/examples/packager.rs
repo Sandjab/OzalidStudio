@@ -33,12 +33,16 @@ fn main() -> Result<(), String> {
             dos: Some(17.0),
             fond_perdu: Some(3.0),
         };
+        let sortie = racine.join(&pr.cle);
+        let int = package::composer_interieur(&projet, pr, &pr.cle, &sortie, &typst)?;
         let p = package::assembler(
             &projet,
             pr,
             pr.papier_defaut(),
             releve,
-            &racine.join(&pr.cle),
+            &pr.cle,
+            &int,
+            &sortie,
             &typst,
         )?;
         println!(

@@ -1281,51 +1281,79 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     }
     let typst = typst()?;
 
-    let mut sorties = Vec::with_capacity(destinataires.len());
+    // Résolution d'abord : un prestataire ou un papier inconnu se fige en `Resultat`
+    // d'erreur ici, sans passer par le lot. Le reste devient une `Cible`, dans l'ordre
+    // des destinataires — c'est cet ordre que la fin de la fonction restitue.
+    let mut etapes: Vec<Result<package::Cible, Resultat>> = Vec::with_capacity(destinataires.len());
     for d in &destinataires {
         let Some(pr) = catalogue::provider(&d.provider) else {
-            sorties.push(Resultat {
+            etapes.push(Err(Resultat {
                 provider: d.provider.clone(),
                 libelle: d.provider.clone(),
                 package: None,
                 vignette: None,
                 erreur: Some(format!("prestataire inconnu : {}", d.provider)),
-            });
+            }));
             continue;
         };
-        let r = papier(pr, Some(&d.papier)).and_then(|pa| {
-            let dossier = sorties_dossier(o, &pr.cle)?;
-            package::assembler(
-                &o.projet,
-                pr,
-                pa,
-                planche::Releve {
+        etapes.push(match papier(pr, Some(&d.papier)) {
+            Ok(pa) => Ok(package::Cible {
+                pr: pr.clone(),
+                papier: pa.clone(),
+                releve: planche::Releve {
                     dos: d.dos_mm,
                     fond_perdu: d.fond_perdu_mm,
                 },
-                &dossier,
-                &typst,
-            )
-        });
-        sorties.push(match r {
-            Ok(p) => Resultat {
-                provider: pr.cle.clone(),
-                libelle: pr.libelle.clone(),
-                // La vignette manquante ne perd pas le package : les PDF sont écrits,
-                // et c'est eux que l'imprimeur reçoit.
-                vignette: donnee_png(Path::new(&p.vignette)).ok(),
-                package: Some(p),
-                erreur: None,
-            },
-            Err(e) => Resultat {
+                // Compat : la clé plate, jusqu'à ce que l'identité à quatre axes
+                // bascule (tâche 4) — un gabarit par destinataire, pour l'instant.
+                cle: pr.cle.clone(),
+                cle_gabarit: pr.cle.clone(),
+            }),
+            Err(e) => Err(Resultat {
                 provider: pr.cle.clone(),
                 libelle: pr.libelle.clone(),
                 package: None,
                 vignette: None,
                 erreur: Some(e),
-            },
+            }),
         });
     }
+
+    // `?` fait échouer la commande entière, sans `Resultat` par destinataire : à la
+    // différence d'un prestataire ou d'un papier inconnu, une racine de sorties
+    // inutilisable (projet non enregistré) ne concerne aucun destinataire en
+    // particulier, et rien ne peut être tenté avant qu'elle existe.
+    let racine = sorties_racine(o)?;
+    let cibles: Vec<package::Cible> = etapes
+        .iter()
+        .filter_map(|e| e.as_ref().ok().cloned())
+        .collect();
+    let mut paquets = package::lot(&o.projet, &cibles, &racine, &typst).into_iter();
+
+    let sorties = etapes
+        .into_iter()
+        .map(|etape| match etape {
+            Err(r) => r,
+            Ok(cible) => match paquets.next().expect("un résultat par cible envoyée à lot") {
+                Ok(p) => Resultat {
+                    provider: cible.cle,
+                    libelle: cible.pr.libelle,
+                    // La vignette manquante ne perd pas le package : les PDF sont
+                    // écrits, et c'est eux que l'imprimeur reçoit.
+                    vignette: donnee_png(Path::new(&p.vignette)).ok(),
+                    package: Some(p),
+                    erreur: None,
+                },
+                Err(e) => Resultat {
+                    provider: cible.cle,
+                    libelle: cible.pr.libelle,
+                    package: None,
+                    vignette: None,
+                    erreur: Some(e),
+                },
+            },
+        })
+        .collect();
     Ok(sorties)
 }
 
@@ -1884,6 +1912,7 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
             dos: d.dos_mm,
             fond_perdu: d.fond_perdu_mm,
         },
+        &pr.cle,
         &racine,
         &typst,
     )?;
@@ -1945,9 +1974,11 @@ fn sorties_dossier(o: &Ouvert, provider: &str) -> Result<PathBuf, String> {
 ///
 /// Nommé ici plutôt qu'à deux endroits : `composer` l'écrit, `vue` le cherche pour en
 /// faire un lien, et deux `format!` identiques finissent par diverger — c'est la même
-/// raison qui a fait servir la liste des jetons par le Rust plutôt que la recopier.
+/// raison qui a fait servir la liste des jetons par le Rust plutôt que la recopier. Le
+/// nom du fichier vient de `package::nom` ; seul l'emplacement — ce dossier précis —
+/// se décide ici.
 fn interieur_pdf(dossier: &Path, provider: &str) -> PathBuf {
-    dossier.join(format!("interieur-{provider}.pdf"))
+    dossier.join(package::nom(provider, "interieur", "pdf"))
 }
 
 /// Répertoire de configuration de l'application, s'il est atteignable.

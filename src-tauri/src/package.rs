@@ -9,6 +9,7 @@
 //! enfin. Inverser reviendrait à ressaisir un nombre de pages à la main, ce que
 //! l'application existe pour supprimer.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -24,7 +25,7 @@ use crate::typst::Typst;
 /// Ce qu'un package contient une fois écrit sur le disque.
 #[derive(Debug, Clone, Serialize)]
 pub struct Package {
-    pub provider: String,
+    pub cle: String,
     pub libelle: String,
     pub papier: String,
     pub pages: u32,
@@ -47,64 +48,134 @@ pub struct Package {
     /// Familles que Typst n'a pas trouvées et a remplacées par une écriture de repli
     /// — sans échouer, donc sans que rien d'autre ne le dise. Vide, tout va bien.
     pub polices_introuvables: Vec<String>,
+    /// Vrai quand l'intérieur de ce package est la copie de celui d'un autre livrable
+    /// du même gabarit : il n'a pas été recomposé.
+    pub interieur_partage: bool,
 }
 
-/// Nom de fichier des sorties d'un prestataire. Le nom porte la clé du prestataire :
-/// deux packages ouverts côte à côte ne peuvent pas être confondus.
-fn nom(pr: &Provider, quoi: &str, ext: &str) -> String {
-    format!("{quoi}-{}.{ext}", pr.cle)
+/// Nom de fichier des sorties d'un livrable. Le nom porte la clé entière : deux
+/// packages ouverts côte à côte ne peuvent pas être confondus, deux papiers non plus.
+pub(crate) fn nom(cle: &str, quoi: &str, ext: &str) -> String {
+    format!("{quoi}-{cle}.{ext}")
 }
 
-/// Compose l'intérieur, en tire la pagination, puis la planche, et écrit le tout dans
-/// `dossier`.
-///
-/// Le `releve` ne sert que chez les prestataires qui ne publient ni dos ni fond perdu ;
-/// ailleurs, il est ignoré au profit de leur formule.
-pub fn assembler(
+/// L'intérieur composé d'un gabarit : ce que deux livrables du même gabarit partagent.
+/// La planche, elle, reste par livrable — le dos suit le papier.
+#[derive(Debug, Clone)]
+pub struct InterieurCompose {
+    pub pages: u32,
+    pub gouttiere: f64,
+    pub blanche: bool,
+    pub polices_introuvables: Vec<String>,
+    pub src: PathBuf,
+    pub pdf: PathBuf,
+}
+
+/// Compose l'intérieur : la convergence, puis le PDF. C'est le bloc 1 de l'ancien
+/// `assembler`, sorti pour n'être payé qu'une fois par gabarit.
+pub fn composer_interieur(
     projet: &Projet,
     pr: &Provider,
-    papier: &Papier,
-    releve: Releve,
+    cle: &str,
     dossier: &Path,
     typst: &Typst,
-) -> Result<Package, String> {
+) -> Result<InterieurCompose, String> {
     let int = &projet.meta.interieur;
     // `interieur::source` interpole la police sans échappement : la validation est ici.
     int.verifie()?;
     std::fs::create_dir_all(dossier)
         .map_err(|e| format!("répertoire inutilisable ({}) : {e}", dossier.display()))?;
-
     let livre = &projet.meta.livre;
     let chapitres = manuscrit::decoupe(&projet.texte, livre.chapitres)?;
 
-    // 1. L'intérieur, et la pagination qui en sort.
-    let src_int = dossier.join(nom(pr, "interieur", "typ"));
+    let src = dossier.join(nom(cle, "interieur", "typ"));
     let r = interieur::converge(pr, |reglage| {
         ecrire(
-            &src_int,
+            &src,
             &interieur::source(livre, int, pr, reglage, &chapitres, None),
         )?;
-        typst.pages(&src_int)
+        typst.pages(&src)
     })?;
-    if r.pages < pr.pages_min || r.pages > pr.pages_max {
-        return Err(format!(
-            "{} : {} pages, hors des {} à {} que {} accepte en dos carré collé.",
-            pr.cle, r.pages, pr.pages_min, pr.pages_max, pr.libelle
-        ));
-    }
     let reglage = Reglage {
         gouttiere: r.gouttiere,
         blanche: r.blanche,
     };
     ecrire(
-        &src_int,
+        &src,
         &interieur::source(livre, int, pr, &reglage, &chapitres, None),
     )?;
-    let pdf_int = dossier.join(nom(pr, "interieur", "pdf"));
-    let mut polices_introuvables = typst.compile(&src_int, &pdf_int)?;
+    let pdf = dossier.join(nom(cle, "interieur", "pdf"));
+    let polices_introuvables = typst.compile(&src, &pdf)?;
+    Ok(InterieurCompose {
+        pages: r.pages,
+        gouttiere: r.gouttiere,
+        blanche: r.blanche,
+        polices_introuvables,
+        src,
+        pdf,
+    })
+}
+
+/// Assemble un package : le dos, découlant de la pagination de l'intérieur, puis la
+/// planche. L'intérieur lui-même n'est pas recomposé — il est reçu tout fait, composé
+/// une fois par gabarit par `composer_interieur` (directement ou via `lot`), et copié
+/// ici s'il vient d'un autre répertoire que celui de ce livrable.
+///
+/// Le `releve` ne sert que chez les prestataires qui ne publient ni dos ni fond perdu ;
+/// ailleurs, il est ignoré au profit de leur formule.
+// La signature retombera à six arguments à la tâche 5, quand `Provider` portera sa
+// `fabrication` : `pr` seul suffira à ce que `cle` et `releve` disent aujourd'hui à
+// part. `expect` et non `allow` : si le compte baisse avant que ce lint ne soit
+// retiré, le build doit le dire.
+#[expect(clippy::too_many_arguments)]
+pub fn assembler(
+    projet: &Projet,
+    pr: &Provider,
+    papier: &Papier,
+    releve: Releve,
+    cle: &str,
+    interieur: &InterieurCompose,
+    dossier: &Path,
+    typst: &Typst,
+) -> Result<Package, String> {
+    let livre = &projet.meta.livre;
+    std::fs::create_dir_all(dossier)
+        .map_err(|e| format!("répertoire inutilisable ({}) : {e}", dossier.display()))?;
+
+    // 1. L'intérieur du gabarit, composé ailleurs ou ici : s'il vient d'un autre
+    // répertoire, il est copié sous le nom de ce livrable — les octets sont les mêmes,
+    // et c'est le sens de « une seule composition ».
+    let src_int = dossier.join(nom(cle, "interieur", "typ"));
+    let pdf_int = dossier.join(nom(cle, "interieur", "pdf"));
+    let interieur_partage = interieur.pdf != pdf_int;
+    if interieur_partage {
+        for (de, vers) in [(&interieur.src, &src_int), (&interieur.pdf, &pdf_int)] {
+            // Garde-fou : `InterieurCompose` est public à champs publics, rien
+            // n'empêche un appelant de passer `dossier` égal à celui où l'intérieur a
+            // déjà été composé. `fs::copy` sur un fichier vers lui-même le tronque sous
+            // Unix — s'y refuser coûte moins qu'un dos recalculé sur un PDF vidé.
+            if de != vers {
+                std::fs::copy(de, vers)
+                    .map_err(|e| format!("copie de l'intérieur ({}) : {e}", vers.display()))?;
+            }
+        }
+    }
+    // Ce contrôle tombe après la composition de l'intérieur du gabarit : un refus ici
+    // coûte donc une composition — que la mémoïsation de `lot` ne repaie pas pour le
+    // livrable suivant du même gabarit, qui la retentera à son tour.
+    if interieur.pages < pr.pages_min || interieur.pages > pr.pages_max {
+        return Err(format!(
+            "{cle} : {} pages, hors des {} à {} que {} accepte en dos carré collé.",
+            interieur.pages, pr.pages_min, pr.pages_max, pr.libelle
+        ));
+    }
+    // NB : à la tâche 5, quand `Provider` porte sa `fabrication`, ce message cite la
+    // reliure (`en {}`, `pr.fabrication.reliure`) au lieu du « dos carré collé »
+    // générique — c'est la spec § 7.
+    let mut polices_introuvables = interieur.polices_introuvables.clone();
 
     // 2. Le dos découle de cette pagination-là, jamais d'une saisie.
-    let g = Gabarit::pour(pr, papier, r.pages, releve)?;
+    let g = Gabarit::pour(pr, papier, interieur.pages, releve)?;
 
     // 3. La planche.
     let cv = projet
@@ -114,12 +185,12 @@ pub fn assembler(
         .as_ref()
         .ok_or("aucune maquette de couverture : en choisir une avant de packager.")?;
     let (une, quatre) = ecrire_images(projet, dossier)?;
-    let src_pl = dossier.join(nom(pr, "couverture", "typ"));
+    let src_pl = dossier.join(nom(cle, "couverture", "typ"));
     ecrire(
         &src_pl,
         &planche::source(livre, cv, &g, une.as_ref(), quatre.as_ref())?,
     )?;
-    let pdf_pl = dossier.join(nom(pr, "couverture", "pdf"));
+    let pdf_pl = dossier.join(nom(cle, "couverture", "pdf"));
     // La planche a ses propres polices : ses substitutions s'ajoutent à celles de
     // l'intérieur, chaque famille une fois.
     for f in typst.compile(&src_pl, &pdf_pl)? {
@@ -131,16 +202,16 @@ pub fn assembler(
     // 4. La même planche en vignette, depuis la même source : ce qu'on regarde est ce
     // qui part à l'impression, et non une approximation qu'on espère fidèle. 72 ppp
     // suffisent à juger un débord ; c'est le PDF qui fait foi pour le reste.
-    let png_pl = dossier.join(nom(pr, "couverture", "png"));
+    let png_pl = dossier.join(nom(cle, "couverture", "png"));
     typst.apercu(&src_pl, &png_pl, 1, 72)?;
 
     Ok(Package {
-        provider: pr.cle.clone(),
+        cle: cle.to_string(),
         libelle: pr.libelle.clone(),
         papier: papier.nom.clone(),
-        pages: r.pages,
-        gouttiere: r.gouttiere,
-        blanche: r.blanche,
+        pages: interieur.pages,
+        gouttiere: interieur.gouttiere,
+        blanche: interieur.blanche,
         dos: g.dos,
         dos_requis: planche::dos_insuffisant(livre, cv, g.format.0, g.dos),
         fond_perdu: g.fond_perdu,
@@ -148,7 +219,51 @@ pub fn assembler(
         chemins: vec![affiche(&pdf_int), affiche(&pdf_pl)],
         vignette: affiche(&png_pl),
         polices_introuvables,
+        interieur_partage,
     })
+}
+
+/// Un livrable prêt à packager : sa vue plate, son papier, son relevé et ses clés.
+///
+/// `cle_gabarit` doit dériver de `pr` ; `lot` mémoïse dessus.
+#[derive(Debug, Clone)]
+pub struct Cible {
+    pub pr: Provider,
+    pub papier: Papier,
+    pub releve: Releve,
+    pub cle: String,
+    pub cle_gabarit: String,
+}
+
+/// Packager un lot de livrables, l'intérieur composé **une fois par gabarit**.
+///
+/// Le premier livrable d'un gabarit compose dans son répertoire ; les suivants copient.
+/// Un échec de composition ne condamne pas le gabarit : le suivant du même gabarit
+/// réessaie, faute d'entrée retenue.
+pub fn lot(
+    projet: &Projet,
+    cibles: &[Cible],
+    racine: &Path,
+    typst: &Typst,
+) -> Vec<Result<Package, String>> {
+    let mut prets: BTreeMap<String, (Provider, InterieurCompose)> = BTreeMap::new();
+    cibles
+        .iter()
+        .map(|c| {
+            let dossier = racine.join(&c.cle);
+            if !prets.contains_key(&c.cle_gabarit) {
+                let i = composer_interieur(projet, &c.pr, &c.cle, &dossier, typst)?;
+                prets.insert(c.cle_gabarit.clone(), (c.pr.clone(), i));
+            }
+            let (pr, interieur) = prets
+                .get(&c.cle_gabarit)
+                .expect("vient d'être inséré si absent");
+            debug_assert_eq!(*pr, c.pr, "deux gabarits de même clé, providers différents");
+            assembler(
+                projet, &c.pr, &c.papier, c.releve, &c.cle, interieur, &dossier, typst,
+            )
+        })
+        .collect()
 }
 
 /// Les noms de répertoire des envois, dans l'ordre de la liste.
@@ -262,6 +377,7 @@ pub fn assembler_envois(
     pr: &Provider,
     papier: &Papier,
     releve: Releve,
+    cle: &str,
     racine: &Path,
     typst: &Typst,
 ) -> Result<Vec<(String, Package)>, String> {
@@ -274,7 +390,8 @@ pub fn assembler_envois(
     // Le package de référence, sans envoi : c'est lui qui converge, calcule le dos et
     // compose la planche. Les envois n'en reprennent que le réglage et les fichiers.
     let reference = racine.join(".reference");
-    let base = assembler(projet, pr, papier, releve, &reference, typst)?;
+    let int = composer_interieur(projet, pr, cle, &reference, typst)?;
+    let base = assembler(projet, pr, papier, releve, cle, &int, &reference, typst)?;
 
     // Le compte de pages n'existe qu'après la convergence : le contrôle ne peut pas
     // avoir lieu plus tôt, et refuser ici coûte une composition de moins qu'un tirage
@@ -290,7 +407,7 @@ pub fn assembler_envois(
     };
 
     let livre = &projet.meta.livre;
-    let int = &projet.meta.interieur;
+    let int_meta = &projet.meta.interieur;
     let chapitres = manuscrit::decoupe(&projet.texte, livre.chapitres)?;
     let reglage = Reglage {
         gouttiere: base.gouttiere,
@@ -302,13 +419,13 @@ pub fn assembler_envois(
         std::fs::create_dir_all(&dossier)
             .map_err(|err| format!("répertoire inutilisable ({}) : {err}", dossier.display()))?;
 
-        let src = dossier.join(nom(pr, "interieur", "typ"));
+        let src = dossier.join(nom(cle, "interieur", "typ"));
         let t = trace(projet, e, &dossier)?;
         ecrire(
             &src,
-            &interieur::source(livre, int, pr, &reglage, &chapitres, Some(t)),
+            &interieur::source(livre, int_meta, pr, &reglage, &chapitres, Some(t)),
         )?;
-        let pdf = dossier.join(nom(pr, "interieur", "pdf"));
+        let pdf = dossier.join(nom(cle, "interieur", "pdf"));
         // L'envoi peut composer dans une main que la référence n'emploie pas : ses
         // substitutions à lui s'ajoutent à celles du package de référence.
         let replis = typst.compile(&src, &pdf)?;
@@ -322,9 +439,9 @@ pub fn assembler_envois(
         }
         p.chemins = vec![
             affiche(&pdf),
-            copier(&reference, &dossier, &nom(pr, "couverture", "pdf"))?,
+            copier(&reference, &dossier, &nom(cle, "couverture", "pdf"))?,
         ];
-        p.vignette = copier(&reference, &dossier, &nom(pr, "couverture", "png"))?;
+        p.vignette = copier(&reference, &dossier, &nom(cle, "couverture", "png"))?;
         sorties.push((nom_dossier, p));
     }
     Ok(sorties)
@@ -400,7 +517,6 @@ fn ecrire(chemin: &Path, contenu: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalogue::provider;
 
     /// Les répertoires d'envoi portent le nom du dédicataire, assaini et rendu unique.
     /// Deux dédicataires qui se confondraient enverraient au second le mot du premier.
@@ -490,20 +606,198 @@ mod tests {
         assert!(err.contains("Léa"), "{err}");
     }
 
-    /// Les deux sorties d'un package portent la clé du prestataire : dans un répertoire
-    /// où plusieurs packages ont été produits, un fichier ne peut pas être remis au
-    /// mauvais imprimeur.
+    /// Les deux sorties d'un package portent la clé du livrable entière, cinq segments
+    /// compris : deux packages ouverts côte à côte ne peuvent pas être confondus, deux
+    /// papiers non plus.
     #[test]
-    fn les_sorties_portent_la_cle_du_prestataire() {
-        let pr = provider("bookvault-127x203").unwrap();
+    fn les_sorties_portent_la_cle_du_livrable() {
         assert_eq!(
-            nom(pr, "couverture", "pdf"),
-            "couverture-bookvault-127x203.pdf"
+            nom("bod-135x215-broche-creme-90", "couverture", "pdf"),
+            "couverture-bod-135x215-broche-creme-90.pdf"
         );
         assert_eq!(
-            nom(pr, "interieur", "typ"),
-            "interieur-bookvault-127x203.typ"
+            nom("bod-135x215-broche-creme-90", "interieur", "typ"),
+            "interieur-bod-135x215-broche-creme-90.typ"
         );
+    }
+
+    /// `Provider` synthétique, sans dépendance au catalogue : les bornes des vrais POD
+    /// refusent un manuscrit d'une page.
+    fn provider_d_essai() -> Provider {
+        Provider {
+            cle: "essai-livre-broche".into(),
+            libelle: "Essai — livre".into(),
+            format: (135.0, 215.0),
+            marge_haut: 18.8,
+            marge_bas: 28.0,
+            exterieur: 15.0,
+            gouttieres: vec![(1, 900, 20.0)],
+            fond_perdu: Some(5.0),
+            pages_min: 1,
+            pages_max: 900,
+            papiers: vec![Papier {
+                cle: "creme".into(),
+                nom: "Crème d'essai".into(),
+                teinte: r##"#f7f0e0"##.into(),
+                dos: crate::catalogue::Dos::Multiplie {
+                    par: 0.0675,
+                    plus: 0.6,
+                },
+                source: None,
+            }],
+        }
+    }
+
+    /// Le `Livre` du témoin, réduit à ce qu'`assembler` et `composer_interieur` lisent.
+    fn livre_d_essai() -> crate::projet::Livre {
+        crate::projet::Livre {
+            titre: "Essai".into(),
+            titre_page: "%TITRE%".into(),
+            auteur: "Autrice".into(),
+            genre: "essai".into(),
+            editeur: "Editeur".into(),
+            collection: "Collection".into(),
+            monogramme: "M".into(),
+            copyright: "Domaine public.".into(),
+            prix: "Prix".into(),
+            mention: "Mention".into(),
+            dedicace: String::new(),
+            chapitres: Some(1),
+        }
+    }
+
+    /// Un intérieur déjà composé n'est pas recomposé : `assembler` reçoit l'intérieur
+    /// d'un gabarit et ne rappelle Typst que pour la planche. Preuve par l'ordre des
+    /// refus : avec un binaire Typst inexistant **et** un intérieur prêt, l'échec doit
+    /// venir de la maquette absente (étape planche) — si l'intérieur était recomposé, il
+    /// viendrait de Typst, avant elle.
+    #[test]
+    fn un_interieur_pret_n_est_pas_recompose() {
+        let projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        // Pas de maquette de couverture : c'est le refus attendu.
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("interieur-essai.typ");
+        let pdf = dir.path().join("interieur-essai.pdf");
+        std::fs::write(&src, "source factice").unwrap();
+        std::fs::write(&pdf, "pdf factice").unwrap();
+        let pret = InterieurCompose {
+            pages: 100,
+            gouttiere: 20.0,
+            blanche: false,
+            polices_introuvables: vec![],
+            src,
+            pdf,
+        };
+        let pr = provider_d_essai();
+        let e = assembler(
+            &projet,
+            &pr,
+            &pr.papiers[0],
+            Releve::default(),
+            "essai",
+            &pret,
+            dir.path(),
+            &Typst::new("typst-qui-n-existe-pas"),
+        )
+        .unwrap_err();
+        assert!(e.contains("maquette"), "l'intérieur a été recomposé : {e}");
+    }
+
+    /// Spec § 9 : deux livrables du même gabarit d'intérieur ne déclenchent **qu'une**
+    /// composition. Composition réelle (Typst du PATH, comme `interieur.rs` le fait
+    /// déjà) : le second package porte un intérieur copié, pas recomposé, et les deux
+    /// PDF sont identiques à l'octet.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn deux_livrables_du_meme_gabarit_ne_composent_l_interieur_qu_une_fois() {
+        let mut projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        projet.meta.couverture.maquette = Some(
+            crate::maquettes::par_cle(None, "filets")
+                .expect("maquette fournie « filets »")
+                .couverture,
+        );
+        let racine = tempfile::tempdir().unwrap();
+        let typst = Typst::new("typst")
+            .avec_polices(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+        let pr = provider_d_essai();
+        let creme = pr.papiers[0].clone();
+        let blanc = Papier {
+            cle: "blanc-essai".into(),
+            nom: "Blanc d'essai".into(),
+            teinte: r##"#ffffff"##.into(),
+            // `plus` largement au-dessus de celui du crème : la formule doit rendre un
+            // dos plus épais quel que soit le nombre de pages, court comme long.
+            dos: crate::catalogue::Dos::Multiplie {
+                par: 0.08,
+                plus: 2.0,
+            },
+            source: None,
+        };
+        let cibles = [
+            Cible {
+                pr: pr.clone(),
+                papier: creme,
+                releve: Releve::default(),
+                cle: "essai-livre-broche-creme".into(),
+                cle_gabarit: "essai-livre-broche".into(),
+            },
+            Cible {
+                pr,
+                papier: blanc,
+                releve: Releve::default(),
+                cle: "essai-livre-broche-blanc-essai".into(),
+                cle_gabarit: "essai-livre-broche".into(),
+            },
+        ];
+        let sorties = lot(&projet, &cibles, racine.path(), &typst);
+        let [a, b]: [&Package; 2] = [
+            sorties[0].as_ref().expect("premier package"),
+            sorties[1].as_ref().expect("second package"),
+        ];
+        assert!(!a.interieur_partage, "le premier compose");
+        assert!(b.interieur_partage, "le second copie");
+        assert_eq!(a.pages, b.pages);
+        assert!(b.dos > a.dos, "le papier plus épais fait un dos plus épais");
+        let lu = |cle: &str| {
+            std::fs::read(racine.path().join(cle).join(format!("interieur-{cle}.pdf"))).unwrap()
+        };
+        assert_eq!(
+            lu("essai-livre-broche-creme"),
+            lu("essai-livre-broche-blanc-essai"),
+            "le même intérieur, à l'octet"
+        );
+    }
+
+    /// `lot` rend un résultat par cible, dans l'ordre, même quand tout échoue : c'est ce
+    /// contrat-là que `commands::packager` consomme par `paquets.next().expect(…)`.
+    /// Et un gabarit dont la composition a échoué n'est pas retenu — la cible suivante
+    /// retente au lieu d'hériter d'un échec.
+    #[test]
+    fn lot_rend_un_resultat_par_cible_et_ne_condamne_pas_le_gabarit() {
+        let projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        let racine = tempfile::tempdir().unwrap();
+        let pr = provider_d_essai();
+        let c = |cle: &str| Cible {
+            pr: pr.clone(),
+            papier: pr.papiers[0].clone(),
+            releve: Releve::default(),
+            cle: cle.into(),
+            cle_gabarit: "essai-livre-broche".into(),
+        };
+        let sorties = lot(
+            &projet,
+            &[c("essai-a"), c("essai-b")],
+            racine.path(),
+            &Typst::new("typst-absent"),
+        );
+        assert_eq!(sorties.len(), 2, "un résultat par cible");
+        for (i, s) in sorties.iter().enumerate() {
+            let e = s
+                .as_ref()
+                .err()
+                .unwrap_or_else(|| panic!("cible {i} aurait dû échouer"));
+            assert!(e.contains("typst-absent"), "cible {i} : {e}");
+        }
     }
 
     /// Le même manuscrit ne fait pas le même nombre de pages en poche et en grand

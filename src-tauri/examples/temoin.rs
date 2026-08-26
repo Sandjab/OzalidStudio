@@ -66,12 +66,15 @@ fn main() -> Result<(), String> {
     let pr = catalogue::provider(PROVIDER).ok_or("prestataire inconnu : bod")?;
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+    let int = package::composer_interieur(&projet, pr, &pr.cle, &sortie, &typst)?;
     let p = package::assembler(
         &projet,
         pr,
         pr.papier_defaut(),
         // BoD publie son dos et son fond perdu : le relevé est ignoré.
         Releve::default(),
+        &pr.cle,
+        &int,
         &sortie,
         &typst,
     )?;
