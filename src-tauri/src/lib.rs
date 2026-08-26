@@ -32,6 +32,13 @@ pub fn run() {
         .manage(commands::Atelier::default())
         .manage(commands::Interface::default())
         .setup(|app| {
+            // Première ligne du démarrage, et elle doit le rester : `providers()`
+            // initialiserait `PLATS` sur les seuls fournis, et les fichiers du poste
+            // seraient ignorés en silence. Le `expect` est ce qui le dirait tout haut.
+            use tauri::Manager;
+            let refus = catalogue::initialiser(app.path().app_config_dir().ok().as_deref())
+                .expect("le catalogue doit être chargé avant toute commande");
+            app.manage(commands::CatalogueRefus(refus));
             menu::poser(app.handle())?;
             Ok(())
         })

@@ -2,9 +2,9 @@
 //!
 //! Un fichier TOML par POD. Les fournis sont incorporés au binaire par `include_str!` —
 //! il n'y a donc aucun chemin à résoudre pour eux, aucun mode dégradé, aucun écart entre
-//! développement et livraison. Le poste pourra en déposer d'autres, qui remplaceront le
-//! fourni de même clé. Ce module porte les types, leur lecture, les six fichiers fournis
-//! et la vue plate ; le chargement depuis le poste manque encore.
+//! développement et livraison. Le poste en dépose d'autres dans `<config>/pods/`, qui
+//! remplacent le fourni de même clé. Ce module porte les types, leur lecture, les six
+//! fichiers fournis, le chargement et la vue plate.
 //!
 //! Un prestataire se décrit à un seul endroit, son fichier, où la couverture — fond
 //! perdu, formule de dos — et l'intérieur — format, marges, gouttières — se tiennent
@@ -29,6 +29,7 @@
 //! serde ne sait pas dire — un nombre impossible, une clé en double, une liste vide.
 
 use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
@@ -350,6 +351,17 @@ impl Pod {
         for p in &self.papiers {
             self.verifie_papier(p)?;
         }
+
+        // La table écrite en dur ne pouvait pas porter un tel POD ; un fichier déposé,
+        // si. Sans ce refus il se lirait sans erreur, ne produirait aucune entrée plate,
+        // et son imprimeur manquerait à la liste sans que rien ne le dise.
+        if !self.reliures.iter().any(|r| r.geometrie.is_some()) {
+            return Err(format!(
+                "{} : aucune reliure composable. Un POD dont aucune reliure ne porte de \
+                 géométrie ne produirait aucun format, et disparaîtrait sans un mot.",
+                self.cle
+            ));
+        }
         Ok(())
     }
 
@@ -659,9 +671,84 @@ pub fn provider(cle: &str) -> Option<&'static Provider> {
     providers().iter().find(|p| p.cle == cle)
 }
 
+/// Un fichier de catalogue que le poste porte et que l'application n'a pas pu lire.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Refus {
+    pub fichier: String,
+    pub raison: String,
+}
+
+/// Là où vivent les surcharges : à côté de `preferences.toml` et de `maquettes/`, parce
+/// qu'elles appartiennent à la machine et non au livre.
+fn repertoire(config: &Path) -> PathBuf {
+    config.join("pods")
+}
+
+/// Les POD du binaire, puis ceux du poste. Même clé : le poste remplace, entièrement.
+///
+/// Une fusion champ par champ rendrait indéchiffrable ce que l'application lit vraiment :
+/// devant une liste de formats, on ne saurait plus lesquels viennent du fichier déposé.
+///
+/// Rend aussi ce qui a été refusé, pour que l'interface puisse le dire. Un journal que
+/// personne n'ouvre laisserait l'utilisateur devant un catalogue amputé.
+pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
+    let mut pods = fournis().expect("catalogue fourni illisible");
+    let mut refus = Vec::new();
+    let Some(dir) = config.map(repertoire) else {
+        return (pods, refus);
+    };
+    // Un répertoire absent n'est pas une avarie : c'est l'état d'un poste où l'on n'a
+    // rien déposé, c'est-à-dire presque tous.
+    let Ok(entrees) = std::fs::read_dir(&dir) else {
+        return (pods, refus);
+    };
+    let mut chemins: Vec<_> = entrees
+        .flatten()
+        .map(|e| e.path())
+        .filter(|c| c.extension().and_then(|x| x.to_str()) == Some("toml"))
+        .collect();
+    // Ordre du nom de fichier : deux postes identiques chargent identiquement, alors que
+    // `read_dir` rend ses entrées dans un ordre que rien ne spécifie.
+    chemins.sort();
+    for chemin in chemins {
+        let nom = chemin.display().to_string();
+        let lu = std::fs::read_to_string(&chemin)
+            .map_err(|e| e.to_string())
+            .and_then(|s| Pod::depuis_toml(&s));
+        match lu {
+            Ok(pod) => match pods.iter().position(|p| p.cle == pod.cle) {
+                Some(i) => pods[i] = pod,
+                None => pods.push(pod),
+            },
+            Err(raison) => refus.push(Refus {
+                fichier: nom,
+                raison,
+            }),
+        }
+    }
+    (pods, refus)
+}
+
+/// Charge le catalogue une fois, au démarrage de l'application.
+///
+/// À appeler avant toute commande. Un second appel est un défaut d'ordonnancement et se
+/// refuse : sans quoi les fichiers du poste seraient silencieusement ignorés, un
+/// `providers()` antérieur ayant déjà figé les seuls fournis.
+pub fn initialiser(config: Option<&Path>) -> Result<Vec<Refus>, String> {
+    let (pods, refus) = charge(config);
+    PLATS
+        .set(aplatit(&pods))
+        .map_err(|_| "le catalogue a déjà été chargé".to_string())?;
+    Ok(refus)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::io::Write;
+
+    use tempfile::TempDir;
 
     // Le socle d'un POD valide. Les tests de refus n'écrivent que le bloc qu'ils mettent
     // en cause : sans ce socle ils échoueraient sur une liste vide, et leur assertion sur
@@ -1228,6 +1315,136 @@ non_outille = "géométrie du casewrap non relevée"
                 p.cle
             );
         }
+    }
+
+    // Les six tests qui suivent portent sur le chargement depuis le poste. Tous passent
+    // par `charge`, jamais par `initialiser` : `PLATS` est un `OnceLock` de processus
+    // que des dizaines d'autres tests ont déjà rempli en appelant `provider(…)`, et un
+    // test d'`initialiser` réussirait ou échouerait selon l'ordre d'exécution.
+
+    /// Écrit un fichier de POD dans le répertoire de surcharges d'un poste d'essai.
+    fn pose(dir: &TempDir, nom: &str, contenu: &str) {
+        let d = dir.path().join("pods");
+        std::fs::create_dir_all(&d).unwrap();
+        let mut f = std::fs::File::create(d.join(nom)).unwrap();
+        f.write_all(contenu.as_bytes()).unwrap();
+    }
+
+    const IMPRIMEUR_ESSAI: &str = r##"
+cle = "essai"
+nom = "Imprimeur d'essai"
+fond_perdu = 4.0
+
+[[format]]
+cle = "100x150"
+nom = "10 × 15 cm"
+cle_heritee = "essai"
+mm = { largeur = 100.0, hauteur = 150.0 }
+marges = { haut = 10.0, bas = 10.0, exterieur = 10.0 }
+gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 24, max = 400 }
+parite = "paire"
+
+[[papier]]
+cle = "standard"
+nom = "Papier standard"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
+"##;
+
+    /// Un POD que le binaire ne connaît pas s'ajoute par un fichier déposé. C'est tout
+    /// l'objet du chantier : un imprimeur de plus ne demande pas de relivrer l'application.
+    #[test]
+    fn un_fichier_du_poste_ajoute_un_pod() {
+        let d = TempDir::new().unwrap();
+        pose(&d, "essai.toml", IMPRIMEUR_ESSAI);
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty(), "{refus:?}");
+        assert_eq!(pods.len(), 7);
+        assert!(pods.iter().any(|p| p.cle == "essai"));
+    }
+
+    /// Même clé : le fichier du poste remplace le fourni **entièrement**. Une fusion champ
+    /// par champ rendrait indéchiffrable ce que l'application lit vraiment.
+    #[test]
+    fn un_fichier_du_poste_remplace_le_fourni_de_meme_cle() {
+        let d = TempDir::new().unwrap();
+        pose(
+            &d,
+            "bod.toml",
+            &IMPRIMEUR_ESSAI.replace(r#"cle = "essai""#, r#"cle = "bod""#),
+        );
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty(), "{refus:?}");
+        assert_eq!(pods.len(), 6, "un remplacement, pas un ajout");
+        let bod = pods.iter().find(|p| p.cle == "bod").unwrap();
+        assert_eq!(bod.fond_perdu, Some(4.0), "le fourni tient encore");
+        assert_eq!(bod.formats.len(), 1);
+        assert_eq!(
+            (bod.formats[0].mm.largeur, bod.formats[0].mm.hauteur),
+            (100.0, 150.0)
+        );
+    }
+
+    /// Un fichier fautif est refusé **en le nommant**, et les autres se chargent quand même.
+    /// L'application démarre toujours : un catalogue amputé sans explication laisserait
+    /// l'utilisateur devant une liste incomplète sans savoir pourquoi.
+    #[test]
+    fn un_fichier_fautif_est_refuse_en_le_nommant_et_les_autres_tiennent() {
+        let d = TempDir::new().unwrap();
+        pose(&d, "casse.toml", "cle = \"casse\"\nnom =");
+        pose(&d, "essai.toml", IMPRIMEUR_ESSAI);
+        let (pods, refus) = charge(Some(d.path()));
+        assert_eq!(refus.len(), 1);
+        assert!(refus[0].fichier.contains("casse.toml"), "{:?}", refus[0]);
+        assert!(!refus[0].raison.is_empty());
+        assert!(
+            pods.iter().any(|p| p.cle == "essai"),
+            "le fichier sain n'a pas été chargé"
+        );
+        assert!(
+            pods.iter().any(|p| p.cle == "bod"),
+            "les fournis n'ont pas tenu"
+        );
+    }
+
+    /// Un POD sans reliure composable ne produit aucune entrée : il doit le dire, pas
+    /// s'évanouir.
+    ///
+    /// `aplatit` ne retient qu'un POD portant une reliure de géométrie connue — c'est
+    /// délibéré, on ne peut pas annoncer un format qu'on ne sait pas composer. Mais tant que
+    /// le catalogue était écrit en dur, le cas n'existait pas ; un fichier déposé, si. Sans
+    /// ce refus, l'utilisateur dépose un fichier valide, relance, et son imprimeur n'est
+    /// nulle part — sans un mot.
+    #[test]
+    fn un_pod_sans_reliure_composable_est_refuse() {
+        let d = TempDir::new().unwrap();
+        pose(
+            &d,
+            "rigide.toml",
+            &IMPRIMEUR_ESSAI.replace(
+                "geometrie = \"dos-carre-colle\"\npages = { min = 24, max = 400 }\nparite = \"paire\"",
+                "non_outille = \"géométrie du casewrap non relevée\"",
+            ),
+        );
+        let (pods, refus) = charge(Some(d.path()));
+        assert_eq!(refus.len(), 1, "{pods:?}");
+        assert!(refus[0].raison.contains("reliure"), "{:?}", refus[0]);
+    }
+
+    /// Un répertoire de surcharges absent n'est pas une avarie : c'est l'état d'un poste où
+    /// l'on n'a rien déposé.
+    #[test]
+    fn un_repertoire_absent_charge_les_seuls_fournis() {
+        let d = TempDir::new().unwrap();
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty());
+        assert_eq!(pods.len(), 6);
     }
 
     /// Le catalogue se sert derrière une référence `'static`, comme la table le faisait :

@@ -24,6 +24,10 @@ use crate::preferences;
 use crate::projet::{Destinataire, Livraison, Livre, Mesure, Projet};
 use crate::typst::Typst;
 
+/// Les fichiers de catalogue du poste que le démarrage a refusés. Vide sur un poste qui
+/// n'en dépose aucun, c'est-à-dire presque toujours.
+pub struct CatalogueRefus(pub Vec<crate::catalogue::Refus>);
+
 /// Le projet ouvert. Un seul à la fois : c'est un éditeur de document, pas une
 /// bibliothèque. `chemin` est absent tant que le projet n'a pas été enregistré.
 #[derive(Default)]
