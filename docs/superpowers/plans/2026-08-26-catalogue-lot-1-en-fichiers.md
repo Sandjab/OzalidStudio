@@ -104,15 +104,15 @@ fond_perdu = 5.0
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "essai"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 
 [[finition]]
@@ -130,11 +130,19 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 
         assert_eq!(pod.cle, "essai");
         assert_eq!(pod.fond_perdu, Some(5.0));
-        assert_eq!(pod.formats[0].mm, (135.0, 215.0));
+        assert_eq!(pod.formats[0].mm.largeur, 135.0);
+        assert_eq!(pod.formats[0].mm.hauteur, 215.0);
         assert_eq!(pod.formats[0].marges.bas, 28.0);
-        assert_eq!(pod.formats[0].gouttieres, vec![(24, 900, 20.0)]);
+        assert_eq!(
+            pod.formats[0].gouttieres,
+            vec![Tranche {
+                de: 24,
+                a: 900,
+                mm: 20.0
+            }]
+        );
         assert_eq!(pod.reliures[0].geometrie, Some(Geometrie::DosCarreColle));
-        assert_eq!(pod.reliures[0].pages, Some((24, 900)));
+        assert_eq!(pod.reliures[0].pages, Some(Pagination { min: 24, max: 900 }));
         assert_eq!(pod.papiers[0].teinte, "#f7f0e0");
         // Comparaison à la tolérance : 0,0675 n'a pas de représentation binaire
         // exacte, et `280 × 0,0675 + 0,6` ne vaut pas `19.5` au bit près.
@@ -156,7 +164,7 @@ nom = "Imprimeur d'essai"
 cle = "cousu"
 nom = "Reliure cousue"
 geometrie = "cousue"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 "#,
         )
@@ -296,8 +304,34 @@ pub struct Marges {
     pub exterieur: f64,
 }
 
+/// Dimensions d'un format de rognage, en mm.
+///
+/// Nommées et non positionnelles : ces fichiers s'éditent à la main, des années après
+/// avoir été écrits, et une largeur prise pour une hauteur donne un livre à l'italienne
+/// que rien ne rattrape avant l'aperçu de la planche.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dimensions {
+    pub largeur: f64,
+    pub hauteur: f64,
+}
+
 /// Une tranche de pagination et la gouttière (marge intérieure) qu'elle impose.
-pub type Tranche = (u32, u32, f64);
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tranche {
+    pub de: u32,
+    pub a: u32,
+    pub mm: f64,
+}
+
+/// Pagination admise, bornes comprises.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pagination {
+    pub min: u32,
+    pub max: u32,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Format {
@@ -306,8 +340,8 @@ pub struct Format {
     /// **Transitoire.** La clé plate que portent encore le `.ozalid`, les répertoires de
     /// package et l'interface. Elle disparaît au lot 2, avec la migration des projets.
     pub cle_heritee: String,
-    /// Format de rognage en mm (largeur, hauteur).
-    pub mm: (f64, f64),
+    /// Format de rognage.
+    pub mm: Dimensions,
     pub marges: Marges,
     /// Seules les tranches vérifiées dans le guide du prestataire figurent ici. Hors
     /// tranche, on refuse plutôt qu'inventer.
@@ -330,7 +364,7 @@ pub struct Reliure {
     /// c'est elle qui la détermine — TheBookEdition accepte 40 à 750 pages en dos carré
     /// collé et 24 à 300 en rigide, au même format.
     #[serde(default)]
-    pub pages: Option<(u32, u32)>,
+    pub pages: Option<Pagination>,
     #[serde(default)]
     pub parite: Option<Parite>,
     /// Pourquoi cette reliure n'est pas composable. Décrit **notre** état, jamais celui
@@ -548,7 +582,7 @@ Reliures et finitions, pour les six : chacun porte au minimum
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]        # les bornes de son entrée historique
+pages = { min = 24, max = 900 }   # les bornes de son entrée historique
 parite = "paire"
 ```
 
@@ -574,18 +608,18 @@ fond_perdu = 5.0
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "bod"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 # BoD ne module pas la marge de reliure selon l'épaisseur — tranche unique, couvrant les
 # 24 à 900 pages que sa couverture souple admet.
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
 source = "modèle Word « Roman » 13,5 × 21,5"
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 source = "validation du calculateur officiel : nombre pair obligatoire"
 
@@ -706,7 +740,9 @@ pub struct Provider {
     pub marge_haut: f64,
     pub marge_bas: f64,
     pub exterieur: f64,
-    pub gouttieres: Vec<Tranche>,
+    /// Triplets, comme la table historique les écrivait : la vue plate est comparée à
+    /// elle, champ par champ, à la tâche 3.
+    pub gouttieres: Vec<(u32, u32, f64)>,
     pub corps_pt: f64,
     pub interligne: f64,
     pub folio_pt: f64,
@@ -762,24 +798,26 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
         let Some(r) = pod.reliures.iter().find(|r| r.geometrie.is_some()) else {
             continue;
         };
-        let Some((pages_min, pages_max)) = r.pages else {
+        let Some(pagination) = r.pages else {
             continue;
         };
         for f in &pod.formats {
             v.push(Provider {
                 cle: f.cle_heritee.clone(),
                 libelle: format!("{} — {}", pod.nom, f.nom),
-                format: f.mm,
+                // La vue plate garde les tuples de la table historique : c'est ce qui
+                // permet au test de non-régression de comparer sans traduction.
+                format: (f.mm.largeur, f.mm.hauteur),
                 marge_haut: f.marges.haut,
                 marge_bas: f.marges.bas,
                 exterieur: f.marges.exterieur,
-                gouttieres: f.gouttieres.clone(),
+                gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
                 corps_pt: CORPS_PT,
                 interligne: INTERLIGNE,
                 folio_pt: FOLIO_PT,
                 fond_perdu: f.fond_perdu.or(pod.fond_perdu),
-                pages_min,
-                pages_max,
+                pages_min: pagination.min,
+                pages_max: pagination.max,
                 papiers: pod.papiers.clone(),
             });
         }
@@ -943,15 +981,15 @@ fond_perdu = 4.0
 cle = "100x150"
 nom = "10 × 15 cm"
 cle_heritee = "essai"
-mm = [100.0, 150.0]
+mm = { largeur = 100.0, hauteur = 150.0 }
 marges = { haut = 10.0, bas = 10.0, exterieur = 10.0 }
-gouttieres = [[24, 400, 15.0]]
+gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 400]
+pages = { min = 24, max = 400 }
 parite = "paire"
 
 [[papier]]
