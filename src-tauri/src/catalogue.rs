@@ -3,8 +3,8 @@
 //! Un fichier TOML par POD. Les fournis sont incorporés au binaire par `include_str!` —
 //! il n'y a donc aucun chemin à résoudre pour eux, aucun mode dégradé, aucun écart entre
 //! développement et livraison. Le poste pourra en déposer d'autres, qui remplaceront le
-//! fourni de même clé. Ce module porte pour l'instant les types, leur lecture et les six
-//! fichiers fournis : ni chargement depuis le poste, ni vue plate.
+//! fourni de même clé. Ce module porte les types, leur lecture, les six fichiers fournis
+//! et la vue plate ; le chargement depuis le poste manque encore.
 //!
 //! Cinq axes : le POD, ses formats, ses reliures, ses finitions, ses papiers. Le cas
 //! courant — tout compatible avec tout — ne s'écrit pas ; seules les exceptions se
@@ -523,6 +523,110 @@ const FOURNIS: &[&str] = &[
 /// l'attrape avant la livraison.
 pub fn fournis() -> Result<Vec<Pod>, String> {
     FOURNIS.iter().map(|s| Pod::depuis_toml(s)).collect()
+}
+
+/// La vue **plate** du catalogue : une entrée par couple POD × format, telle que le reste
+/// du code la consomme encore.
+///
+/// Transitoire dans son principe — le lot 2 lui substitue le livrable à cinq axes — mais
+/// c'est elle qui rend ce lot invisible : rien d'autre ne change pendant qu'on déplace le
+/// catalogue dans des fichiers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Provider {
+    pub cle: String,
+    pub libelle: String,
+    pub format: (f64, f64),
+    pub marge_haut: f64,
+    pub marge_bas: f64,
+    pub exterieur: f64,
+    /// Triplets, comme la table historique les écrivait : la vue plate est comparée à
+    /// elle, champ par champ, à la tâche 3.
+    pub gouttieres: Vec<(u32, u32, f64)>,
+    pub corps_pt: f64,
+    pub interligne: f64,
+    pub folio_pt: f64,
+    pub fond_perdu: Option<f64>,
+    pub pages_min: u32,
+    pub pages_max: u32,
+    pub papiers: Vec<Papier>,
+}
+
+/// Corps, interligne et folio de l'intérieur.
+///
+/// Ils étaient dans les quatorze entrées de la table, **identiques dans toutes**. Ce ne
+/// sont pas des faits de prestataire mais des réglages typographiques : ils quittent le
+/// catalogue à la tâche 7, où ils deviennent les constantes de `interieur`. Ils sont
+/// reproduits ici le temps que la vue plate porte encore ces champs.
+const CORPS_PT: f64 = 9.5;
+const INTERLIGNE: f64 = 1.42;
+const FOLIO_PT: f64 = 8.0;
+
+impl Provider {
+    /// Gouttière imposée par la tranche de pagination, en mm.
+    pub fn gouttiere(&self, pages: u32) -> Result<f64, String> {
+        self.gouttieres
+            .iter()
+            .find(|(lo, hi, _)| *lo <= pages && pages <= *hi)
+            .map(|(_, _, g)| *g)
+            .ok_or_else(|| {
+                format!(
+                    "{pages} pages : tranche de gouttière absente du gabarit {} — \
+                     la compléter depuis le guide du prestataire.",
+                    self.cle
+                )
+            })
+    }
+
+    /// Papier par défaut : le premier de la liste.
+    pub fn papier_defaut(&self) -> &Papier {
+        &self.papiers[0]
+    }
+
+    pub fn papier(&self, cle: &str) -> Option<&Papier> {
+        self.papiers.iter().find(|p| p.cle == cle)
+    }
+}
+
+/// Aplatit une liste de POD en une entrée par couple POD × format.
+///
+/// La reliure composable du POD donne la pagination admise ; un POD qui n'en aurait
+/// aucune ne produit aucune entrée plate, faute de pouvoir dire ce qu'il accepte.
+pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
+    let mut v = Vec::new();
+    for pod in pods {
+        let Some(r) = pod.reliures.iter().find(|r| r.geometrie.is_some()) else {
+            continue;
+        };
+        let Some(pagination) = r.pages else {
+            continue;
+        };
+        for f in &pod.formats {
+            v.push(Provider {
+                cle: f.cle_heritee.clone(),
+                libelle: format!("{} — {}", pod.nom, f.nom),
+                // La vue plate garde les tuples de la table historique : c'est ce qui
+                // permet au test de non-régression de comparer sans traduction.
+                format: (f.mm.largeur, f.mm.hauteur),
+                marge_haut: f.marges.haut,
+                marge_bas: f.marges.bas,
+                exterieur: f.marges.exterieur,
+                gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
+                corps_pt: CORPS_PT,
+                interligne: INTERLIGNE,
+                folio_pt: FOLIO_PT,
+                fond_perdu: f.fond_perdu.or(pod.fond_perdu),
+                pages_min: pagination.min,
+                pages_max: pagination.max,
+                papiers: pod.papiers.clone(),
+            });
+        }
+    }
+    v
+}
+
+/// La vue plate des fournis.
+pub fn plats() -> Result<Vec<Provider>, String> {
+    Ok(aplatit(&fournis()?))
 }
 
 #[cfg(test)]
@@ -1080,6 +1184,47 @@ non_outille = "géométrie du casewrap non relevée"
         // Les quatorze formats de la table historique, tous présents.
         let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
         assert_eq!(formats, 14, "quatorze formats attendus");
+    }
+
+    /// La vue plate rend, valeur par valeur, ce que la table écrite en dur rendait.
+    ///
+    /// Test **transitoire** : il meurt avec la table, à la tâche 4. C'est la seule preuve que
+    /// la conversion des quatorze entrées n'a pas perdu un dixième de millimètre — et une
+    /// valeur fausse ne se verrait autrement qu'au massicot.
+    #[test]
+    fn la_vue_plate_rend_ce_que_la_table_historique_rendait() {
+        let vue = plats().unwrap();
+        let heritee = crate::providers::PROVIDERS_HERITEE;
+        assert_eq!(vue.len(), heritee.len());
+        for (v, h) in vue.iter().zip(heritee) {
+            assert_eq!(v.cle, h.cle, "clé");
+            assert_eq!(v.libelle, h.libelle, "{} : libellé", h.cle);
+            assert_eq!(v.format, h.format, "{} : format", h.cle);
+            assert_eq!(v.marge_haut, h.marge_haut, "{} : marge haut", h.cle);
+            assert_eq!(v.marge_bas, h.marge_bas, "{} : marge bas", h.cle);
+            assert_eq!(v.exterieur, h.exterieur, "{} : extérieur", h.cle);
+            assert_eq!(
+                v.gouttieres.as_slice(),
+                h.gouttieres,
+                "{} : gouttières",
+                h.cle
+            );
+            assert_eq!(v.corps_pt, h.corps_pt, "{} : corps", h.cle);
+            assert_eq!(v.interligne, h.interligne, "{} : interligne", h.cle);
+            assert_eq!(v.folio_pt, h.folio_pt, "{} : folio", h.cle);
+            assert_eq!(v.fond_perdu, h.fond_perdu, "{} : fond perdu", h.cle);
+            assert_eq!(v.pages_min, h.pages_min, "{} : pages min", h.cle);
+            assert_eq!(v.pages_max, h.pages_max, "{} : pages max", h.cle);
+            assert_eq!(v.papiers.len(), h.papiers.len(), "{} : papiers", h.cle);
+            for (pv, ph) in v.papiers.iter().zip(h.papiers) {
+                assert_eq!(pv.cle, ph.cle, "{} : clé papier", h.cle);
+                // Le catalogue dit `nom` là où la table disait `libelle` : c'est le même
+                // fait, et le nom du champ suit celui du POD et du format.
+                assert_eq!(pv.nom, ph.libelle, "{} : nom du papier", h.cle);
+                assert_eq!(pv.teinte, ph.teinte, "{} : teinte", h.cle);
+                assert_eq!(pv.dos.mm(280), ph.dos.mm(280), "{} : dos à 280 p", h.cle);
+            }
+        }
     }
 
     /// Chaque POD outillé porte au moins un papier et une reliure composable : sans quoi il

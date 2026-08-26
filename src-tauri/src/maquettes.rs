@@ -920,7 +920,7 @@ mod tests {
     fn le_pied_editeur_ne_traverse_jamais_le_cadre() {
         let cv = fournie("filets");
         let c = &cv.cadre;
-        for pr in crate::providers::PROVIDERS {
+        for pr in crate::providers::PROVIDERS_HERITEE {
             let (fw, fh) = pr.format;
             // Bord intérieur du filet le plus bas, mesuré depuis le bas de la couverture.
             // Le cadre étant concentrique, c'est la même distance qu'en haut.

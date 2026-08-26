@@ -252,7 +252,9 @@ const GOUTTIERES_TBE: &[Tranche] = &[(40, 750, 17.5)];
 // (« It needs to be at least 1.3mm (24 pages) ») et accepte encore 1000 pages.
 const GOUTTIERES_BOOKVAULT: &[Tranche] = &[(24, 1000, 20.0)];
 
-pub const PROVIDERS: &[Provider] = &[
+/// **Transitoire.** La table historique, gardée le temps de prouver que le catalogue lu
+/// depuis les TOML rend exactement ce qu'elle rendait. Supprimée à la tâche 4 du lot 1.
+pub const PROVIDERS_HERITEE: &[Provider] = &[
     Provider {
         cle: "lulu",
         libelle: "Lulu — poche 108 × 175",
@@ -493,7 +495,7 @@ pub const PROVIDERS: &[Provider] = &[
 ];
 
 pub fn provider(cle: &str) -> Option<&'static Provider> {
-    PROVIDERS.iter().find(|p| p.cle == cle)
+    PROVIDERS_HERITEE.iter().find(|p| p.cle == cle)
 }
 
 #[cfg(test)]
@@ -613,7 +615,7 @@ mod tests {
 
     #[test]
     fn chaque_prestataire_a_un_papier_par_defaut_et_des_bornes_coherentes() {
-        for pr in PROVIDERS {
+        for pr in PROVIDERS_HERITEE {
             assert!(!pr.papiers.is_empty(), "{} sans papier", pr.cle);
             assert!(pr.pages_min < pr.pages_max, "{} : bornes inversées", pr.cle);
             assert!(!pr.gouttieres.is_empty(), "{} sans tranche", pr.cle);
@@ -628,7 +630,7 @@ mod tests {
     /// donnerait une colonne de texte négative, et Typst composerait n'importe quoi.
     #[test]
     fn la_colonne_de_texte_reste_positive_sur_toute_la_pagination() {
-        for pr in PROVIDERS {
+        for pr in PROVIDERS_HERITEE {
             for (lo, _, g) in pr.gouttieres {
                 let utile = pr.format.0 - g - pr.exterieur;
                 assert!(
@@ -646,7 +648,7 @@ mod tests {
     /// son crème.
     #[test]
     fn chaque_papier_annonce_sa_teinte() {
-        for p in PROVIDERS {
+        for p in PROVIDERS_HERITEE {
             for pa in p.papiers {
                 assert!(
                     pa.teinte.len() == 7 && pa.teinte.starts_with('#'),

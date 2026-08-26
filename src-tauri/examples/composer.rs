@@ -22,7 +22,7 @@ fn main() -> Result<(), String> {
             eprintln!("usage : composer <projet.ozalid> <prestataire> <répertoire de sortie>");
             eprintln!(
                 "prestataires : {}",
-                providers::PROVIDERS
+                providers::PROVIDERS_HERITEE
                     .iter()
                     .map(|p| p.cle)
                     .collect::<Vec<_>>()

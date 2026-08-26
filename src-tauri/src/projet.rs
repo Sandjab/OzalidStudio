@@ -322,7 +322,7 @@ pub struct Livraison {
 /// réclame un format sans réclamer aucune composition.
 impl Default for Livraison {
     fn default() -> Self {
-        let pr = &crate::providers::PROVIDERS[0];
+        let pr = &crate::providers::PROVIDERS_HERITEE[0];
         Self {
             destinataires: vec![Destinataire::pour(pr)],
             courant: pr.cle.into(),
@@ -1353,7 +1353,7 @@ auteur = "Ivan Pjig"
 "#;
         let mut m: Metadonnees = toml::from_str(toml).expect("projet sans [livraison] refusé");
         m.livraison.normalise();
-        let attendu = crate::providers::PROVIDERS[0].cle;
+        let attendu = crate::providers::PROVIDERS_HERITEE[0].cle;
         assert_eq!(m.livraison.courant, attendu);
         assert_eq!(m.livraison.destinataires.len(), 1);
         assert_eq!(m.livraison.destinataires[0].provider, attendu);

@@ -153,7 +153,10 @@ pub struct Composition {
 
 #[tauri::command]
 pub fn providers_liste() -> Vec<ProviderVue> {
-    providers::PROVIDERS.iter().map(ProviderVue::from).collect()
+    providers::PROVIDERS_HERITEE
+        .iter()
+        .map(ProviderVue::from)
+        .collect()
 }
 
 /// Importe un répertoire de travail de l'ancienne chaîne (son `livre.toml`).
