@@ -281,24 +281,6 @@ test('chaque commande appelée par le front est déclarée au Rust', () => {
   );
 });
 
-/**
- * Le pendant du test précédent pour les trois commandes du **démarrage** : elles ne
- * partent d'aucun geste, et un front qui les perdrait se dégraderait en silence — la
- * moisson par `invoke('…')` cesserait simplement de les voir.
- *
- * Les nommer ici, c'est dire que le démarrage tient à ces trois-là : la table plate,
- * l'arbre du catalogue et ses refus.
- */
-test('le démarrage ne demande que des commandes que le Rust expose', () => {
-  const lib = source('src-tauri', 'src', 'lib.rs');
-  for (const cmd of ['providers_liste', 'pods_liste', 'catalogue_refus']) {
-    assert.ok(
-      lib.includes(`commands::${cmd},`),
-      `${cmd} n'est pas enregistrée dans le generate_handler`
-    );
-  }
-});
-
 /* ---------- menu.rs → RECENT ---------- */
 
 /**

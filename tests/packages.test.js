@@ -19,6 +19,16 @@ const KDP = {
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
+// Le même imprimeur dans son autre format. La cascade offre les deux, la table plate
+// doit donc savoir les dire tous les deux : sans lui, un 5 × 8 ajouté partait au Rust
+// sans que rien ne puisse revenir à l'écran, et le test de l'ajout restait vert sur un
+// faux qui levait dans le vide.
+const KDP_5X8 = {
+  cle: 'kdp-5x8-broche', pod: 'kdp', format: '5x8', reliure: 'broche',
+  libelle: 'Amazon KDP — 5 × 8 po',
+  largeur: 127, hauteur: 203.2, fond_perdu: 3.175, dos_publie: true,
+  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
+};
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
@@ -374,7 +384,7 @@ test('la cascade offre les formats du POD choisi, et eux seuls', async () => {
 });
 
 test('l\'ajout envoie les quatre axes, la reliure composable et le premier papier', async () => {
-  const { els, appels } = await ouvre([LULU, KDP, COOLLIBRI], {}, { pods: PODS });
+  const { els, appels } = await ouvre([LULU, KDP, KDP_5X8, COOLLIBRI], {}, { pods: PODS });
 
   els.get('inAjoutPod').value = 'kdp';
   await els.get('inAjoutPod').declenche('change');
@@ -389,6 +399,21 @@ test('l\'ajout envoie les quatre axes, la reliure composable et le premier papie
     // raison de ne pas l'être, et le Rust la refuserait.
     pod: 'kdp', format: '5x8', reliure: 'broche', papier: 'creme',
   });
+  // L'ajout doit **aboutir**, pas seulement partir. Sans cette ligne, le test lisait le
+  // départ de la commande et rien d'autre : il serait resté vert sur une fabrication que
+  // le Rust refuse, l'exception étant avalée par `tente()`.
+  assert.ok(
+    els.get('dest-papier-kdp-5x8-broche-creme'),
+    'le livrable ajouté ne paraît pas à l\'écran'
+  );
+  // Le format retenu survit à l'ajout, comme le POD : comparer deux papiers d'un même
+  // livre, ce que cet écran existe pour permettre, c'est ajouter deux fois le même
+  // couple imprimeur × format avant de changer le papier sur l'une des deux lignes.
+  assert.strictEqual(
+    els.get('inAjoutFormat').value,
+    '5x8',
+    'le format est retombé sur le premier du POD entre deux ajouts'
+  );
 });
 
 /**

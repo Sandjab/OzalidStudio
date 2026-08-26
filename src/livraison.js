@@ -143,8 +143,15 @@ function afficherCascade() {
 function afficherFormatsDuPod() {
   const p = pods.find((x) => x.cle === $('inAjoutPod').value);
   const sel = $('inAjoutFormat');
+  const choisi = sel.value;
   sel.replaceChildren();
   for (const f of p?.formats ?? []) sel.append(new Option(f.nom, f.cle));
+  // Le format retenu survit, comme le POD. Comparer deux papiers d'un même livre —
+  // le geste pour lequel cet écran existe — c'est déclarer deux fois le même couple
+  // imprimeur × format, puis changer le papier sur l'une des deux lignes. Reperdre le
+  // format entre les deux ajouts ferait payer deux clics à ce geste-là. Changer de POD
+  // l'emporte de lui-même : un format que le nouveau ne porte pas ne se retrouve pas.
+  if (p?.formats.some((f) => f.cle === choisi)) sel.value = choisi;
   sel.disabled = !p || p.formats.length < 2;
 }
 
