@@ -338,6 +338,11 @@ pub struct Livraison {
     pub deja_compose: bool,
     /// Les mesures, par clé de gabarit (`Fabrication::cle_gabarit`). Une map et non une
     /// liste : deux entrées de même gabarit sont impossibles par construction.
+    ///
+    /// Une mesure dont plus aucun livrable ne porte le gabarit — une reliure réglée sur
+    /// la ligne, depuis le lot 3 — survit jusqu'à la prochaine ouverture, où `normalise`
+    /// l'élague. Personne ne la lit entre-temps : elle est rangée sous une clé que plus
+    /// aucun livrable ne forme.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub mesures: std::collections::BTreeMap<String, Mesure>,
 }

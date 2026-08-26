@@ -612,13 +612,20 @@ fn refuse_doublon(livrables: &[Livrable], cle: &str) -> bool {
 /// un `State` qu'aucun test ne fabrique, et ces deux refus-là seraient alors les seuls
 /// du chantier que rien ne protège.
 ///
-/// Le gabarit ne se règle pas : c'est lui qui range la mesure, et le changer sur place
-/// laisserait le livrable sous une pagination qui n'est plus la sienne — retirer puis
-/// ajouter le dit, et le fait. La finition, elle, doit exister chez le POD : elle nomme
-/// une option de commande, et une option inventée ne se commande nulle part.
+/// Le POD et le format ne se règlent pas : ils se choisissent à l'ajout, en cascade, et
+/// les changer sur place laisserait le livrable sous une pagination qui n'est plus la
+/// sienne — retirer puis ajouter le dit, et le fait. La reliure, elle, se règle (spec
+/// § 6) : elle emporte le gabarit avec elle, le livrable retombe sur un gabarit sans
+/// mesure, et la recomposition est précisément ce qu'elle exige. La finition doit
+/// exister chez le POD : elle nomme une option de commande, et une option inventée ne se
+/// commande nulle part.
 fn reglage_refuse(place: &Livrable, neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
-    if place.fabrication.cle_gabarit() != neuf.fabrication.cle_gabarit() {
-        return Some("le gabarit d'un livrable ne se règle pas : retirer, puis ajouter.".into());
+    if place.fabrication.pod != neuf.fabrication.pod
+        || place.fabrication.format != neuf.fabrication.format
+    {
+        return Some(
+            "le POD et le format d'un livrable ne se règlent pas : retirer, puis ajouter.".into(),
+        );
     }
     match &neuf.finition {
         Some(f) if !pod.finitions.iter().any(|x| &x.cle == f) => {
@@ -2445,18 +2452,35 @@ nom = "Pelliculage mat"
         .unwrap()
     }
 
-    /// Le gabarit ne se règle pas sur une ligne : il range la mesure, et le changer sur
-    /// place laisserait le livrable sous une pagination qui n'est plus la sienne. Le
-    /// refus dit le geste qui, lui, marche.
+    /// Le POD et le format se choisissent à l'ajout, en cascade, et ne se règlent plus : les
+    /// changer sur place laisserait le livrable sous une pagination qui n'est plus la
+    /// sienne, et le refus dit le geste qui, lui, marche. La reliure, elle, **se règle**
+    /// (spec § 6) : elle change le gabarit, le livrable retombe sur un gabarit sans mesure,
+    /// et c'est exactement ce qu'une reliure exige — sa pagination admise, sa parité et sa
+    /// géométrie ne sont pas celles de la précédente.
     #[test]
-    fn changer_le_gabarit_d_un_livrable_est_refuse_en_disant_quoi_faire() {
+    fn le_pod_et_le_format_ne_se_reglent_pas_la_reliure_si() {
         let place = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
-        let ailleurs = Livrable::pour(fabrication("kdp", "5x8", "broche", "creme"));
-        let refus = reglage_refuse(&place, &ailleurs, &pod_a_finition())
-            .expect("un gabarit changé doit être refusé");
+
+        let autre_format = Livrable::pour(fabrication("kdp", "5x8", "broche", "creme"));
+        let refus = reglage_refuse(&place, &autre_format, &pod_a_finition())
+            .expect("un format changé doit être refusé");
         assert!(refus.contains("retirer"), "{refus}");
 
-        // Le papier, lui, se règle : c'est le geste même de la ligne.
+        let autre_pod = Livrable::pour(fabrication("bod", "6x9", "broche", "creme"));
+        let refus = reglage_refuse(&place, &autre_pod, &pod_a_finition())
+            .expect("un POD changé doit être refusé");
+        assert!(refus.contains("retirer"), "{refus}");
+
+        // La reliure se règle : c'est le geste que la spec § 6 pose sur la ligne.
+        let autre_reliure = Livrable::pour(fabrication("kdp", "6x9", "rigide", "creme"));
+        assert_eq!(
+            reglage_refuse(&place, &autre_reliure, &pod_a_finition()),
+            None,
+            "la reliure doit se régler sur la ligne"
+        );
+
+        // Le papier aussi, comme depuis le lot 2.
         let autre_papier = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
         assert_eq!(
             reglage_refuse(&place, &autre_papier, &pod_a_finition()),
