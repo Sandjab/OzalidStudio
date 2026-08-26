@@ -191,12 +191,46 @@ n'a jamais dépendu du papier.
 ## 6. L'écran Livraison
 
 À l'ajout, deux listes en cascade : le POD, puis **ses** formats. Une fois la ligne posée,
-trois réglages dessus : reliure, finition, papier, chacun limité à ce que ce POD offre pour
-ce format.
+trois réglages dessus : reliure, finition, papier, chacun limité à ce que ce POD offre.
+
+*Écrit « pour ce format », corrigé au lot 3 : reliures, finitions et papiers vivent sur le
+POD et jamais sous un format — c'est le lot 1 qui l'a voulu, « un arbre POD > format >
+reliure > papier aurait obligé à recopier les quatre papiers d'un POD sous chacun de ses
+formats ». Aucune exception par format n'est déclarable, et la phrase promettait donc plus
+que le modèle ne porte. Le jour où un POD n'offrira un papier que sous l'un de ses formats,
+ce sera un chantier de catalogue, pas d'écran.*
+
+**Le POD et le format ne se règlent pas** : ils se choisissent à l'ajout, et les changer
+sur place laisserait le livrable sous une pagination qui n'est plus la sienne — retirer
+puis ajouter le dit, et le fait. La reliure, elle, **se règle**, et emporte le gabarit avec
+elle : le livrable retombe sur un gabarit sans mesure et recompose, ce qui est précisément
+ce qu'une reliure exige, sa pagination admise et sa parité n'étant pas celles de la
+précédente. *Le lot 2 avait verrouillé le gabarit entier par prudence ; c'est ce § 6 qui
+l'emporte, arbitré le 26/08.*
+
+**La table plate porte une entrée par POD × format × reliure composable.** Elle n'en portait
+qu'une par POD × format, sur la première reliure outillée : tant que la reliure était figée
+c'était sans conséquence, mais une reliure réglable produit alors un gabarit que la table
+ignore, et le front dégrade en silence — ligne intitulée par sa clé brute, note de format
+disparue, relevé de fond perdu jamais proposé. *Corrigé au lot 3, sur une trouvaille de
+revue : aucun POD fourni n'ayant deux reliures composables, le cas ne se rencontrait qu'avec
+un fichier déposé sur le poste.*
 
 Une reliure non outillée paraît **grisée, avec sa raison en clair sous elle**. C'est la
 différence entre « ce POD ne le fait pas » et « l'application ne le compose pas », et elle
-doit se lire à l'écran, pas dans un document à côté.
+doit se lire à l'écran, pas dans un document à côté. *Le refus, lui, ne dépend pas de
+l'écran : `catalogue::resout` le rend depuis le lot 2, première instruction des commandes
+qui posent ou règlent un livrable. Le grisé n'est que la lecture de ce refus avant le clic.*
+
+**La finition n'a de contrôle que chez un POD qui en déclare.** Aucun des six fournis n'en
+déclare aujourd'hui : un contrôle vide se lirait comme un choix qu'on n'a pas su faire,
+alors qu'il n'y en avait aucun à faire. C'est le lot 4 qui les relèvera.
+
+**Le relevé de dos suit le papier retenu**, jamais le papier d'office du POD. Un POD peut
+publier une formule pour l'un de ses papiers et n'en publier aucune pour l'autre ; c'est le
+papier de la ligne qui décide si le dos se calcule ou se relève. *Le lot 2 tranchait sur le
+papier d'office — exact par accident de données, aucun POD fourni ne mélangeant les deux
+formes.*
 
 Le reste de l'étape ne change pas : les relevés naissent vides, le dernier livrable ne se
 retire pas, et chaque package généré affiche sa planche en vignette.
@@ -291,7 +325,7 @@ Livraison continue d'afficher sa liste, construite depuis le nouveau catalogue.
 **Lot 2 — Le livrable.** L'identité à quatre axes, le `.ozalid` migré, la mesure rangée sous
 le gabarit d'intérieur, les noms de packages, les commandes `livrable_*`.
 
-**Lot 3 — La cascade.** L'écran Livraison : POD puis format à l'ajout, reliure, finition et
+**Lot 3 — La cascade.** ✅ *Fait le 26/08/2026.* L'écran Livraison : POD puis format à l'ajout, reliure, finition et
 papier sur la ligne, et le grisé qui dit pourquoi.
 
 **Lot 4 — BoD complété.** Tous ses formats, papiers et reliures, chacun avec sa `source`

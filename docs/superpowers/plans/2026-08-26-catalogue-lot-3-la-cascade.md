@@ -42,11 +42,22 @@ cités (1 à 6) y sont, chacun avec ses `fichier:ligne`.
 4. **Le renommage « destinataire » → « livrable » entre dans ce lot**, README compris, en
    **tâche séparée** : un renommage de ~160 points noyé dans la refonte de l'écran rend la
    revue de la cascade illisible.
+   *Étendu le 26/08, après la tâche 7 : les 32 commentaires Rust et les sept passages de
+   README hors de la section visée disaient encore « destinataire » là où le code dit
+   « livrable » depuis le lot 2. 14 renommés, 12 laissés — ceux qui **narrent** la migration
+   v4→v5, où le mot désigne la clé d'hier ; les clés TOML littérales `[[destinataires]]` des
+   fixtures de migration restent, sous peine de casser la lecture des anciens fichiers.*
 5. **Le libellé de ligne ne gagne rien** : `libelleProvider(d.gabarit)` porte déjà le POD
    et le format, et ces deux axes ne se règlent plus.
 6. **`libelleLivrable` porte la reliure** en plus du papier : il sert le pointeur du pied
    et les comptes rendus de package, où aucun contrôle ne se lit, et deux livrables ne
    différant que par leur reliure s'y liraient identiques.
+   *Affiné à la tâche 6 : elle n'y paraît que chez un POD qui en offre **plusieurs de
+   composables**. Ailleurs elle ne distingue rien et coûte cher à lire — « Lulu — poche
+   108 × 175 — Broché — dos carré collé — Papier standard », quatre tirets cadratins dont un
+   interne au nom de la reliure. Un libellé dit ce qui distingue, pas tout ce qu'on sait ;
+   sur le catalogue livré les libellés sont donc inchangés, et les trois tests qui les
+   ancrent le prouvent.*
 
 ## Invariants sur lesquels ce plan s'appuie
 
@@ -134,7 +145,7 @@ verts. `PapierVue` gagne `dos_publie` **sans** que `ProviderVue` le perde — le
 cohabitent le temps de deux tâches, et la tâche 4 retire le doublon en basculant ses
 lecteurs. C'est le seul moment du lot où deux vérités coexistent, et il est borné.
 
-- [ ] **Étape 1 : Écrire le test qui échoue**
+- [x] **Étape 1 : Écrire le test qui échoue**
 
 Dans le module de tests de `src-tauri/src/commands.rs`, à côté de
 `deux_papiers_d_un_gabarit_partagent_la_mesure_sans_partager_le_dos` :
@@ -204,7 +215,7 @@ fn dos_publie_est_porte_par_chaque_papier() {
 }
 ```
 
-- [ ] **Étape 2 : Lancer le test pour le voir échouer**
+- [x] **Étape 2 : Lancer le test pour le voir échouer**
 
 Depuis `src-tauri/` :
 
@@ -218,7 +229,7 @@ cargo test dos_publie_est_porte_par_chaque_papier
 Attendu : **échec de compilation** — `cannot find function 'pods_liste' in this scope`, et
 `no field 'dos_publie' on type 'PapierVue'`.
 
-- [ ] **Étape 3 : Écrire les vues et la commande**
+- [x] **Étape 3 : Écrire les vues et la commande**
 
 Dans `src-tauri/src/commands.rs`, à la suite de `PapierVue` (vers la ligne 82) :
 
@@ -353,7 +364,7 @@ pub fn pods_liste() -> Vec<PodVue> {
 }
 ```
 
-- [ ] **Étape 4 : Enregistrer la commande**
+- [x] **Étape 4 : Enregistrer la commande**
 
 Dans `src-tauri/src/lib.rs`, à la ligne qui suit `commands::providers_liste,` (l. 96) :
 
@@ -361,7 +372,7 @@ Dans `src-tauri/src/lib.rs`, à la ligne qui suit `commands::providers_liste,` (
             commands::pods_liste,
 ```
 
-- [ ] **Étape 5 : Lancer les tests pour les voir passer**
+- [x] **Étape 5 : Lancer les tests pour les voir passer**
 
 Depuis `src-tauri/` :
 
@@ -373,7 +384,7 @@ cargo test dos_publie_est_porte_par_chaque_papier
 Attendu : **1 passed** chacun. Puis la suite entière, `cargo test` : aucun test existant ne lit
 `PapierVue`, l'ajout d'un champ ne casse rien.
 
-- [ ] **Étape 6 : Commit**
+- [x] **Étape 6 : Commit**
 
 ```bash
 git add src-tauri/src/commands.rs src-tauri/src/lib.rs
@@ -391,7 +402,7 @@ Rust seul : l'écran n'offre pas encore le contrôle, donc rien ne bouge à l'œ
 l'assouplissement du verdict 2 — le lot 2 avait verrouillé le gabarit entier ; la spec § 6
 n'en verrouille que le POD et le format.
 
-- [ ] **Étape 1 : Écrire le test qui échoue**
+- [x] **Étape 1 : Écrire le test qui échoue**
 
 Dans `src-tauri/src/commands.rs`, remplacer le corps du test
 `changer_le_gabarit_d_un_livrable_est_refuse_en_disant_quoi_faire` (l. 2354-2367) par
@@ -435,7 +446,7 @@ fn le_pod_et_le_format_ne_se_reglent_pas_la_reliure_si() {
 }
 ```
 
-- [ ] **Étape 2 : Lancer le test pour le voir échouer**
+- [x] **Étape 2 : Lancer le test pour le voir échouer**
 
 Depuis `src-tauri/` :
 
@@ -447,7 +458,7 @@ Attendu : **FAIL** sur l'assertion « la reliure doit se régler sur la ligne »
 `reglage_refuse` compare encore les gabarits entiers et rend le refus « retirer, puis
 ajouter ».
 
-- [ ] **Étape 3 : Assouplir le verrou**
+- [x] **Étape 3 : Assouplir le verrou**
 
 Dans `src-tauri/src/commands.rs`, remplacer l'en-tête et le premier test de
 `reglage_refuse` (l. 515-528) :
@@ -478,12 +489,12 @@ fn reglage_refuse(place: &Livrable, neuf: &Livrable, pod: &catalogue::Pod) -> Op
 }
 ```
 
-- [ ] **Étape 4 : Lancer le test pour le voir passer**
+- [x] **Étape 4 : Lancer le test pour le voir passer**
 
 Depuis `src-tauri/` : `cargo test le_pod_et_le_format_ne_se_reglent_pas_la_reliure_si`
 → **PASS**. Puis `cargo test` entier.
 
-- [ ] **Étape 5 : Consigner la mesure orpheline**
+- [x] **Étape 5 : Consigner la mesure orpheline**
 
 Une mesure dont plus aucun livrable ne porte le gabarit survit en mémoire — et donc dans
 le `.ozalid` réécrit — jusqu'à la prochaine ouverture, où `normalise` l'élague
@@ -498,7 +509,7 @@ lit ; ce n'est pas un défaut à corriger ici. Ajouter la note à la documentati
     /// aucun livrable ne forme.
 ```
 
-- [ ] **Étape 6 : Commit**
+- [x] **Étape 6 : Commit**
 
 ```bash
 git add src-tauri/src/commands.rs src-tauri/src/projet.rs
@@ -519,7 +530,7 @@ git commit -m "La reliure se règle sur la ligne, le POD et le format restent au
 C'est la tâche qui apprend `pods_liste` à tous les faux : sans elle, neuf fichiers de
 tests jettent « commande inattendue ».
 
-- [ ] **Étape 1 : Écrire le test qui échoue**
+- [x] **Étape 1 : Écrire le test qui échoue**
 
 Dans `tests/packages.test.js`, la constante d'arbre à poser près de `LULU`/`KDP`/`COOLLIBRI` :
 
@@ -615,7 +626,7 @@ et sert la commande, à côté de `providers_liste` (l. 162) :
     if (cmd === 'pods_liste') return pods;
 ```
 
-- [ ] **Étape 2 : Lancer les tests pour les voir échouer**
+- [x] **Étape 2 : Lancer les tests pour les voir échouer**
 
 Depuis la racine :
 
@@ -626,7 +637,7 @@ node --test tests/packages.test.js
 Attendu : **FAIL** — `els.get('inAjoutPod')` est `undefined` : l'identifiant n'existe pas
 dans `index.html`, et le shim ne fabrique que ce qu'il y lit.
 
-- [ ] **Étape 3 : Poser les deux listes dans le balisage**
+- [x] **Étape 3 : Poser les deux listes dans le balisage**
 
 Dans `src/index.html`, remplacer la ligne d'ajout (l. 303-306) :
 
@@ -645,7 +656,7 @@ Dans `src/index.html`, remplacer la ligne d'ajout (l. 303-306) :
       </div>
 ```
 
-- [ ] **Étape 4 : Charger l'arbre au démarrage**
+- [x] **Étape 4 : Charger l'arbre au démarrage**
 
 Dans `src/app.js`, à côté de `providers` (l. 20) :
 
@@ -663,7 +674,7 @@ et dans `chargerProviders` (l. 454) :
   pods = await invoke('pods_liste');
 ```
 
-- [ ] **Étape 5 : Remplir la cascade**
+- [x] **Étape 5 : Remplir la cascade**
 
 Dans `src/livraison.js`, remplacer les six dernières lignes d'`afficherDestinataires`
 (l. 114-121, du commentaire « La table entière… » à la ligne
@@ -708,7 +719,7 @@ function afficherFormatsDuPod() {
 }
 ```
 
-- [ ] **Étape 6 : Brancher les deux écouteurs**
+- [x] **Étape 6 : Brancher les deux écouteurs**
 
 Dans `src/app.js`, remplacer l'écouteur du bouton d'ajout (l. 1289-1297) :
 
@@ -734,7 +745,7 @@ $('btAjouterDestinataire').addEventListener('click', () => tente(async () => {
 }));
 ```
 
-- [ ] **Étape 7 : Apprendre `pods_liste` aux huit autres faux**
+- [x] **Étape 7 : Apprendre `pods_liste` aux huit autres faux**
 
 Dans chacun de `tests/composition.test.js`, `tests/contrats.test.js`,
 `tests/coquille.test.js`, `tests/couverture.test.js`, `tests/cycle_de_vie.test.js`,
@@ -783,14 +794,14 @@ test('le démarrage ne demande que des commandes que le Rust expose', async () =
 });
 ```
 
-- [ ] **Étape 8 : Lancer la suite pour la voir passer**
+- [x] **Étape 8 : Lancer la suite pour la voir passer**
 
 Depuis la racine : `node --test tests/*.test.js`.
 
 Attendu : **0 échec**, et la suite **rend la main**. Si elle boucle au-delà d'une minute,
 c'est qu'un faux a été changé sans ses lecteurs (piège transverse).
 
-- [ ] **Étape 9 : Commit**
+- [x] **Étape 9 : Commit**
 
 ```bash
 git add src/index.html src/app.js src/livraison.js tests/
@@ -810,7 +821,7 @@ git commit -m "L'ajout se fait en cascade : l'imprimeur, puis ses formats"
 Le cœur du lot. La ligne passe d'un contrôle à trois, et `dos_publie` bascule du POD au
 papier — les deux vérités de la tâche 1 se réduisent à une.
 
-- [ ] **Étape 1 : Écrire les tests qui échouent**
+- [x] **Étape 1 : Écrire les tests qui échouent**
 
 Dans `tests/packages.test.js` :
 
@@ -923,7 +934,7 @@ test('le relevé de dos suit le papier, pas le POD', async () => {
 });
 ```
 
-- [ ] **Étape 2 : Lancer les tests pour les voir échouer**
+- [x] **Étape 2 : Lancer les tests pour les voir échouer**
 
 Depuis la racine : `node --test tests/packages.test.js`.
 
@@ -932,7 +943,7 @@ n'existent pas ; le dernier test échoue sur `dest-dos-mixte-a5-broche-formule`,
 ligne pose encore d'après `p.dos_publie` du provider (absent de la fixture, donc
 `undefined`, donc « faux »).
 
-- [ ] **Étape 3 : Refaire la ligne**
+- [x] **Étape 3 : Refaire la ligne**
 
 Dans `src/livraison.js`, remplacer le corps de la boucle d'`afficherDestinataires`
 (l. 71-112, du `for (const d of declares)` au `}` qui la ferme) :
@@ -1034,7 +1045,7 @@ Dans `src/livraison.js`, remplacer le corps de la boucle d'`afficherDestinataire
   }
 ```
 
-- [ ] **Étape 4 : Renvoyer les trois réglages au Rust**
+- [x] **Étape 4 : Renvoyer les trois réglages au Rust**
 
 Dans `src/livraison.js`, le corps de `reglerLivrable` (l. 156-172) — la reliure et la
 finition rejoignent le papier :
@@ -1066,7 +1077,7 @@ async function reglerLivrable(d) {
 }
 ```
 
-- [ ] **Étape 5 : Basculer le pied sur le papier**
+- [x] **Étape 5 : Basculer le pied sur le papier**
 
 Dans `src/app.js`, ajouter le helper à côté de `providerCourant` (après la l. 492) :
 
@@ -1089,7 +1100,7 @@ et remplacer la ligne 386 :
     : !papierCourant()?.dos_publie ? 'dos relevé sur le gabarit'
 ```
 
-- [ ] **Étape 6 : Retirer la seconde vérité, côté Rust**
+- [x] **Étape 6 : Retirer la seconde vérité, côté Rust**
 
 Dans `src-tauri/src/commands.rs`, supprimer le champ `dos_publie` de `ProviderVue`
 (l. 67-69) et la ligne qui le calculait dans `ProviderVue::from` (l. 93-94). Plus aucun
@@ -1100,13 +1111,13 @@ Retirer aussi `dos_publie` des fixtures de providers dans `tests/composition.tes
 `tests/ebook.test.js`, `tests/epreuve.test.js`, `tests/packages.test.js` — le porter là
 ferait croire qu'il est encore servi.
 
-- [ ] **Étape 7 : Lancer les deux suites pour les voir passer**
+- [x] **Étape 7 : Lancer les deux suites pour les voir passer**
 
 Depuis la racine : `node --test tests/*.test.js` → **0 échec**.
 Depuis `src-tauri/` : `cargo test` → **0 échec**, puis `cargo run --example temoin` →
 **98 pages, dos 7,21 mm**.
 
-- [ ] **Étape 8 : Commit**
+- [x] **Étape 8 : Commit**
 
 ```bash
 git add src/livraison.js src/app.js src-tauri/src/commands.rs tests/
@@ -1166,7 +1177,7 @@ le témoin (**98 pages, dos 7,21 mm**) et la suite JS doivent passer sans modifi
 Sans test : une disposition se vérifie à l'œil. La ligne était calibrée au pixel pour
 trois éléments (verdict 5) ; elle en porte cinq.
 
-- [ ] **Étape 1 : Reprendre la ligne**
+- [x] **Étape 1 : Reprendre la ligne**
 
 Dans `src/styles.css`, après `.destinataire select { width: auto; }` (l. 1118) :
 
@@ -1190,7 +1201,7 @@ Et la note de format (l. 1127) reprend sa base pour laisser passer trois sélect
 .destinataire .note { margin: 0; flex: 1 1 100%; min-width: 0; text-align: right; }
 ```
 
-- [ ] **Étape 2 : Regarder**
+- [x] **Étape 2 : Regarder**
 
 ```
 touch src-tauri/src/lib.rs
@@ -1205,7 +1216,7 @@ ont été mesurés (`src/styles.css:307`). À vérifier :
 - aucun ascenseur **horizontal** ;
 - chez BoD, la ligne de raison paraît sous la ligne, en gris, lisible sans survol.
 
-- [ ] **Étape 3 : Commit**
+- [x] **Étape 3 : Commit**
 
 ```bash
 git add src/styles.css
@@ -1224,7 +1235,7 @@ git commit -m "La ligne de livraison range quatre contrôles et la raison du gri
 contrôle ne se lit. Avec la reliure réglable, deux livrables peuvent ne différer que par
 elle et s'y lire identiques (décision 6).
 
-- [ ] **Étape 1 : Écrire le test qui échoue**
+- [x] **Étape 1 : Écrire le test qui échoue**
 
 Dans `tests/packages.test.js` :
 
@@ -1254,12 +1265,12 @@ test('deux livrables du même papier se distinguent par leur reliure au pied', a
 });
 ```
 
-- [ ] **Étape 2 : Lancer le test pour le voir échouer**
+- [x] **Étape 2 : Lancer le test pour le voir échouer**
 
 `node --test tests/packages.test.js` → **FAIL** sur `notStrictEqual` : les deux options
 portent « Amazon KDP — 6 × 9 po — Crème ».
 
-- [ ] **Étape 3 : Ajouter la reliure au libellé**
+- [x] **Étape 3 : Ajouter la reliure au libellé**
 
 Dans `src/app.js`, remplacer `libelleLivrable` (l. 505-513) :
 
@@ -1281,13 +1292,13 @@ function libelleLivrable(d) {
 }
 ```
 
-- [ ] **Étape 4 : Lancer les tests pour les voir passer**
+- [x] **Étape 4 : Lancer les tests pour les voir passer**
 
 `node --test tests/*.test.js` → **0 échec**. Les tests qui ancraient l'ancien libellé
 (`coquille.test.js`, `packages.test.js`) sont à recaler sur la forme à trois segments —
 c'est le même libellé, avec sa reliure.
 
-- [ ] **Étape 5 : Commit**
+- [x] **Étape 5 : Commit**
 
 ```bash
 git add src/app.js tests/
@@ -1319,7 +1330,7 @@ Le tableau des renommages, exhaustif :
 | `#btAjouterDestinataire` | `#btAjouterLivrable` | `index.html`, `app.js`, `livraison.js`, tests |
 | `<h2>Destinataires</h2>` | `<h2>Livrables</h2>` | `index.html` |
 
-- [ ] **Étape 1 : Relever le point de départ**
+- [x] **Étape 1 : Relever le point de départ**
 
 Depuis la racine, pour pouvoir comparer :
 
@@ -1330,7 +1341,7 @@ grep -rc "estinataire" src/*.js src/*.html src/*.css
 
 Attendu : **0 échec**, et 60 occurrences réparties comme au verdict 6 de la reconnaissance.
 
-- [ ] **Étape 2 : Renommer dans `src/`**
+- [x] **Étape 2 : Renommer dans `src/`**
 
 Les identifiants et les symboles du tableau ci-dessus, un fichier à la fois. Le mot
 « destinataire » subsiste **dans les commentaires et les textes d'interface** partout où il
@@ -1351,13 +1362,13 @@ et le pointeur du pied (`index.html:492`) :
   <label id="visee"><span>Vu pour</span><select id="inLivrable"></select></label>
 ```
 
-- [ ] **Étape 3 : Renommer dans `tests/`**
+- [x] **Étape 3 : Renommer dans `tests/`**
 
 Les mêmes identifiants, dans `packages.test.js` (54 points), `coquille.test.js` (29),
 `composition.test.js` (8), `couverture.test.js` (3). **Aucune assertion ne change** : ce
 sont les mêmes tests sur les mêmes gestes.
 
-- [ ] **Étape 4 : Lancer la suite pour la voir passer, à l'identique**
+- [x] **Étape 4 : Lancer la suite pour la voir passer, à l'identique**
 
 Depuis la racine : `node --test tests/*.test.js`.
 
@@ -1365,7 +1376,7 @@ Attendu : **le même nombre de tests passés qu'à l'étape 1**, 0 échec. Un no
 signale un test perdu en route, pas un renommage réussi. Si la suite ne rend pas la main,
 c'est un renommage à moitié fait (piège transverse).
 
-- [ ] **Étape 5 : Recaler le README**
+- [x] **Étape 5 : Recaler le README**
 
 Dans `README.md`, réécrire la section « Le prestataire, choisi une seule fois »
 (l. 278-300) : le titre devient « Le livrable, choisi une seule fois », « destinataires »
@@ -1373,7 +1384,7 @@ devient « livrables », et le premier paragraphe dit l'identité à quatre axes
 prestataire. Le reste de la section — les relevés vides, la vignette de planche — est
 vrai tel quel et ne bouge pas.
 
-- [ ] **Étape 6 : Commit**
+- [x] **Étape 6 : Commit**
 
 ```bash
 git add src/ tests/ README.md
@@ -1388,7 +1399,7 @@ git commit -m "L'écran nomme des livrables, et le README avec lui"
 - Modifier : `docs/superpowers/specs/2026-08-26-catalogue-et-livrables-design.md` (§ 6, § 10)
 - Modifier : `docs/superpowers/plans/2026-08-26-catalogue-lot-3-la-cascade.md` (les cases)
 
-- [ ] **Étape 1 : Recaler le § 6**
+- [x] **Étape 1 : Recaler le § 6**
 
 Trois faits que l'exécution a précisés, à écrire dans la spec :
 
@@ -1406,9 +1417,9 @@ Trois faits que l'exécution a précisés, à écrire dans la spec :
    aujourd'hui. La phrase devient « ce que ce POD offre » ; le jour où un POD offrira un
    papier sous un seul de ses formats, ce sera un chantier de catalogue, pas d'écran.
 
-- [ ] **Étape 2 : Cocher le lot 3 au § 10**
+- [x] **Étape 2 : Cocher le lot 3 au § 10**
 
-- [ ] **Étape 3 : Commit**
+- [x] **Étape 3 : Commit**
 
 ```bash
 git add docs/
@@ -1418,6 +1429,18 @@ git commit -m "La spec dit ce que la cascade fait, et le lot 3 est coché"
 ---
 
 ## À l'œil, avant de clore le lot
+
+> ✅ **Les sept faites et validées par l'utilisateur le 26/08**, au moyen du POD d'essai
+> `essai-deux-reliures.toml` déposé dans
+> `~/Library/Application Support/cloud.gavini.ozalid/pods/` — deux formats, deux reliures
+> composables, une non outillée, deux finitions, et deux papiers dont un seul publie sa
+> formule de dos. Aucun POD fourni n'offrant deux reliures composables, ce fichier est le
+> seul moyen d'exercer la reliure réglable à l'écran. Il ferme du même coup la
+> **vérification 4 du lot 2**, en suspens depuis sa clôture : un `.toml` déposé sur le
+> poste paraît sans recompilation.
+>
+> Reste ouverte la **vérification 5 du lot 2** : réécrire une marge de ce fichier, rouvrir
+> un livre déjà composé chez « Essai », et voir le dos se déclarer périmé.
 
 Dans l'application, sur un vrai livre :
 
