@@ -591,15 +591,16 @@ impl Provider {
 ///
 /// La reliure composable du POD donne la pagination admise ; un POD qui n'en aurait
 /// aucune ne produit aucune entrée plate, faute de pouvoir dire ce qu'il accepte.
+/// Qu'elle porte cette pagination est en revanche acquis : la lecture le vérifie.
 pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
     let mut v = Vec::new();
     for pod in pods {
         let Some(r) = pod.reliures.iter().find(|r| r.geometrie.is_some()) else {
             continue;
         };
-        let Some(pagination) = r.pages else {
-            continue;
-        };
+        let pagination = r
+            .pages
+            .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
         for f in &pod.formats {
             v.push(Provider {
                 cle: f.cle_heritee.clone(),
@@ -1195,7 +1196,14 @@ non_outille = "géométrie du casewrap non relevée"
     fn la_vue_plate_rend_ce_que_la_table_historique_rendait() {
         let vue = plats().unwrap();
         let heritee = crate::providers::PROVIDERS_HERITEE;
-        assert_eq!(vue.len(), heritee.len());
+        let cles = |v: &[&str]| v.join(", ");
+        assert_eq!(
+            vue.len(),
+            heritee.len(),
+            "vue plate : {}\ntable : {}",
+            cles(&vue.iter().map(|p| p.cle.as_str()).collect::<Vec<_>>()),
+            cles(&heritee.iter().map(|p| p.cle).collect::<Vec<_>>())
+        );
         for (v, h) in vue.iter().zip(heritee) {
             assert_eq!(v.cle, h.cle, "clé");
             assert_eq!(v.libelle, h.libelle, "{} : libellé", h.cle);
@@ -1222,7 +1230,17 @@ non_outille = "géométrie du casewrap non relevée"
                 // fait, et le nom du champ suit celui du POD et du format.
                 assert_eq!(pv.nom, ph.libelle, "{} : nom du papier", h.cle);
                 assert_eq!(pv.teinte, ph.teinte, "{} : teinte", h.cle);
-                assert_eq!(pv.dos.mm(280), ph.dos.mm(280), "{} : dos à 280 p", h.cle);
+                // Aux deux bornes autant qu'au milieu : à un seul point de pagination,
+                // deux coefficients modifiés de concert pour y coïncider passent, et le
+                // dos est faux de huit millimètres partout ailleurs.
+                for pages in [h.pages_min, 280, h.pages_max] {
+                    assert_eq!(
+                        pv.dos.mm(pages),
+                        ph.dos.mm(pages),
+                        "{} : dos à {pages} p",
+                        h.cle
+                    );
+                }
             }
         }
     }
