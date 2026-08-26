@@ -90,8 +90,7 @@ impl From<&catalogue::Papier> for PapierVue {
             cle: pa.cle.clone(),
             libelle: pa.nom.clone(),
             teinte: pa.teinte.clone(),
-            // Une pagination quelconque suffit à savoir si une formule existe.
-            dos_publie: pa.dos.mm(100).is_some(),
+            dos_publie: pa.dos.publie(),
         }
     }
 }
@@ -107,8 +106,7 @@ impl From<&Provider> for ProviderVue {
             largeur: p.format.0,
             hauteur: p.format.1,
             fond_perdu: p.fond_perdu,
-            // Une pagination quelconque suffit à savoir si une formule existe.
-            dos_publie: p.papier_defaut().dos.mm(100).is_some(),
+            dos_publie: p.papier_defaut().dos.publie(),
             papiers: p.papiers.iter().map(PapierVue::from).collect(),
         }
     }
@@ -137,6 +135,15 @@ pub struct FormatVue {
     nom: String,
 }
 
+impl From<&catalogue::Format> for FormatVue {
+    fn from(f: &catalogue::Format) -> Self {
+        Self {
+            cle: f.cle.clone(),
+            nom: f.nom.clone(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct ReliureVue {
     cle: String,
@@ -148,10 +155,42 @@ pub struct ReliureVue {
     non_outille: Option<String>,
 }
 
+impl From<&catalogue::Reliure> for ReliureVue {
+    fn from(r: &catalogue::Reliure) -> Self {
+        Self {
+            cle: r.cle.clone(),
+            nom: r.nom.clone(),
+            non_outille: r.non_outille.clone(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct FinitionVue {
     cle: String,
     nom: String,
+}
+
+impl From<&catalogue::Finition> for FinitionVue {
+    fn from(f: &catalogue::Finition) -> Self {
+        Self {
+            cle: f.cle.clone(),
+            nom: f.nom.clone(),
+        }
+    }
+}
+
+impl From<&catalogue::Pod> for PodVue {
+    fn from(pod: &catalogue::Pod) -> Self {
+        Self {
+            cle: pod.cle.clone(),
+            nom: pod.nom.clone(),
+            formats: pod.formats.iter().map(FormatVue::from).collect(),
+            reliures: pod.reliures.iter().map(ReliureVue::from).collect(),
+            finitions: pod.finitions.iter().map(FinitionVue::from).collect(),
+            papiers: pod.papiers.iter().map(PapierVue::from).collect(),
+        }
+    }
 }
 
 /// Ce que l'interface affiche d'un projet ouvert.
@@ -226,49 +265,12 @@ pub fn providers_liste() -> Vec<ProviderVue> {
 
 /// L'arbre du catalogue : un POD, ses formats, ses reliures, ses finitions, ses papiers.
 ///
-/// Ne sont rendus que les POD chez qui l'on sait composer — au moins une reliure
-/// outillée. **Le filtre ne peut pas se déclencher** : `Pod::verifie` refuse un tel POD
-/// au chargement, en nommant son fichier, précisément pour qu'un imprimeur ne disparaisse
-/// pas sans un mot. Il est ici pour la même raison que le `continue` d'`aplatit`, dont il
-/// reprend la forme : les deux projections du catalogue disent la même chose de ce
-/// qu'elles savent composer, et une garantie qui vivrait dans un seul des deux se
-/// perdrait le jour où le refus du chargement s'assouplirait.
+/// Pas de filtre ici : `Pod::verifie` refuse au chargement un POD dont aucune reliure ne
+/// porte de géométrie, en nommant son fichier ; filtrer ici escamoterait l'imprimeur au
+/// lieu de le signaler.
 #[tauri::command]
 pub fn pods_liste() -> Vec<PodVue> {
-    catalogue::pods()
-        .iter()
-        .filter(|pod| pod.reliure_composable().is_some())
-        .map(|pod| PodVue {
-            cle: pod.cle.clone(),
-            nom: pod.nom.clone(),
-            formats: pod
-                .formats
-                .iter()
-                .map(|f| FormatVue {
-                    cle: f.cle.clone(),
-                    nom: f.nom.clone(),
-                })
-                .collect(),
-            reliures: pod
-                .reliures
-                .iter()
-                .map(|r| ReliureVue {
-                    cle: r.cle.clone(),
-                    nom: r.nom.clone(),
-                    non_outille: r.non_outille.clone(),
-                })
-                .collect(),
-            finitions: pod
-                .finitions
-                .iter()
-                .map(|f| FinitionVue {
-                    cle: f.cle.clone(),
-                    nom: f.nom.clone(),
-                })
-                .collect(),
-            papiers: pod.papiers.iter().map(PapierVue::from).collect(),
-        })
-        .collect()
+    catalogue::pods().iter().map(PodVue::from).collect()
 }
 
 /// Ce que le démarrage a refusé de charger. L'interface le dit à la Livraison : c'est là
@@ -2599,9 +2601,11 @@ nom = "Pelliculage mat"
         assert!(raison.contains("casewrap"), "{raison}");
     }
 
-    /// Le relevé de dos suit le **papier**, jamais le premier de la liste : un POD peut
-    /// publier une formule pour l'un et n'en publier aucune pour l'autre, et c'est la ligne
-    /// du livrable qui réclame alors la mesure.
+    /// Le drapeau voyage jusqu'à l'arbre et y suit le fichier, POD par POD : KDP publie
+    /// une formule pour ses deux papiers, CoolLibri pour aucun des siens. Aucun POD fourni
+    /// ne mélange les deux formes dans le même fichier — c'est
+    /// `la_conversion_d_un_papier_suit_sa_propre_formule_de_dos` qui couvre la règle
+    /// « par papier, pas par POD » sur une fixture construite pour l'exercer.
     #[test]
     fn dos_publie_est_porte_par_chaque_papier() {
         let pods = pods_liste();
@@ -2623,6 +2627,53 @@ nom = "Pelliculage mat"
             coollibri.papiers.iter().all(|pa| !pa.dos_publie),
             "CoolLibri ne publie aucune formule : le dos se relève sur son gabarit"
         );
+    }
+
+    /// Le relevé de dos suit le **papier**, jamais le premier de la liste. Aucun POD fourni
+    /// ne le vérifie : KDP publie une formule pour ses deux papiers, CoolLibri pour aucun —
+    /// la mutation qui calculerait `dos_publie` sur le papier d'office du POD plutôt que
+    /// sur `pa` resterait donc invisible à `dos_publie_est_porte_par_chaque_papier`. Cette
+    /// fixture mélange exprès les deux formes dans le même POD pour que la règle rougisse.
+    #[test]
+    fn la_conversion_d_un_papier_suit_sa_propre_formule_de_dos() {
+        let pod = catalogue::Pod::depuis_toml(
+            r##"
+cle = "essai"
+nom = "Imprimeur d'essai"
+
+[[format]]
+cle = "135x215"
+nom = "13,5 × 21,5 cm"
+mm = { largeur = 135.0, hauteur = 215.0 }
+marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
+gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 24, max = 900 }
+parite = "paire"
+
+[[papier]]
+cle = "mesure"
+nom = "Dos relevé sur le gabarit"
+teinte = "#ffffff"
+dos = { forme = "mesure" }
+
+[[papier]]
+cle = "creme-90"
+nom = "Crème 90 g"
+teinte = "#f7f0e0"
+dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
+"##,
+        )
+        .unwrap();
+
+        let mesure = PapierVue::from(&pod.papiers[0]);
+        let creme = PapierVue::from(&pod.papiers[1]);
+        assert!(!mesure.dos_publie, "« mesure » ne publie aucune formule");
+        assert!(creme.dos_publie, "« multiplie » en publie une");
     }
 
     /// Choisir l'image d'une face remplace celle qui s'y composait, quel que soit le

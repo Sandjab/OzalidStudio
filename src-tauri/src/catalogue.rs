@@ -59,6 +59,15 @@ impl Dos {
             Dos::Mesure => None,
         }
     }
+
+    /// Vrai quand ce papier publie de quoi calculer son dos.
+    ///
+    /// La question porte sur la **forme**, pas sur une pagination : `mm` interrogé sur un
+    /// nombre de pages arbitraire y répondait, au prix d'un chiffre sans signification à
+    /// deux endroits.
+    pub fn publie(&self) -> bool {
+        !matches!(self, Dos::Mesure)
+    }
 }
 
 /// La seule géométrie de planche que l'application sache composer.
@@ -1037,6 +1046,23 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         let modifie = bloc.replace(avant, apres);
         assert_ne!(modifie, bloc, "« {avant} » ne figure plus dans le gabarit");
         modifie
+    }
+
+    /// `publie` interroge la **forme**, pas une pagination arbitraire : les trois formes
+    /// du dos doivent y répondre chacune ce que leur constructeur promet.
+    #[test]
+    fn publie_distingue_les_trois_formes_de_dos() {
+        assert!(Dos::Divise {
+            par: 280.0,
+            plus: 0.6
+        }
+        .publie());
+        assert!(Dos::Multiplie {
+            par: 0.0675,
+            plus: 0.6
+        }
+        .publie());
+        assert!(!Dos::Mesure.publie());
     }
 
     /// Le TOML d'un POD se lit tel qu'il est écrit. Ce test tient la forme du format :
