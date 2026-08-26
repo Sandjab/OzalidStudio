@@ -58,10 +58,16 @@ cités (1 à 6) y sont, chacun avec ses `fichier:ligne`.
   en rendant la raison du fichier (`catalogue.rs:786-791`), ancrée par le test
   `catalogue.rs:2106`. Le grisé de l'écran n'est que la **lecture** de ce refus ; il ne le
   remplace pas.
-- **La liste des POD à l'ajout ne montre que les POD offrant au moins une reliure
-  composable** — la règle d'`aplatit` (`catalogue.rs:617-652`), inchangée. Aucun POD livré
-  n'est dans l'autre cas ; griser un POD entier serait une fonction que personne n'a
-  demandée.
+- **Un POD sans reliure composable n'existe pas dans le catalogue chargé** :
+  `Pod::verifie` le refuse en nommant son fichier (`catalogue.rs:367-373`, testé
+  l. 1683), précisément pour qu'un imprimeur ne disparaisse pas sans un mot. Le filtre
+  qu'`aplatit` porte (`catalogue.rs:617-652`) — et celui que la tâche 1 reprend — ne peut
+  donc pas se déclencher : il tient les deux projections d'accord, il ne rattrape rien.
+  Griser un POD entier n'a par conséquent aucun objet, et serait une fonction que
+  personne n'a demandée.
+
+  *(Corrigé après la tâche 1 : la reconnaissance avait manqué ce refus et le plan
+  l'attribuait à `aplatit`.)*
 
 ## Avant chaque commit
 
@@ -203,8 +209,11 @@ fn dos_publie_est_porte_par_chaque_papier() {
 Depuis `src-tauri/` :
 
 ```
-cargo test la_vue_d_arbre_porte_les_reliures_avec_leur_raison dos_publie_est_porte_par_chaque_papier
+cargo test la_vue_d_arbre_porte_les_reliures_avec_leur_raison
+cargo test dos_publie_est_porte_par_chaque_papier
 ```
+
+`cargo` n'accepte **qu'un** filtre de nom : `cargo test A B` est refusé.
 
 Attendu : **échec de compilation** — `cannot find function 'pods_liste' in this scope`, et
 `no field 'dos_publie' on type 'PapierVue'`.
@@ -357,10 +366,11 @@ Dans `src-tauri/src/lib.rs`, à la ligne qui suit `commands::providers_liste,` (
 Depuis `src-tauri/` :
 
 ```
-cargo test la_vue_d_arbre_porte_les_reliures_avec_leur_raison dos_publie_est_porte_par_chaque_papier
+cargo test la_vue_d_arbre_porte_les_reliures_avec_leur_raison
+cargo test dos_publie_est_porte_par_chaque_papier
 ```
 
-Attendu : **2 passed**. Puis la suite entière, `cargo test` : aucun test existant ne lit
+Attendu : **1 passed** chacun. Puis la suite entière, `cargo test` : aucun test existant ne lit
 `PapierVue`, l'ajout d'un champ ne casse rien.
 
 - [ ] **Étape 6 : Commit**
