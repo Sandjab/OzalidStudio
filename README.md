@@ -278,15 +278,19 @@ second : les deux ne sont pas le même fait.
 ## Le livrable, choisi une seule fois
 
 Un livre a des **livrables** : l'identité à quatre axes — POD, format, reliure,
-papier — de ce qu'on en fabrique. Elle se déclare à l'étape Livraison — le papier, et
-pour ceux qui ne publient ni dos ni fond perdu, ce qu'on a relevé sur leur gabarit —
-et **nulle part ailleurs**. Le pied de fenêtre porte le **pointeur** sur le livrable
+papier — de ce qu'on en fabrique. Elle se déclare à l'étape Livraison, et **nulle part
+ailleurs**. On l'ajoute par deux listes en cascade — l'imprimeur, puis **ses** formats —,
+puis la ligne posée porte ses trois réglages : reliure, finition, papier, chacun limité à
+ce que cet imprimeur offre. Une reliure qu'on ne sait pas composer y paraît **grisée, avec
+sa raison en clair sous elle** : « ce POD ne le fait pas » et « l'application ne le compose
+pas » ne sont pas la même chose, et cela doit se lire à l'écran. S'y ajoute, chez les
+imprimeurs qui ne publient ni dos ni fond perdu, ce qu'on a relevé sur leur gabarit. Le pied de fenêtre porte le **pointeur** sur le livrable
 visé : celui pour qui l'étape 2 compose et à quel format l'étape 3 rend ses aperçus.
 L'étape 4, elle, génère pour toute la liste.
 
-Un prestataire courant est nécessaire même pour regarder une première de couverture,
-qui ne réclame aucune composition mais réclame un format : un projet neuf naît donc
-avec un livrable, le premier de la table, et le dernier ne se retire pas.
+Un livrable visé est nécessaire même pour regarder une première de couverture, qui ne
+réclame aucune composition mais réclame un format : un projet neuf naît donc avec un
+livrable, le premier de la table, et le dernier ne se retire pas.
 
 Les relevés naissent **vides**, jamais préremplis. Un chiffre par défaut se lirait
 comme une mesure ; à sa place, la génération refuse en disant quoi faire — « CoolLibri

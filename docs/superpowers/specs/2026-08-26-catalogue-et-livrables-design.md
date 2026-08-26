@@ -226,6 +226,13 @@ qui posent ou règlent un livrable. Le grisé n'est que la lecture de ce refus a
 déclare aujourd'hui : un contrôle vide se lirait comme un choix qu'on n'a pas su faire,
 alors qu'il n'y en avait aucun à faire. C'est le lot 4 qui les relèvera.
 
+**Le libellé d'un livrable nomme sa reliure là où elle distingue** — chez un POD qui en
+offre plusieurs de composables, et là seulement. Le pointeur du pied et les comptes rendus
+de package ne portent aucun contrôle : ce qui sépare deux livrables doit s'y lire, ou ne
+s'y lit pas. Ailleurs la reliure ne distingue rien et coûte quatre tirets cadratins à lire.
+*Ajouté au lot 3 : la spec ne parlait que de la ligne, où les axes se lisent dans leurs
+propres sélecteurs.*
+
 **Le relevé de dos suit le papier retenu**, jamais le papier d'office du POD. Un POD peut
 publier une formule pour l'un de ses papiers et n'en publier aucune pour l'autre ; c'est le
 papier de la ligne qui décide si le dos se calcule ou se relève. *Le lot 2 tranchait sur le

@@ -1471,8 +1471,10 @@ ici : elles portent sur les fichiers déposés dans `<config>/pods/`, pas sur l'
 
 - **Il ne relève aucune donnée chez un POD.** Ni finitions, ni formats, ni papiers : c'est
   le lot 4, et chaque valeur y viendra avec sa `source`.
-- **Il ne grise pas un POD entier.** Un POD sans reliure composable ne paraît pas dans la
-  liste d'ajout, comme aujourd'hui. Aucun POD fourni n'est dans ce cas.
+- **Il ne grise pas un POD entier**, et n'a pas à le faire : `Pod::verifie` refuse au
+  chargement un POD dont aucune reliure n'est composable, en nommant son fichier. Un tel
+  POD n'atteint donc jamais l'écran. *(Le plan l'attribuait d'abord à un filtre d'`aplatit`,
+  corrigé après la tâche 1.)*
 - **Il ne touche pas à la politique d'invalidation des mesures.** `normalise` continue de
   ne tourner qu'à l'ouverture ; une mesure orpheline y est élaguée, et personne ne la lit
   d'ici là (tâche 2, étape 5).
