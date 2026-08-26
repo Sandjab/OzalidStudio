@@ -71,6 +71,7 @@ function faux(providers, sur = {}) {
   const servi = sur.projet_ouvrir ?? sur.projet_importer ?? PROJET;
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'catalogue_refus') return [];
     // Recharger un manuscrit périme tout ce qui a été mesuré : c'est la règle du Rust,
     // et sans elle le front n'aurait rien à recomposer.
     if (cmd === 'manuscrit_reimporter' && !(cmd in sur)) {

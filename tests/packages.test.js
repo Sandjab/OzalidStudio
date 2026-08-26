@@ -148,6 +148,7 @@ async function ouvre(
       return cmd === 'composer' ? { ...r, projet: retenir(r) } : r;
     }
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

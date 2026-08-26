@@ -163,6 +163,13 @@ pub fn providers_liste() -> Vec<ProviderVue> {
         .collect()
 }
 
+/// Ce que le démarrage a refusé de charger. L'interface le dit à la Livraison : c'est là
+/// qu'on regarde la liste des POD, donc là qu'un POD manquant se remarque.
+#[tauri::command]
+pub fn catalogue_refus(refus: State<CatalogueRefus>) -> Vec<catalogue::Refus> {
+    refus.0.clone()
+}
+
 /// Importe un répertoire de travail de l'ancienne chaîne (son `livre.toml`).
 /// Le projet devient le projet ouvert, sans être enregistré : l'utilisateur choisit
 /// où poser le `.ozalid`.

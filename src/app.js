@@ -452,6 +452,7 @@ function lienFichier(chemin, libelle) {
 
 async function chargerProviders() {
   providers = await invoke('providers_liste');
+  await afficherRefusCatalogue();
   polices = await invoke('polices_liste');
   for (const p of await invoke('polices_texte_liste')) {
     $('inPoliceInterieur').append(new Option(p, p));

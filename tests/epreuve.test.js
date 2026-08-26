@@ -40,6 +40,7 @@ const PROJET = {
 function faux(providers, sur = {}) {
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Bodoni Moda', 'Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

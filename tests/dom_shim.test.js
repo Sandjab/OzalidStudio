@@ -37,6 +37,7 @@ const invokeMuet = async (cmd) => {
       largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
       papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
     }];
+    case 'catalogue_refus': return [];
     case 'polices_liste': return ['Bodoni Moda'];
     case 'polices_texte_liste': return ['EB Garamond'];
     case 'jetons_liste': return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

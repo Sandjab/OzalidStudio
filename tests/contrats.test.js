@@ -44,6 +44,7 @@ const PROJET = {
 /** Le strict nécessaire pour que l'application charge et route un menu. */
 const invoke = async (cmd) => {
   if (cmd === 'providers_liste') return [LULU];
+  if (cmd === 'catalogue_refus') return [];
   if (cmd === 'polices_liste') return ['Archivo'];
   if (cmd === 'polices_texte_liste') return ['Alegreya'];
   if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -442,4 +443,56 @@ test('l\'aide des jetons vient du Rust, pas du HTML', async () => {
   for (const jeton of attendus) {
     assert.ok(aide.includes(jeton), `${jeton} absent de l'aide`);
   }
+});
+
+/**
+ * Un fichier de catalogue que le démarrage a refusé doit se nommer à l'écran. Un POD
+ * absent de la liste sans explication se lirait comme un POD qui n'existe pas — et
+ * l'utilisateur chercherait la faute dans son fichier plutôt que dans sa syntaxe.
+ */
+test('un fichier de catalogue refusé se nomme à la Livraison', async () => {
+  const refuse = async (cmd, args) =>
+    cmd === 'catalogue_refus'
+      ? [{ fichier: '/config/pods/bod.toml', raison: 'expected value at line 2' }]
+      : invoke(cmd, args);
+  const { els } = await charge({ invoke: refuse, open: async () => null });
+  const p = els.get('refusCatalogue');
+  assert.equal(p.hidden, false);
+  assert.match(p.textContent, /bod\.toml/);
+  assert.match(p.textContent, /line 2/);
+  // Le fichier corrigé ne sera relu qu'au prochain démarrage : le dire est la moitié
+  // utile du message, sans quoi l'utilisateur corrige et regarde un écran inchangé.
+  assert.match(p.textContent, /relancer/);
+});
+
+/** Le cas courant : aucun fichier déposé, aucune ligne à l'écran. */
+test('sans fichier de catalogue refusé, la ligne reste muette', async () => {
+  const { els } = await charge({ invoke, open: async () => null });
+  assert.equal(els.get('refusCatalogue').hidden, true);
+});
+
+/**
+ * Deux fichiers, deux lignes — et le chemin entier au survol de chacune.
+ *
+ * `Refus.fichier` est un chemin absolu : écrit d'un seul tenant, il pousse la bande de
+ * contenu, et tronqué sans recours il ne mène plus au fichier. C'est le traitement que
+ * l'entête applique déjà au chemin du `.ozalid`.
+ */
+test('chaque fichier refusé garde son chemin entier au survol', async () => {
+  const chemins = [
+    '/Users/kim/Library/Application Support/org.ozalid.studio/pods/bod.toml',
+    '/Users/kim/Library/Application Support/org.ozalid.studio/pods/pumbo.toml',
+  ];
+  const refuse = async (cmd, args) =>
+    cmd === 'catalogue_refus'
+      ? chemins.map((fichier) => ({ fichier, raison: 'champ inconnu « papiers »' }))
+      : invoke(cmd, args);
+  const { els } = await charge({ invoke: refuse, open: async () => null });
+  const survols = [];
+  const visite = (e) => {
+    if (e.title) survols.push(e.title);
+    for (const enfant of e.children) visite(enfant);
+  };
+  for (const ligne of els.get('refusCatalogue').children) visite(ligne);
+  assert.deepStrictEqual(survols, chemins);
 });

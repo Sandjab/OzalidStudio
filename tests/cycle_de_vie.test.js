@@ -48,6 +48,7 @@ function atelier({ garde = 'ignorer', recents = [], sur = {} } = {}) {
     appels.push([cmd, args]);
     switch (cmd) {
       case 'providers_liste': return [LULU];
+      case 'catalogue_refus': return [];
       case 'polices_liste': return ['Bodoni Moda'];
       case 'polices_texte_liste': return ['EB Garamond'];
       case 'jetons_liste': return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

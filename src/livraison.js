@@ -10,6 +10,47 @@
  */
 
 /**
+ * Les fichiers de catalogue du poste que le démarrage n'a pas pu lire.
+ *
+ * Muet sur un poste qui n'en dépose aucun — le cas de presque tous. Quand il parle, il
+ * nomme le fichier et la raison : un POD absent de la liste sans explication se lirait
+ * comme un POD qui n'existe pas, et la faute se chercherait dans le fichier plutôt que
+ * dans sa syntaxe.
+ */
+async function afficherRefusCatalogue() {
+  const refus = await invoke('catalogue_refus');
+  const box = $('refusCatalogue');
+  box.hidden = refus.length === 0;
+  box.replaceChildren();
+  for (const r of refus) {
+    // Le nom d'abord, son répertoire ensuite et tronqué, le chemin entier au survol :
+    // le montage des projets récents, et pour la même raison — ces fichiers sortent
+    // tous du même `pods/`, et coupés par la fin ils se liraient tous pareil. Les deux
+    // séparateurs, comme là-bas : l'application est aussi empaquetée pour Windows.
+    const coupe = Math.max(r.fichier.lastIndexOf('/'), r.fichier.lastIndexOf('\\'));
+    const fichier = h('span', undefined, 'fichier');
+    fichier.title = r.fichier;
+    fichier.append(
+      h('span', `Catalogue non chargé : ${r.fichier.slice(coupe + 1)}`),
+      h('span', r.fichier.slice(0, Math.max(coupe, 0)), 'chemin')
+    );
+    // La raison sur sa propre ligne : c'est la seule partie du message qui dit quoi
+    // corriger, et elle doit se lire jusqu'au bout même quand elle fait trois phrases.
+    const ligne = h('p', undefined, 'note alerte');
+    ligne.append(fichier, h('span', r.raison));
+    box.append(ligne);
+  }
+  if (refus.length) {
+    // Les deux choses que l'utilisateur ne peut pas déduire de l'écran : que la liste
+    // ci-dessous est complète de ce qui a pu être chargé, et qu'un fichier corrigé ne
+    // sera relu qu'au prochain démarrage.
+    box.append(h('p', 'Les POD fournis, eux, sont là. Corriger '
+      + `${refus.length > 1 ? 'ces fichiers' : 'ce fichier'}, puis relancer : ceux du `
+      + 'poste ne sont lus qu\'au démarrage.', 'note'));
+  }
+}
+
+/**
  * La liste des destinataires du livre, et de quoi en ajouter un.
  *
  * Une ligne par destinataire : son papier, le format de son gabarit, et les relevés que

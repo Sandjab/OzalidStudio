@@ -123,6 +123,7 @@ async function ouvre(couverture, sur = {}, dialogues = []) {
     // pourrait jamais remplacer le comportement d'une commande courante.
     if (cmd in sur) return sur[cmd](args);
     if (cmd === 'providers_liste') return [LULU];
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Archivo', 'Spectral', 'Bodoni Moda'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

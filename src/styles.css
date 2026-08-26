@@ -430,6 +430,26 @@ button:active:not(:disabled) { background: var(--encre); border-color: var(--enc
 .note { margin: .6rem 0 0; color: var(--gris); font-size: .85rem; }
 .note.alerte { color: var(--rouge); }
 
+/* Les fichiers de catalogue refusés au démarrage, en tête de la Livraison. Le chemin y
+   est absolu : laissé en `break-all` comme les autres chemins de l'écran, un seul
+   couvrait trois lignes avant sa raison — qui est la partie à lire. Il se tronque donc
+   comme celui du `.ozalid` dans l'entête. Le nom du fichier, lui, ne cède jamais : ces
+   refus sortent tous du même `pods/`, et c'est leur nom seul qui les distingue. */
+.refus p { display: flex; flex-direction: column; }
+
+.refus .fichier { display: flex; gap: .3rem; }
+
+.refus .fichier > :first-child { flex: none; }
+
+.refus .fichier .chemin {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+
 /* L'échantillon d'écriture, sous le choix de police. La famille vient d'une variable
    posée par `montrerEchantillon` : c'est le nom de la face que la fenêtre a chargée,
    et non celui de la famille — une police du poste qui porterait le même nom passerait
