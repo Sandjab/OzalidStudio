@@ -605,10 +605,18 @@ Correspondance des quatorze entrées historiques :
 | `thebookedition.toml` | `tbe` | `110x170` → `tbe-110x170`, `120x180` → `tbe-120x180`, `1485x210` → `tbe-1485x210` |
 | `bookvault.toml` | `bookvault` | `127x203` → `bookvault-127x203`, `129x198` → `bookvault-129x198`, `148x210` → `bookvault-148x210` |
 
-Le `nom` du POD est son nom d'imprimeur seul (« BoD (Books on Demand) », « Amazon KDP »), le
-`nom` du format son format seul (« 13,5 × 21,5 cm », « 5,5 × 8,5 po ») : le `libelle` plat
-d'aujourd'hui — « Amazon KDP — 5,5 × 8,5 po » — se reconstitue à la tâche 3 en les joignant
-par « — ». C'est ce qui garde l'interface identique.
+Le `nom` du POD est son nom d'imprimeur seul, le `nom` du format son format seul
+(« 13,5 × 21,5 cm », « 5,5 × 8,5 po ») : le `libelle` plat d'aujourd'hui — « Amazon KDP —
+5,5 × 8,5 po » — se reconstitue à la tâche 3 en les joignant par « — ». C'est ce qui garde
+l'interface identique.
+
+**Contrainte qui en découle, et qui prime sur l'envie de bien nommer : le `nom` du POD doit
+être exactement le préfixe du libellé historique.** Donc `nom = "BoD"`, et non
+« BoD (Books on Demand) » : ce dernier donnerait « BoD (Books on Demand) — 13,5 × 21,5 cm »
+à l'écran, ferait échouer la tâche 3, et changerait l'interface — contre le but déclaré du
+lot. Le nom complet vit en commentaire de tête du fichier. Les cinq autres n'ont pas ce
+problème : « Lulu », « Amazon KDP », « CoolLibri », « TheBookEdition » et « Bookvault » sont
+déjà les préfixes historiques.
 
 Reliures et finitions, pour les six : chacun porte au minimum
 
@@ -635,7 +643,8 @@ les apporte pour BoD.
 # référencer le titre. C'est ce qui en fait le défaut du comparatif POD du 19/08/2026.
 
 cle = "bod"
-nom = "BoD (Books on Demand)"
+# « BoD » seul : c'est le préfixe du libellé historique, et la tâche 3 le vérifie.
+nom = "BoD"
 # Guide de maquette BoD. Commun à ses formats.
 fond_perdu = 5.0
 
