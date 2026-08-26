@@ -1595,6 +1595,42 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         assert!(provider("imprimeur-imaginaire").is_none());
     }
 
+    /// La liste que la Livraison donne à lire, telle qu'elle s'y lit : quatorze entrées,
+    /// leurs libellés, leur ordre.
+    ///
+    /// Le compte, seul, était déjà tenu ; les clés le sont par les ancrages de dos qui les
+    /// nomment. Ni l'un ni les autres ne voient un `nom` de POD réécrit ni deux fichiers
+    /// fournis permutés — les deux passaient toute la suite. Or c'est un choix de
+    /// prestataire que l'utilisateur fait dans cette liste, à la lecture de ces libellés :
+    /// l'ordre vient des `FOURNIS`, le libellé du POD et du format, et rien d'autre ici ne
+    /// le dit.
+    #[test]
+    fn la_liste_des_prestataires_garde_ses_quatorze_libelles_dans_l_ordre() {
+        let vue: Vec<(&str, &str)> = providers()
+            .iter()
+            .map(|p| (p.cle.as_str(), p.libelle.as_str()))
+            .collect();
+        assert_eq!(
+            vue,
+            [
+                ("lulu", "Lulu — poche 108 × 175"),
+                ("bod", "BoD — 13,5 × 21,5 cm"),
+                ("kdp-5x8", "Amazon KDP — 5 × 8 po"),
+                ("kdp-55x85", "Amazon KDP — 5,5 × 8,5 po"),
+                ("kdp-6x9", "Amazon KDP — 6 × 9 po"),
+                ("coollibri-110x170", "CoolLibri — 11 × 17 cm"),
+                ("coollibri-148x210", "CoolLibri — A5"),
+                ("coollibri-160x240", "CoolLibri — 16 × 24 cm"),
+                ("tbe-110x170", "TheBookEdition — Poche 11 × 17"),
+                ("tbe-120x180", "TheBookEdition — Manga 12 × 18"),
+                ("tbe-1485x210", "TheBookEdition — A5 14,8 × 21"),
+                ("bookvault-127x203", "Bookvault — Novel 127 × 203"),
+                ("bookvault-129x198", "Bookvault — B Format 129 × 198"),
+                ("bookvault-148x210", "Bookvault — A5 148 × 210"),
+            ]
+        );
+    }
+
     // Les douze tests qui suivent viennent de la table écrite en dur, dont ils ont suivi
     // la suppression : ils n'ont jamais comparé la vue plate à la table, ils ancrent ses
     // valeurs sur des relevés extérieurs — guides, calculateurs, un livre réel tenu en
