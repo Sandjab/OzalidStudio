@@ -238,6 +238,12 @@ async function ouvre(
     if (cmd === 'livrable_ajouter') {
       const f = args.fabrication;
       const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
+      // Le faux ne sait rendre que ce que sa table plate porte, et l'arbre `PODS` est
+      // plus riche : un couple que la cascade offre sans ligne plate lèverait ici une
+      // `TypeError` que `tente()` avale, et le test échouerait plus loin sur « l'ajout
+      // n'a rien donné à l'écran » — le message même d'un vrai refus du Rust. Deux
+      // causes, un seul symptôme : celle-ci se nomme.
+      if (!p) throw new Error(`fixture : aucune ligne plate pour ${f.pod}-${f.format}-${f.reliure}`);
       // La règle du Rust : le refus porte sur les quatre axes, et sur eux seuls.
       const neuve = `${p.cle}-${f.papier}`;
       if (projet.livraison.livrables.some((d) => d.cle === neuve)) {
@@ -334,7 +340,7 @@ test('la liste d\'ajout garde les gabarits déjà déclarés', async () => {
   await els.get('btAjouterDestinataire').declenche('click');
   assert.ok(els.get('dest-papier-coollibri-148x210-broche-mesure'), 'ajout sans effet à l\'écran');
   // La fabrication entière part au Rust, pas une clé à découper : les trois axes du
-  // gabarit viennent de la table, le papier est celui d'office du POD.
+  // gabarit viennent de l'arbre du catalogue, le papier est celui d'office du POD.
   assert.deepStrictEqual({ ...dernier(appels, 'livrable_ajouter')[1].fabrication }, {
     pod: 'coollibri', format: '148x210', reliure: 'broche', papier: 'mesure',
   });
