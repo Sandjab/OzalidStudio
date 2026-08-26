@@ -259,8 +259,12 @@ impl Pod {
     /// La reliure sur laquelle ce POD compose : la première qu'on ait outillée.
     ///
     /// `None` chez un POD dont aucune reliure n'a de géométrie relevée : on ne sait rien
-    /// composer chez lui, et c'est aux appelants d'en décider — `aplatit` l'ignore,
-    /// `fabrication_defaut` ne propose rien.
+    /// composer chez lui, et `fabrication_defaut` ne propose alors rien. Le cas ne se
+    /// rencontre pas — `Pod::verifie` refuse un tel POD au chargement, en nommant son
+    /// fichier, pour qu'un imprimeur ne disparaisse pas sans un mot.
+    ///
+    /// **La première**, et c'est ce qui la distingue d'`aplatit`, qui les prend toutes :
+    /// celle-ci nomme un défaut, celle-là énumère une offre.
     pub fn reliure_composable(&self) -> Option<&Reliure> {
         self.reliures.iter().find(|r| r.geometrie.is_some())
     }
@@ -628,9 +632,11 @@ impl Provider {
 /// la seule reliure d'office ne contiendrait pas le gabarit d'un livrable ainsi réglé, et
 /// l'écran dégraderait sans le dire.
 ///
-/// Les reliures au dehors, les formats au dedans : la tête de la table reste ainsi
-/// (première reliure composable, premier format), qui est la fabrication qu'un livre neuf
-/// se donne — l'invariant que `Pod::fabrication_defaut` documente.
+/// La tête de la table est (première reliure composable, premier format, premier papier),
+/// la fabrication qu'un livre neuf se donne — l'invariant que `Pod::fabrication_defaut`
+/// documente. Il tient des trois `first`, non de l'ordre des boucles ; les reliures sont
+/// au dehors pour que les entrées d'une même reliure se suivent, ce qui n'est qu'un
+/// confort de lecture.
 ///
 /// Une reliure non outillée ne produit rien : on ne peut pas annoncer un gabarit qu'on ne
 /// sait pas composer. Un POD qui n'en aurait aucune de composable ne produit donc aucune
