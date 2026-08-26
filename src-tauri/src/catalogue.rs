@@ -869,6 +869,10 @@ non_outille = "géométrie du casewrap non relevée"
     /// Deux tranches qui se chevauchent, et l'appelant prend la première qui correspond :
     /// la seconde gouttière, relevée au guide, meurt sans un mot. C'est l'argument de
     /// `sans_doublon`, appliqué aux tranches.
+    ///
+    /// Le second cas tient le **côté accepté**, qui compte autant : deux tranches qui
+    /// s'enchaînent sans se recouvrir sont la forme réelle de KDP. Un glissement de la
+    /// borne refuserait un catalogue correct, et rien ne le dirait.
     #[test]
     fn deux_tranches_de_gouttiere_qui_se_chevauchent_sont_refusees() {
         let f = sauf(
@@ -878,6 +882,15 @@ non_outille = "géométrie du casewrap non relevée"
         );
         let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
         assert!(e.contains("135x215") && e.contains("se chevauchent"), "{e}");
+
+        // La paire réelle de KDP : 24–700 puis 701–828, bornes jointives.
+        let f = sauf(
+            FORMAT,
+            "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]",
+            "gouttieres = [{ de = 24, a = 700, mm = 20.0 }, { de = 701, a = 828, mm = 22.0 }]",
+        );
+        let lu = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap();
+        assert_eq!(lu.formats[0].gouttieres.len(), 2);
     }
 
     /// Un format sans aucune tranche ne compose aucune pagination : c'est la même
@@ -901,11 +914,11 @@ non_outille = "géométrie du casewrap non relevée"
     /// dans un TOML, et `package` en ferait un chemin.
     #[test]
     fn une_cle_vide_ou_qui_n_est_pas_un_nom_est_refusee() {
-        for (bloc, avant) in [
-            (FORMAT, "cle = \"135x215\""),
-            (RELIURE, "cle = \"broche\""),
-            (FINITION, "cle = \"mat\""),
-            (PAPIER, "cle = \"creme-90\""),
+        for (bloc, avant, quoi) in [
+            (FORMAT, "cle = \"135x215\"", "un format"),
+            (RELIURE, "cle = \"broche\"", "une reliure"),
+            (FINITION, "cle = \"mat\"", "une finition"),
+            (PAPIER, "cle = \"creme-90\"", "un papier"),
         ] {
             let ampute = sauf(bloc, avant, "cle = \"\"");
             let blocs: Vec<&str> = [FORMAT, RELIURE, FINITION, PAPIER]
@@ -913,10 +926,11 @@ non_outille = "géométrie du casewrap non relevée"
                 .map(|b| if *b == bloc { ampute.as_str() } else { *b })
                 .collect();
             let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
-            assert!(e.contains("sans clé"), "{avant} : {e}");
+            let attendu = format!("{quoi} sans clé");
+            assert!(e.contains(&attendu), "attendu « {attendu} », reçu : {e}");
         }
 
-        for cle_heritee in ["", "../../ailleurs", "Essai 135x215"] {
+        for cle_heritee in ["", "../../ailleurs", "ailleurs/essai", "Essai 135x215"] {
             let f = sauf(
                 FORMAT,
                 "cle_heritee = \"essai-135x215\"",
