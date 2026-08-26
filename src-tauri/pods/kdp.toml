@@ -17,7 +17,6 @@ fond_perdu = 3.175
 [[format]]
 cle = "5x8"
 nom = "5 × 8 po"
-cle_heritee = "kdp-5x8"
 mm = { largeur = 127.0, hauteur = 203.2 }
 marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
 gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
@@ -26,7 +25,6 @@ source = "modèles Word officiels et tableau des minimums"
 [[format]]
 cle = "55x85"
 nom = "5,5 × 8,5 po"
-cle_heritee = "kdp-55x85"
 mm = { largeur = 139.7, hauteur = 215.9 }
 marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
 gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
@@ -35,7 +33,6 @@ source = "modèles Word officiels et tableau des minimums"
 [[format]]
 cle = "6x9"
 nom = "6 × 9 po"
-cle_heritee = "kdp-6x9"
 mm = { largeur = 152.4, hauteur = 228.6 }
 marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
 gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]

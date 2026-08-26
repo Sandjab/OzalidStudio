@@ -22,7 +22,6 @@ fond_perdu = 5.0
 [[format]]
 cle = "110x170"
 nom = "Poche 11 × 17"
-cle_heritee = "tbe-110x170"
 mm = { largeur = 110.0, hauteur = 170.0 }
 marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
 gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
@@ -31,7 +30,6 @@ source = "leur table des formats ; marges de la page « Réussir la mise en page
 [[format]]
 cle = "120x180"
 nom = "Manga 12 × 18"
-cle_heritee = "tbe-120x180"
 mm = { largeur = 120.0, hauteur = 180.0 }
 marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
 gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
@@ -42,7 +40,6 @@ source = "leur table des formats ; marges de la page « Réussir la mise en page
 # dimensionne le gabarit de couverture.
 cle = "1485x210"
 nom = "A5 14,8 × 21"
-cle_heritee = "tbe-1485x210"
 mm = { largeur = 148.5, hauteur = 210.0 }
 marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
 gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]

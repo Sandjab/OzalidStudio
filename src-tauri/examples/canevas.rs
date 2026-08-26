@@ -5,7 +5,7 @@
 //! même chemin sur les fonctions de composition, ce qui suffit à vérifier que Typst
 //! accepte les sources et que les rendus sortent aux bonnes dimensions.
 //!
-//! Usage : cargo run --example canevas -- <projet.ozalid> <prestataire>
+//! Usage : cargo run --example canevas -- <projet.ozalid> <clé de gabarit>
 
 use std::path::Path;
 
@@ -21,14 +21,25 @@ fn main() -> Result<(), String> {
     let (ozalid, cle) = match (args.next(), args.next()) {
         (Some(a), Some(b)) => (a, b),
         _ => {
-            eprintln!("usage : canevas <projet.ozalid> <prestataire>");
+            eprintln!("usage : canevas <projet.ozalid> <clé de gabarit>");
             std::process::exit(2);
         }
     };
     let pr = catalogue::providers()
         .iter()
         .find(|p| p.cle == cle)
-        .ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+        .unwrap_or_else(|| {
+            eprintln!("clé de gabarit inconnue : {cle}");
+            eprintln!(
+                "gabarits : {}",
+                catalogue::providers()
+                    .iter()
+                    .map(|p| p.cle.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            std::process::exit(2);
+        });
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let livre = &projet.meta.livre;
     let int = &projet.meta.interieur;

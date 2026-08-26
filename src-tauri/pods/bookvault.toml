@@ -21,7 +21,6 @@ fond_perdu = 3.0
 [[format]]
 cle = "127x203"
 nom = "Novel 127 × 203"
-cle_heritee = "bookvault-127x203"
 mm = { largeur = 127.0, hauteur = 203.0 }
 # Format à 0,2 mm du KDP 5 × 8 déjà en table : ses marges sont reprises telles quelles,
 # faute de valeur publiée par Bookvault hors gouttière.
@@ -32,7 +31,6 @@ source = "calculateur pour le format ; gouttière du guide PDF p. 2 ; marges du 
 [[format]]
 cle = "129x198"
 nom = "B Format 129 × 198"
-cle_heritee = "bookvault-129x198"
 mm = { largeur = 129.0, hauteur = 198.0 }
 marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
 gouttieres = [ { de = 24, a = 1000, mm = 20.0 } ]
@@ -41,7 +39,6 @@ source = "calculateur pour le format ; gouttière du guide PDF p. 2 ; marges du 
 [[format]]
 cle = "148x210"
 nom = "A5 148 × 210"
-cle_heritee = "bookvault-148x210"
 mm = { largeur = 148.0, hauteur = 210.0 }
 # Format identique au CoolLibri A5 : mêmes marges que lui.
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }

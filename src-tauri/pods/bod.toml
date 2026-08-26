@@ -11,7 +11,6 @@ fond_perdu = 5.0
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-cle_heritee = "bod"
 mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 # BoD ne module pas la marge de reliure selon l'épaisseur — tranche unique, couvrant les

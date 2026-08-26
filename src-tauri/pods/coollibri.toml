@@ -17,7 +17,6 @@ nom = "CoolLibri"
 [[format]]
 cle = "110x170"
 nom = "11 × 17 cm"
-cle_heritee = "coollibri-110x170"
 mm = { largeur = 110.0, hauteur = 170.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
@@ -26,7 +25,6 @@ source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
 [[format]]
 cle = "148x210"
 nom = "A5"
-cle_heritee = "coollibri-148x210"
 mm = { largeur = 148.0, hauteur = 210.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
@@ -35,7 +33,6 @@ source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
 [[format]]
 cle = "160x240"
 nom = "16 × 24 cm"
-cle_heritee = "coollibri-160x240"
 mm = { largeur = 160.0, hauteur = 240.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]

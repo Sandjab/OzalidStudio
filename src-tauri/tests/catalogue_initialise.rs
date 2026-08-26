@@ -21,7 +21,6 @@ fond_perdu = 4.0
 [[format]]
 cle = "100x150"
 nom = "10 × 15 cm"
-cle_heritee = "essai"
 mm = { largeur = 100.0, hauteur = 150.0 }
 marges = { haut = 10.0, bas = 10.0, exterieur = 10.0 }
 gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]

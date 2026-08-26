@@ -124,9 +124,6 @@ pub struct Pagination {
 pub struct Format {
     pub cle: String,
     pub nom: String,
-    /// **Transitoire.** La clé plate que portent encore le `.ozalid`, les répertoires de
-    /// package et l'interface. Elle disparaît au lot 2, avec la migration des projets.
-    pub cle_heritee: String,
     /// Format de rognage, en mm.
     pub mm: Dimensions,
     pub marges: Marges,
@@ -328,27 +325,10 @@ impl Pod {
                 ));
             }
         }
-        for f in &self.formats {
-            if !est_un_nom(&f.cle_heritee) {
-                return Err(format!(
-                    "{} / {} : clé héritée « {} ». Elle nomme un répertoire de package : \
-                     minuscules, chiffres et tirets, rien d'autre.",
-                    self.cle, f.cle, f.cle_heritee
-                ));
-            }
-        }
-
         sans_doublon(
             &self.cle,
             "formats",
             self.formats.iter().map(|f| f.cle.as_str()),
-        )?;
-        // La clé héritée nomme un répertoire de package : deux formats qui la partagent
-        // écriraient l'un sur l'autre.
-        sans_doublon(
-            &self.cle,
-            "formats (clé héritée)",
-            self.formats.iter().map(|f| f.cle_heritee.as_str()),
         )?;
         sans_doublon(
             &self.cle,
@@ -743,7 +723,7 @@ impl Fabrication {
 /// Deux maîtres : la migration v4→v5 des `.ozalid` (`projet::migre`), et le helper de
 /// test `provider`. **Gelée** : un format neuf naît en triplet et n'y entre jamais, quand
 /// bien même la vue plate grandirait au lot 4. Elle ne sert donc qu'à relire le passé —
-/// ce que le poste dépose aujourd'hui se lit dans `cle_heritee`, pas ici.
+/// ce que le poste dépose aujourd'hui se lit dans le triplet POD/format/reliure, pas ici.
 pub(crate) const HERITEES: [(&str, &str, &str, &str); 14] = [
     ("lulu", "lulu", "108x175", "broche"),
     ("bod", "bod", "135x215", "broche"),
@@ -969,33 +949,6 @@ pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
             }
         };
         let remplace = pods.iter().position(|p| p.cle == pod.cle);
-        // La clé héritée est celle que la vue plate porte, que le projet enregistre et
-        // que `provider` cherche : deux POD qui la partagent, et le `find` en prend une
-        // sans que rien ne dise laquelle — l'écran annoncerait un format pendant que le
-        // dos et la pagination viendraient de l'autre. `sans_doublon` ne peut pas le
-        // voir, c'est un fait entre POD. Le POD remplacé est écarté de la comparaison
-        // avant elle, sans quoi un fichier reprenant les clés du fourni qu'il remplace se
-        // refuserait lui-même.
-        let collision = pods
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| Some(*i) != remplace)
-            .flat_map(|(_, p)| p.formats.iter().map(move |f| (&f.cle_heritee, &p.cle)))
-            .find(|(h, _)| pod.formats.iter().any(|f| &f.cle_heritee == *h))
-            .map(|(h, c)| (h.clone(), c.clone()));
-        if let Some((heritee, tenant)) = collision {
-            refus.push(Refus {
-                fichier: nom,
-                raison: format!(
-                    "{} : clé héritée « {heritee} » déjà portée par le POD « {tenant} ». \
-                     Elle nomme le prestataire dans le projet enregistré : deux POD qui \
-                     la partagent, et le livre composé n'est pas celui qu'annonce \
-                     l'écran. En choisir une autre.",
-                    pod.cle
-                ),
-            });
-            continue;
-        }
         match remplace {
             Some(i) => pods[i] = pod,
             None => pods.push(pod),
@@ -1034,7 +987,6 @@ mod tests {
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-cle_heritee = "essai-135x215"
 mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
@@ -1100,7 +1052,6 @@ fond_perdu = 5.0
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-cle_heritee = "essai-135x215"
 mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
@@ -1431,9 +1382,7 @@ non_outille = "géométrie du casewrap non relevée"
         );
     }
 
-    /// Une clé vide ne se choisit pas et ne se retrouve pas dans un `.ozalid`. La clé
-    /// héritée, elle, nomme un répertoire de package : `../../ailleurs` s'écrit sans peine
-    /// dans un TOML, et `package` en ferait un chemin.
+    /// Une clé vide ne se choisit pas et ne se retrouve pas dans un `.ozalid`.
     #[test]
     fn une_cle_vide_ou_qui_n_est_pas_un_nom_est_refusee() {
         for (bloc, avant, quoi) in [
@@ -1450,16 +1399,6 @@ non_outille = "géométrie du casewrap non relevée"
             let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
             let attendu = format!("{quoi} à la clé");
             assert!(e.contains(&attendu), "attendu « {attendu} », reçu : {e}");
-        }
-
-        for cle_heritee in ["", "../../ailleurs", "ailleurs/essai", "Essai 135x215"] {
-            let f = sauf(
-                FORMAT,
-                "cle_heritee = \"essai-135x215\"",
-                &format!("cle_heritee = \"{cle_heritee}\""),
-            );
-            let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
-            assert!(e.contains("clé héritée"), "{cle_heritee} : {e}");
         }
     }
 
@@ -1503,7 +1442,6 @@ nom = "Essai"
 [[format]]
 cle = "C:nul*"
 nom = "Format"
-cle_heritee = "essai"
 mm = {{ largeur = 100.0, hauteur = 100.0 }}
 marges = {{ haut = 10.0, bas = 10.0, exterieur = 10.0 }}
 gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
@@ -1543,19 +1481,13 @@ gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
 
     /// Deux entrées de même clé, et le `find` des appelants en prend une sans que rien ne
     /// dise laquelle — deux papiers homonymes aux dos différents donneraient deux
-    /// épaisseurs selon l'appelant. Les cinq listes se contrôlent, la clé héritée comprise :
-    /// elle nomme un répertoire de package.
+    /// épaisseurs selon l'appelant. Les quatre listes se contrôlent.
     #[test]
     fn deux_cles_identiques_sont_refusees() {
-        let autre = sauf(FORMAT, "cle = \"135x215\"", "cle = \"148x210\"");
         for (blocs, attendu) in [
             (
                 vec![FORMAT, FORMAT, RELIURE, PAPIER],
                 "deux formats portent la clé « 135x215 »",
-            ),
-            (
-                vec![FORMAT, autre.as_str(), RELIURE, PAPIER],
-                "deux formats (clé héritée) portent la clé « essai-135x215 »",
             ),
             (
                 vec![FORMAT, RELIURE, RELIURE, PAPIER],
@@ -1665,7 +1597,6 @@ fond_perdu = 4.0
 [[format]]
 cle = "100x150"
 nom = "10 × 15 cm"
-cle_heritee = "essai"
 mm = { largeur = 100.0, hauteur = 150.0 }
 marges = { haut = 10.0, bas = 10.0, exterieur = 10.0 }
 gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]
@@ -1777,50 +1708,15 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         assert_eq!(pods.len(), 6);
     }
 
-    /// Deux POD qui se disputent une clé héritée : le pire cas que ce chantier rend
-    /// atteignable. La clé héritée est celle que la vue plate porte, que le `.ozalid`
-    /// enregistre et que `provider` cherche — deux entrées de même clé, et le `find` en
-    /// prend une sans que rien ne dise laquelle. L'écran annoncerait 10 × 15 pendant que
-    /// le dos, la pagination et les papiers seraient ceux de BoD. Découvert au tirage.
+    /// Un fichier qui remplace un fourni reprend ses propres clés de format : il ne doit
+    /// pas s'y refuser.
     #[test]
-    fn une_cle_heritee_deja_prise_par_un_autre_pod_est_refusee() {
-        let d = TempDir::new().unwrap();
-        pose(
-            &d,
-            "essai.toml",
-            &IMPRIMEUR_ESSAI.replace(r#"cle_heritee = "essai""#, r#"cle_heritee = "bod""#),
-        );
-        let (pods, refus) = charge(Some(d.path()));
-        assert_eq!(refus.len(), 1, "{pods:?}");
-        assert!(refus[0].fichier.contains("essai.toml"), "{:?}", refus[0]);
-        assert!(refus[0].raison.contains("bod"), "{:?}", refus[0]);
-        assert!(
-            !pods.iter().any(|p| p.cle == "essai"),
-            "le fichier fautif a été retenu quand même"
-        );
-        // Deux entrées de même clé dans la vue plate, c'est exactement ce qu'on empêche.
-        let plats = aplatit(&pods);
-        assert_eq!(
-            plats
-                .iter()
-                .filter(|p| p.cle == "bod-135x215-broche")
-                .count(),
-            1
-        );
-    }
-
-    /// Un fichier qui remplace un fourni reprend ses clés héritées : il ne doit pas se
-    /// refuser sur les siennes. C'est l'ordre du contrôle qui le décide — ôter d'abord le
-    /// remplacé, comparer ensuite.
-    #[test]
-    fn un_remplacement_ne_se_refuse_pas_sur_ses_propres_cles_heritees() {
+    fn un_remplacement_ne_se_refuse_pas_sur_ses_propres_cles() {
         let d = TempDir::new().unwrap();
         pose(
             &d,
             "bod.toml",
-            &IMPRIMEUR_ESSAI
-                .replace(r#"cle = "essai""#, r#"cle = "bod""#)
-                .replace(r#"cle_heritee = "essai""#, r#"cle_heritee = "bod""#),
+            &IMPRIMEUR_ESSAI.replace(r#"cle = "essai""#, r#"cle = "bod""#),
         );
         let (pods, refus) = charge(Some(d.path()));
         assert!(refus.is_empty(), "{refus:?}");
@@ -2251,20 +2147,20 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         assert_eq!(p.cle, "kdp-6x9-broche");
     }
 
-    /// La table de migration est ancrée sur les fichiers : chaque ligne désigne un triplet
-    /// qui se résout, et la clé héritée qu'elle remplace est bien celle que le format porte
-    /// encore. La seconde moitié tombe à la tâche 7 avec `cle_heritee`.
+    /// La table de migration est ancrée sur les fichiers : chaque triplet qu'elle porte se
+    /// résout, et elle en compte quatorze — c'est l'ancrage des `.ozalid` anciens, il ne
+    /// disparaîtra qu'avec la migration v5 elle-même.
     #[test]
-    fn chaque_cle_heritee_a_son_triplet() {
+    fn chaque_triplet_de_la_table_de_migration_resout() {
+        // Pas d'assertion sur le compte : le type `[…; 14]` le fige à la compilation.
         for (heritee, pod, format, reliure) in HERITEES {
-            let r = resout(&Fabrication {
+            resout(&Fabrication {
                 pod: pod.into(),
                 format: format.into(),
                 reliure: reliure.into(),
                 papier: pod_de(pod).papiers[0].cle.clone(),
             })
             .unwrap_or_else(|e| panic!("{heritee} : {e}"));
-            assert_eq!(r.format.cle_heritee, heritee);
         }
     }
 
