@@ -24,6 +24,7 @@ function afficherDestinataires() {
   for (const d of declares) {
     const p = providers.find((pr) => pr.cle === d.provider);
     const ligne = h('div', undefined, 'destinataire');
+    let releve;
     ligne.append(h('span', libelleProvider(d.provider), 'nom'));
 
     if (p) {
@@ -35,13 +36,17 @@ function afficherDestinataires() {
       papier.addEventListener('change', () => reglerDestinataire(d.provider));
       ligne.append(papier);
 
+      // Fabriqué ici, avec le prestataire qui le motive, mais posé après le bouton :
+      // le relevé prend une ligne à lui, et l'insérer avant renvoyait le format et le
+      // bouton « Retirer » au rang suivant, décalés de ceux des voisins. Ordre du
+      // balisage et ordre de lecture restent les mêmes — c'est le CSS qui met le
+      // relevé à la ligne, pas un `order`.
       if (!p.dos_publie || p.fond_perdu === null) {
-        const releve = h('span', undefined, 'releve');
+        releve = h('span', undefined, 'releve');
         const champ = (quoi, libelle, valeur) =>
           releve.append(champReleve(`dest-${quoi}-${d.provider}`, libelle, valeur, d.provider));
         if (!p.dos_publie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
         if (p.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
-        ligne.append(releve);
       }
       ligne.append(h('span', noteFormat(p), 'note'));
     }
@@ -55,6 +60,7 @@ function afficherDestinataires() {
     retirer.addEventListener('click', () => tente(async () =>
       afficherProjet(await invoke('destinataire_retirer', { providerCle: d.provider }))));
     ligne.append(retirer);
+    if (releve) ligne.append(releve);
     box.append(ligne);
   }
 

@@ -280,11 +280,16 @@ main {
    supprime : on relirait la moitié d'un formulaire à côté de l'autre.
    Le filet qui les séparait quand ils s'empilaient ne veut plus rien dire une fois
    qu'ils coulent en colonnes — il ne courrait que sous la première, au hasard de
-   l'ordre du balisage. C'est le blanc qui sépare désormais. */
+   l'ordre du balisage. C'est le blanc qui sépare désormais.
+   Ce blanc est un rembourrage et non une marge : WebKit reporte en tête de la colonne
+   suivante la marge basse du bloc sur lequel la coupure tombe, et « Manuscrit »
+   descendait d'un rem sous « Livre » — les deux colonnes de l'étape ne commençaient
+   pas à la même ligne. Un rembourrage appartient à la boîte du bloc et reste avec lui,
+   du bon côté de la coupure. */
 #etapeLivre > .bloc {
   break-inside: avoid;
-  padding: 0;
-  margin-bottom: 1rem;
+  padding: 0 0 1rem;
+  margin-bottom: 0;
   border-bottom: none;
 }
 
@@ -613,6 +618,21 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   align-content: start;
   align-items: start;
   padding-right: 0;
+}
+
+/* Les colonnes du dos font 13,5 rem, et les 10 rem que `.groupe label` réserve au
+   libellé n'en laissaient au champ que trois et demi — moins encore une fois le gap.
+   Mesuré à 1040 px, où la grille tient cinq colonnes : la case du champ faisait 53 px,
+   le select de graisse affichait « 60( » pour 600 et celui de casse « Ca| », et la
+   piste du champ, qui ne descend pas sous la largeur propre d'un select, débordait de
+   sa colonne — d'où la barre horizontale sous le panneau.
+   Le libellé passe donc au-dessus, comme dans la bande des Envois où la même largeur
+   avait produit le même écrasement, et le champ prend la colonne entière. Le `minmax`
+   plutôt qu'un `1fr` sec : c'est lui qui autorise la piste à se serrer sous la largeur
+   propre du select, et sans lui la colonne déborderait encore. */
+.couv[data-face="dos"] .groupe label {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .15rem;
 }
 
 /* Le fond et les espacements ne règlent pas un texte du dos mais le dos lui-même : la
@@ -1073,10 +1093,22 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .destinataire .nom { flex: 1; min-width: 14rem; }
 .destinataire label { margin: 0; }
 .destinataire select { width: auto; }
-.destinataire .note { margin: 0; }
+/* Le format se réserve une base et non sa largeur pleine : un flex replie avant de
+   comprimer, et la note du prestataire à gabarit — la plus longue des trois, elle
+   nomme le fond perdu au lieu de le chiffrer — emportait à elle seule le bouton
+   « Retirer » au rang suivant, où il ne finissait plus sa ligne comme celui des
+   voisins. Avec une base de 14 rem le rang tient, et le peu qui manque se prend sur la
+   note, qui passe à deux lignes plutôt que de casser la ligne du destinataire.
+   Fer à droite pour la même raison qu'elle grandit : collée au bouton, la mesure se
+   lit en colonne d'un destinataire à l'autre au lieu de flotter où le nom la laisse. */
+.destinataire .note { margin: 0; flex: 1 1 14rem; min-width: 0; text-align: right; }
 
-/* Relevés d'un prestataire à gabarit : côte à côte, à droite de sa ligne. */
-.releve { display: flex; gap: .6rem; }
+/* Relevés d'un prestataire à gabarit : côte à côte, sur une ligne à eux. Le
+   `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte
+   à côté du bouton dès que la fenêtre s'élargit, et le « Retirer » d'un prestataire à
+   gabarit ne finit plus sa ligne comme celui des autres. Une ligne de destinataire se
+   lit en colonnes, d'un destinataire à l'autre. */
+.releve { display: flex; gap: .6rem; flex-basis: 100%; }
 /* Une seule colonne, contre les deux que `label` impose partout ailleurs : le libellé
    se met au-dessus de son champ, et la paire tient dans la ligne du destinataire au
    lieu de réclamer les 13 rem d'une colonne de formulaire. */
