@@ -1114,9 +1114,17 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   border-bottom: 1px solid var(--trait);
 }
 .destinataire:last-child { border-bottom: 0; }
-.destinataire .nom { flex: 1; min-width: 14rem; }
+/* Le nom cède deux rems depuis que la ligne porte trois réglages : à 14 rem de plancher,
+   il poussait la note hors du rang à lui seul. « Amazon KDP — 6 × 9 po », le plus long
+   des quatorze, en réclame onze. */
+.destinataire .nom { flex: 1 1 12rem; min-width: 12rem; }
 .destinataire label { margin: 0; }
-.destinataire select { width: auto; }
+/* Les listes ne se compriment pas : un select réduit à sa flèche ne se lit plus, et
+   c'est son libellé qui dit ce qu'on choisit. Bridées à 13 rem parce que « Broché —
+   dos carré collé » mangerait sinon le tiers de la ligne à lui seul. Ce qui ne tient
+   plus se prend sur la note, dont la base de 14 rem la fait passer au rang suivant
+   avant que quoi que ce soit d'autre ne se comprime. */
+.destinataire select { width: auto; flex: 0 0 auto; max-width: 13rem; }
 /* Le format se réserve une base et non sa largeur pleine : un flex replie avant de
    comprimer, et la note du prestataire à gabarit — la plus longue des trois, elle
    nomme le fond perdu au lieu de le chiffrer — emportait à elle seule le bouton
