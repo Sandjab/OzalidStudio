@@ -687,8 +687,9 @@ pub fn livrable_retirer(cle: String, atelier: State<Atelier>) -> Result<ProjetVu
     vue_modifiee(o)
 }
 
-/// Le papier, la finition et les relevés d'un livrable. `cle` désigne le livrable tel
-/// qu'il était : changer son papier change son identité, et `courant` suit.
+/// La reliure, le papier, la finition et les relevés d'un livrable. `cle` désigne le
+/// livrable tel qu'il était : changer sa reliure ou son papier change son identité, et
+/// `courant` suit.
 #[tauri::command]
 pub fn livrable_regler(
     cle: String,
@@ -715,9 +716,11 @@ pub fn livrable_regler(
         return Err(format!("{neuve} est déjà un livrable de ce livre."));
     }
     let place = &mut l.livrables[rang];
-    // Refusé avant toute écriture : seuls le papier, la finition et les relevés se
-    // règlent sur une ligne, et le gabarit ne bouge pas — donc la mesure non plus, le
-    // dos affiché se recalculant à la vue.
+    // Refusé avant toute écriture : le POD et le format ne se règlent pas sur une ligne,
+    // ils se choisissent à l'ajout. La reliure, elle, emporte le gabarit avec elle — le
+    // livrable retombe alors sur un gabarit sans mesure, et recompose, ce qui est
+    // précisément ce qu'une reliure exige. Le papier ne touche à rien : deux papiers
+    // partagent la mesure de leur gabarit, et chacun en tire son dos à la vue.
     if let Some(e) = reglage_refuse(place, &livrable, r.pod) {
         return Err(e);
     }
