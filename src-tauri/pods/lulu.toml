@@ -1,0 +1,40 @@
+# Lulu — le poche 108 × 175, seul format outillé chez eux.
+#
+# Réserve du COOKBOOK : une maquette qui imite une charte de collection existante reste un
+# usage privé — ne pas activer la Retail Distribution avec une couverture de ce genre.
+
+cle = "lulu"
+nom = "Lulu"
+# Guide Lulu : 0,125 po.
+fond_perdu = 3.175
+
+[[format]]
+cle = "108x175"
+nom = "poche 108 × 175"
+cle_heritee = "lulu"
+mm = { largeur = 108.0, hauteur = 175.0 }
+# La marge extérieure de 13 mm est une sécurité, non une valeur publiée ; le guide ne donne
+# que la gouttière.
+marges = { haut = 14.0, bas = 15.0, exterieur = 13.0 }
+# Une seule tranche publiée, et elle ne couvre pas toute la pagination admise : hors de
+# 151–400 pages la composition refuse plutôt que d'inventer une gouttière.
+gouttieres = [ { de = 151, a = 400, mm = 25.0 } ]
+source = "guide Lulu — Pocketbook 4,25 × 6,875 po"
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 32, max = 800 }
+# Lulu ne publie pas de règle de parité ; « paire » est ce que la composition fait partout.
+parite = "paire"
+source = "bornes reprises de la table historique du dépôt, sans relevé au guide"
+
+[[papier]]
+cle = "standard"
+nom = "Papier standard"
+teinte = "#ffffff"
+# Gardée sous forme de division, comme le guide l'écrit — la convertir en facteur décimal
+# introduirait une dérive.
+dos = { forme = "divise", par = 17.48, plus = 1.524 }
+source = "guide Lulu, vérifié sur un livre réel de 244 pages → 15,48 mm"

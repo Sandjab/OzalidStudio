@@ -501,6 +501,30 @@ impl Pod {
     }
 }
 
+/// Les fichiers fournis, incorporés au binaire.
+///
+/// Par `include_str!` et non par lecture disque : l'immuabilité est un fait, pas une
+/// règle applicative — il n'y a aucun fichier à protéger sur le poste, aucun chemin à
+/// résoudre, aucun écart entre `cargo test` et l'application livrée. C'est le piège connu
+/// de `fonts/`, où `target/debug` ne suit pas les sources.
+const FOURNIS: &[&str] = &[
+    include_str!("../pods/lulu.toml"),
+    include_str!("../pods/bod.toml"),
+    include_str!("../pods/kdp.toml"),
+    include_str!("../pods/coollibri.toml"),
+    include_str!("../pods/thebookedition.toml"),
+    include_str!("../pods/bookvault.toml"),
+];
+
+/// Les POD fournis, dans l'ordre du tableau.
+///
+/// Une erreur ici n'est pas un cas d'usage mais un défaut de compilation logique : elle
+/// remonte telle quelle, et le test `les_six_fichiers_fournis_se_lisent` est ce qui
+/// l'attrape avant la livraison.
+pub fn fournis() -> Result<Vec<Pod>, String> {
+    FOURNIS.iter().map(|s| Pod::depuis_toml(s)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1045,5 +1069,30 @@ non_outille = "géométrie du casewrap non relevée"
         let lu = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap();
         assert_eq!(lu.papiers[0].dos, Dos::Mesure);
         assert_eq!(lu.papiers[0].dos.mm(244), None);
+    }
+
+    /// Les six fournis se lisent tous. Un TOML mal formé ne casse plus la compilation mais
+    /// le démarrage : ce test est ce qui le rattrape avant la livraison.
+    #[test]
+    fn les_six_fichiers_fournis_se_lisent() {
+        let pods = fournis().expect("un fichier fourni est illisible");
+        assert_eq!(pods.len(), 6, "six POD attendus");
+        // Les quatorze formats de la table historique, tous présents.
+        let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
+        assert_eq!(formats, 14, "quatorze formats attendus");
+    }
+
+    /// Chaque POD outillé porte au moins un papier et une reliure composable : sans quoi il
+    /// serait en table sans que rien ne puisse en sortir.
+    #[test]
+    fn chaque_pod_fourni_porte_un_papier_et_une_reliure_composable() {
+        for p in fournis().unwrap() {
+            assert!(!p.papiers.is_empty(), "{} sans papier", p.cle);
+            assert!(
+                p.reliures.iter().any(|r| r.geometrie.is_some()),
+                "{} sans reliure composable",
+                p.cle
+            );
+        }
     }
 }
