@@ -227,9 +227,12 @@ pub fn providers_liste() -> Vec<ProviderVue> {
 /// L'arbre du catalogue : un POD, ses formats, ses reliures, ses finitions, ses papiers.
 ///
 /// Ne sont rendus que les POD chez qui l'on sait composer — au moins une reliure
-/// outillée —, la règle qu'`aplatit` applique déjà à la table plate. Un POD dont aucune
-/// reliure n'aurait de géométrie relevée n'offre rien à ajouter, et le faire paraître
-/// grisé en entier serait une fonction que personne n'a demandée.
+/// outillée. **Le filtre ne peut pas se déclencher** : `Pod::verifie` refuse un tel POD
+/// au chargement, en nommant son fichier, précisément pour qu'un imprimeur ne disparaisse
+/// pas sans un mot. Il est ici pour la même raison que le `continue` d'`aplatit`, dont il
+/// reprend la forme : les deux projections du catalogue disent la même chose de ce
+/// qu'elles savent composer, et une garantie qui vivrait dans un seul des deux se
+/// perdrait le jour où le refus du chargement s'assouplirait.
 #[tauri::command]
 pub fn pods_liste() -> Vec<PodVue> {
     catalogue::pods()
