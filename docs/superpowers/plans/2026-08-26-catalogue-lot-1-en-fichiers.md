@@ -477,6 +477,41 @@ git commit -m "Le catalogue a ses types, et refuse ce qu'il ne sait pas tenir"
 
 ---
 
+#### Ce que l'exécution a ajouté à la tâche 1
+
+Écrit après coup, pour que ce plan ne mente pas à qui le relira. La tâche 1 a été livrée
+telle que décrite ci-dessus (`27ca0ce`), puis une revue de qualité a montré que `verifie`
+ne regardait que le couple géométrie/raison — aucun nombre, aucune clé, aucune liste. Or
+c'est le nombre qui va au massicot. Dix corrections ont suivi (`17241e7`, `102c1e3`) :
+
+- **Les nombres sont validés.** `par = nan` était accepté — TOML 1.0 lit littéralement
+  `nan` et `inf` —, `forme = "divise", par = 0.0` donnait un dos infini et `par = -0.07`
+  un dos de −19,6 mm. Sont refusés : facteur de dos non fini ou ≤ 0, constante non finie
+  ou < 0, dimension non finie ou ≤ 0, marge ou fond perdu non fini ou < 0.
+- **`#[serde(deny_unknown_fields)]`** sur les structures. Sans lui, `fond-perdu` avec un
+  tiret était ignoré sans erreur : quelqu'un relève une valeur, l'écrit, et le catalogue
+  fait comme s'il ne l'avait pas. C'est le pire défaut possible dans un module dont la
+  règle est qu'on ne reporte que ce qu'on a lu.
+- **Une reliure ne peut pas porter à la fois `geometrie` et `non_outille`.** Deux
+  appelants qui n'interrogent pas le même champ en tireraient deux réponses opposées.
+- **Unicité des `cle`** dans les quatre listes et des `cle_heritee` entre formats ; **au
+  moins un format, une reliure, un papier** — `papier_defaut()` indexera `papiers[0]`, et
+  l'invariant que `&'static [Papier]` tenait par construction n'existe plus ; **bornes**
+  `de <= a` et `min <= max`.
+- **Les tuples positionnels deviennent `Dimensions`, `Tranche` et `Pagination`** — c'est
+  la forme qui figure dans les blocs de code ci-dessus, mise à jour.
+- **Cinq tests neufs** là où rien ne protégeait : parité inconnue, reliure outillée sans
+  parité, reliure non outillée lue avec sa raison, `Dos::Divise` sur le cas Lulu vérifié
+  sur livre réel (244 pages → 15,48 mm), `Dos::Mesure` rendant `None`.
+
+Un contrôle a été **écarté** et ne doit pas être ajouté plus tard par mégarde : vérifier
+que les tranches de gouttière couvrent la pagination admise d'une reliure. Le catalogue
+réel ne le respecte pas — Lulu accepte 32 à 800 pages en dos carré collé et ne publie de
+gouttière que pour 151 à 400. Le refus tardif à la composition est le comportement voulu,
+et le COOKBOOK le documente comme piège.
+
+---
+
 ### Tâche 2 : Les six fichiers fournis
 
 **Fichiers :**
