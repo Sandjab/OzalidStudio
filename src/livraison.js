@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * L'étape Livraison : les destinataires et leurs packages. Les envois ont leur
+ * L'étape Livraison : les livrables et leurs packages. Les envois ont leur
  * étape et leur fichier, `envois.js`.
  *
  * Même partage que `couverture.js` : ce fichier ne pose aucun écouteur et ne lit pas
@@ -68,14 +68,14 @@ async function afficherRefusCatalogue() {
  * livrables du même gabarit coexistent, et les nommer par le gabarit leur donnerait le
  * même `id`. Toutes les clés du catalogue sont des noms, la clé en est donc un aussi.
  */
-function afficherDestinataires() {
-  const box = $('destinataires');
+function afficherLivrables() {
+  const box = $('livrables');
   box.replaceChildren();
   const declares = projet.livraison.livrables;
   for (const d of declares) {
     const p = providers.find((pr) => pr.cle === d.gabarit);
     const pod = pods.find((x) => x.cle === d.pod);
-    const ligne = h('div', undefined, 'destinataire');
+    const ligne = h('div', undefined, 'livrable');
     let releve;
     let raison;
     ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
@@ -86,7 +86,7 @@ function afficherDestinataires() {
       // avant le clic. Le fichier tranche — une reliure porte une géométrie **ou** une
       // raison de ne pas en avoir, jamais les deux.
       const reliure = h('select');
-      reliure.id = `dest-reliure-${d.cle}`;
+      reliure.id = `liv-reliure-${d.cle}`;
       for (const r of pod.reliures) {
         const o = new Option(r.nom, r.cle);
         o.disabled = r.non_outille !== null;
@@ -107,7 +107,7 @@ function afficherDestinataires() {
       const grisees = pod.reliures.filter((r) => r.non_outille !== null);
       if (grisees.length) {
         raison = h('p', undefined, 'note raison');
-        raison.id = `dest-reliure-raison-${d.cle}`;
+        raison.id = `liv-reliure-raison-${d.cle}`;
         raison.textContent = grisees
           .map((r) => `${r.nom} — ${r.non_outille}`)
           .join(' · ');
@@ -118,7 +118,7 @@ function afficherDestinataires() {
       // fourni n'en déclare aujourd'hui ; c'est le lot 4 du chantier qui les relèvera.
       if (pod.finitions.length) {
         const finition = h('select');
-        finition.id = `dest-finition-${d.cle}`;
+        finition.id = `liv-finition-${d.cle}`;
         // Le vide en tête : aucune finition est le cas courant, et il doit rester
         // choisissable après en avoir pris une.
         finition.append(new Option('—', ''));
@@ -129,7 +129,7 @@ function afficherDestinataires() {
       }
 
       const papier = h('select');
-      papier.id = `dest-papier-${d.cle}`;
+      papier.id = `liv-papier-${d.cle}`;
       for (const pa of pod.papiers) papier.append(new Option(pa.libelle, pa.cle));
       papier.value = d.papier;
       papier.disabled = pod.papiers.length < 2;
@@ -146,7 +146,7 @@ function afficherDestinataires() {
       if (!dosPublie || p?.fond_perdu === null) {
         releve = h('span', undefined, 'releve');
         const champ = (quoi, libelle, valeur) =>
-          releve.append(champReleve(`dest-${quoi}-${d.cle}`, libelle, valeur, d));
+          releve.append(champReleve(`liv-${quoi}-${d.cle}`, libelle, valeur, d));
         if (!dosPublie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
         if (p?.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
       }
@@ -155,7 +155,7 @@ function afficherDestinataires() {
 
     const retirer = h('button', 'Retirer');
     retirer.type = 'button';
-    retirer.id = `dest-retirer-${d.cle}`;
+    retirer.id = `liv-retirer-${d.cle}`;
     // Le dernier ne se retire pas : le Rust refuse, mais un bouton qui ne peut
     // qu'échouer vaut mieux éteint que refusé.
     retirer.disabled = declares.length < 2;
@@ -191,7 +191,7 @@ function afficherCascade() {
   // liste sur son premier, alors qu'on en ajoute souvent deux de suite chez le même.
   if (pods.some((p) => p.cle === choisi)) sel.value = choisi;
   sel.disabled = pods.length === 0;
-  $('btAjouterDestinataire').disabled = pods.length === 0;
+  $('btAjouterLivrable').disabled = pods.length === 0;
   afficherFormatsDuPod();
 }
 
@@ -258,12 +258,12 @@ async function reglerLivrable(d) {
     livrable: {
       pod: d.pod,
       format: d.format,
-      reliure: choix(`dest-reliure-${d.cle}`, d.reliure),
-      papier: choix(`dest-papier-${d.cle}`, d.papier),
+      reliure: choix(`liv-reliure-${d.cle}`, d.reliure),
+      papier: choix(`liv-papier-${d.cle}`, d.papier),
       // La chaîne vide du choix « — » est une absence, pas une finition nommée.
-      finition: choix(`dest-finition-${d.cle}`, d.finition ?? '') || null,
-      dos_mm: lu(`dest-dos-${d.cle}`),
-      fond_perdu_mm: lu(`dest-fp-${d.cle}`),
+      finition: choix(`liv-finition-${d.cle}`, d.finition ?? '') || null,
+      dos_mm: lu(`liv-dos-${d.cle}`),
+      fond_perdu_mm: lu(`liv-fp-${d.cle}`),
     },
   })));
 }
@@ -272,7 +272,7 @@ async function reglerLivrable(d) {
  * Les fichiers d'un package : leur répertoire une fois, leurs noms ensuite.
  *
  * Un package écrit tous ses fichiers au même endroit, et redire soixante-dix caractères
- * de chemin identiques à chaque ligne coûtait deux lignes de plus par destinataire —
+ * de chemin identiques à chaque ligne coûtait deux lignes de plus par livrable —
  * l'ascenseur de la Livraison se payait en redites. Coupés ainsi, les noms tiennent sur
  * une ligne au lieu de se replier au milieu d'un mot.
  *

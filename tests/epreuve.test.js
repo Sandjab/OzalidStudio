@@ -73,7 +73,7 @@ function faux(providers, sur = {}) {
     // remonterait une erreur dans l'entête.
     //
     // La mesure **doit** entrer dans le projet rendu, comme le Rust le fait : la veille
-    // relance tant que le destinataire visé n'en porte pas, et une composition qui
+    // relance tant que le livrable visé n'en porte pas, et une composition qui
     // réussirait sans rien déposer tournerait en boucle.
     if (cmd === 'composer') {
       const mesure = { pages: 262, gouttiere: 25, blanche: true, dos: 16.513 };

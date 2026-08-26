@@ -275,18 +275,18 @@ geste par lequel on répare un manuscrit fautif. Le porter dans l'archive demand
 distinguer « on a consenti » de « on a composé », et le témoin de dos périmé a besoin du
 second : les deux ne sont pas le même fait.
 
-## Le prestataire, choisi une seule fois
+## Le livrable, choisi une seule fois
 
-Un livre a des **destinataires** : les prestataires chez qui on le livre. Ils se
-déclarent à l'étape Livraison — leur papier, et pour ceux qui ne publient ni dos ni
-fond perdu, ce qu'on a relevé sur leur gabarit — et **nulle part ailleurs**. Le pied
-de fenêtre porte le **pointeur** dessus : le destinataire visé, celui pour qui
-l'étape 2 compose et à quel format l'étape 3 rend ses aperçus. L'étape 4, elle,
-génère pour toute la liste.
+Un livre a des **livrables** : l'identité à quatre axes — POD, format, reliure,
+papier — de ce qu'on en fabrique. Elle se déclare à l'étape Livraison — le papier, et
+pour ceux qui ne publient ni dos ni fond perdu, ce qu'on a relevé sur leur gabarit —
+et **nulle part ailleurs**. Le pied de fenêtre porte le **pointeur** sur le livrable
+visé : celui pour qui l'étape 2 compose et à quel format l'étape 3 rend ses aperçus.
+L'étape 4, elle, génère pour toute la liste.
 
 Un prestataire courant est nécessaire même pour regarder une première de couverture,
 qui ne réclame aucune composition mais réclame un format : un projet neuf naît donc
-avec un destinataire, le premier de la table, et le dernier ne se retire pas.
+avec un livrable, le premier de la table, et le dernier ne se retire pas.
 
 Les relevés naissent **vides**, jamais préremplis. Un chiffre par défaut se lirait
 comme une mesure ; à sa place, la génération refuse en disant quoi faire — « CoolLibri

@@ -585,14 +585,14 @@ test('l\'aperçu est demandé et affiché à l\'ouverture du projet', async () =
 });
 
 /**
- * Le format vient du destinataire visé : en changer change l'aperçu, même si aucun
+ * Le format vient du livrable visé : en changer change l'aperçu, même si aucun
  * réglage de maquette n'a bougé.
  */
-test('viser un autre destinataire redemande un aperçu', async () => {
+test('viser un autre livrable redemande un aperçu', async () => {
   const { els, appels } = await ouvre(maquette());
   await attendreApercu();
   const avant = appels.filter(([c]) => c === 'couverture_apercu').length;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   const apres = appels.filter(([c]) => c === 'couverture_apercu').length;
   assert.ok(apres > avant, 'aperçu non redemandé');
@@ -632,7 +632,7 @@ test('un aperçu qui échoue efface l\'image et affiche la cause', async () => {
   assert.strictEqual(els.get('apercu').hidden, false, 'aperçu réussi mais masqué');
 
   casse = true;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   assert.strictEqual(els.get('apercu').src, undefined, 'aperçu périmé laissé à l\'écran');
   assert.strictEqual(els.get('apercu').hidden, true, 'cadre d\'image sans image');
@@ -773,7 +773,7 @@ test('un aperçu qui échoue emporte l\'habillage avec l\'image', async () => {
   assert.strictEqual(els.get('reperes').hidden, false);
 
   casse = true;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   assert.strictEqual(els.get('reperes').hidden, true, 'habillage laissé seul à l\'écran');
 });

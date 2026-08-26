@@ -394,7 +394,7 @@ async function majPage() {
     return;
   }
 
-  // La teinte du papier que le destinataire visé imprimera. C'est un fait d'écran : le
+  // La teinte du papier que le livrable visé imprimera. C'est un fait d'écran : le
   // PDF n'a pas de fond, et lui en donner un ferait imprimer un aplat sur toutes les
   // pages. Sans elle, un fond mal détouré resterait invisible — blanc de photo sur
   // blanc d'écran — jusqu'au tirage.

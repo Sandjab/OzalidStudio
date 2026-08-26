@@ -328,7 +328,7 @@ function alerter(message) {
 /**
  * Le pied : pour qui l'on regarde, et ce que vaut le dos.
  *
- * Le destinataire visé s'y choisit, une fois pour toute la fenêtre — c'est le pointeur
+ * Le livrable visé s'y choisit, une fois pour toute la fenêtre — c'est le pointeur
  * de la spec, et il est ici plutôt qu'à l'étape Livraison parce qu'on en change en
  * réglant la couverture, sans avoir à quitter ce qu'on regarde.
  *
@@ -358,7 +358,7 @@ function majPied() {
   // gabarits laisse la liste vide, et le premier projet ouvert ferait lever le pied
   // au lieu de dire ce qu'il sait — c'est-à-dire rien.
   const p = projet ? providerCourant() : null;
-  const sel = $('inDestinataire');
+  const sel = $('inLivrable');
   $('visee').hidden = !p;
   if (!p) {
     sel.replaceChildren();
@@ -392,7 +392,7 @@ function majPied() {
 
   // Les chiffres ne paraissent qu'avec une mesure, et un dos périmé n'en a pas : c'est
   // sa définition même — `dosPerime` est vrai quand le livre a été composé et que la
-  // mesure du destinataire visé a disparu. Il n'y a donc pas de second garde à écrire
+  // mesure du livrable visé a disparu. Il n'y a donc pas de second garde à écrire
   // ici, et le pied ne peut pas donner à lire 264 pages sous un « dos périmé ».
   const mesure = livrableCourant()?.compose;
   if (!mesure) return;
@@ -615,7 +615,7 @@ function afficherProjet(p) {
   // à l'endroit où le manque se voit.
   if (p.couverture) afficherCouverture(p.couverture);
   else poserDisposition(false);
-  afficherDestinataires();
+  afficherLivrables();
   afficherEnvois();
   demanderApercu();
   majPied();
@@ -624,7 +624,7 @@ function afficherProjet(p) {
 }
 
 /**
- * Recompose de soi-même quand la mesure du destinataire visé vient d'être périmée.
+ * Recompose de soi-même quand la mesure du livrable visé vient d'être périmée.
  *
  * Deux conditions, et il faut les deux.
  *
@@ -796,7 +796,7 @@ function oublierLaComposition() {
  * Efface ce que le projet précédent avait laissé à l'écran.
  *
  * Ses sorties de composition d'abord, puis ce qui n'appartient qu'à lui : l'étape où
- * l'on était, ses destinataires, ses envois, sa couverture. C'est ce partage qui sépare
+ * l'on était, ses livrables, ses envois, sa couverture. C'est ce partage qui sépare
  * les deux fonctions — remplacer le texte d'un livre n'est pas en ouvrir un autre.
  */
 function oublierLesSorties() {
@@ -812,9 +812,9 @@ function oublierLesSorties() {
   // regardait. Rester sur la Livraison en ouvrant un autre livre donnerait à lire ses
   // packages sous le titre du nouveau.
   etape = 'livre';
-  // La liste des destinataires appartient au projet, pas à l'écran : sans projet, elle
+  // La liste des livrables appartient au projet, pas à l'écran : sans projet, elle
   // n'a personne à nommer, et `afficherProjet` la refait entièrement pour le suivant.
-  $('destinataires').replaceChildren();
+  $('livrables').replaceChildren();
   // Les envois de même : ce sont les mots écrits pour les lecteurs du livre A, et
   // l'aperçu de page de titre qui va avec. L'image proposée par le modèle s'en va avec
   // eux : le Rust l'a oubliée en posant l'autre projet, et laisser « Retenir » allumé
@@ -1039,7 +1039,7 @@ async function majLivre() {
  * l'épreuve, ni les envois — et rien dans le panneau ne permettrait de s'en apercevoir,
  * le gabarit, le papier et la police, eux, n'ayant pas bougé.
  *
- * Les sorties, et elles seules : le projet est le même, avec ses destinataires, ses
+ * Les sorties, et elles seules : le projet est le même, avec ses livrables, ses
  * envois à écrire et l'étape où l'on travaillait.
  *
  * Périmé sans regarder si le texte a réellement changé : réimporter un manuscrit
@@ -1139,7 +1139,7 @@ async function chargerEcriture(famille) {
 /*
  * Aucun panneau de compte rendu ici, et c'est le fait de ce lot.
  *
- * Ce que la composition mesure entre dans le projet, chez le destinataire visé, et le
+ * Ce que la composition mesure entre dans le projet, chez le livrable visé, et le
  * pied le relit de là — comme le dos le faisait déjà seul. `Composition` porte les mêmes
  * chiffres en copie de lecture ; l'écran ne s'en sert plus, et `afficherProjet` suffit.
  * C'est ce qui fait tenir la légende après une réouverture, là où un panneau rempli
@@ -1150,7 +1150,7 @@ async function chargerEcriture(famille) {
  */
 
 /**
- * Compose l'intérieur pour le destinataire visé.
+ * Compose l'intérieur pour le livrable visé.
  *
  * Plus personne ne l'appelle depuis un bouton : elle part du chargement d'un manuscrit,
  * puis de la veille. Son compte rendu est donc une **légende** et non l'attente d'un
@@ -1174,7 +1174,7 @@ async function composer() {
   try {
     const c = await invoke('composer');
     // Le dos sort de la pagination qu'on vient de mesurer, et c'est le projet qui le
-    // retient désormais, chez le destinataire pour qui il vaut. L'interface n'en garde
+    // retient désormais, chez le livrable pour qui il vaut. L'interface n'en garde
     // aucune copie : elle le relit là où il est enregistré, comme tout le reste — et
     // depuis ce lot, les pages, les chapitres, la gouttière et le repli avec.
     afficherProjet(c.projet);
@@ -1307,21 +1307,21 @@ $('btPackager').addEventListener('click', packager);
 $('btEbooks').addEventListener('click', ebooks);
 $('btEpreuve').addEventListener('click', epreuve);
 $('inPoliceInterieur').addEventListener('change', majInterieur);
-// Changer de destinataire déplace le format de l'aperçu et l'épaisseur du dos : c'est
+// Changer de livrable déplace le format de l'aperçu et l'épaisseur du dos : c'est
 // le projet qui les porte, et `afficherProjet` suffit à les remettre d'accord.
 // Les vignettes du rail, elles, ne sont pas dans le projet : ce sont les pages d'une
-// pagination, et deux destinataires n'ont pas les mêmes. Elles se périment donc ici, et
-// non dans `composer` seul — revenir à un destinataire déjà mesuré ne recompose rien, et
+// pagination, et deux livrables n'ont pas les mêmes. Elles se périment donc ici, et
+// non dans `composer` seul — revenir à un livrable déjà mesuré ne recompose rien, et
 // le rail garderait les pages du précédent.
-$('inDestinataire').addEventListener('change', () => tente(async () => {
-  afficherProjet(await invoke('livrable_viser', { cle: $('inDestinataire').value }));
+$('inLivrable').addEventListener('change', () => tente(async () => {
+  afficherProjet(await invoke('livrable_viser', { cle: $('inLivrable').value }));
   oublierPages();
 }));
 // La cascade parle en POD puis en format ; la reliure et le papier d'office viennent du
 // catalogue, et se règlent ensuite sur la ligne. C'est le Rust qui refuse le vrai
 // doublon.
 $('inAjoutPod').addEventListener('change', afficherFormatsDuPod);
-$('btAjouterDestinataire').addEventListener('click', () => tente(async () => {
+$('btAjouterLivrable').addEventListener('click', () => tente(async () => {
   const p = pods.find((x) => x.cle === $('inAjoutPod').value);
   // La première reliure **composable** : une reliure grisée porte une raison de ne pas
   // l'être, et le Rust la refuserait en la citant. Proposer d'office ce qu'on sait

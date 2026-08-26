@@ -118,7 +118,7 @@
     <!-- Aucun bouton ici, et c'est le fait du chantier : la composition part au
          chargement d'un manuscrit, puis se tient à jour toute seule. Aucun sélecteur de
          prestataire non plus — il est dans le pied, et il vaut pour toute la fenêtre :
-         on compose pour le destinataire visé. -->
+         on compose pour le livrable visé. -->
     <div class="bloc">
       <h2>Intérieur</h2>
       <label><span>Police</span><select id="inPoliceInterieur"></select></label>
@@ -291,8 +291,8 @@
 
   <section id="etapeLivraison" class="etape" role="tabpanel" hidden>
     <div class="bloc">
-      <h2>Destinataires</h2>
-      <p class="note">Chaque destinataire compose son propre intérieur, donc sa propre
+      <h2>Livrables</h2>
+      <p class="note">Chaque livrable compose son propre intérieur, donc sa propre
         pagination, donc son propre dos et sa propre planche. Les fichiers sont écrits à côté
         du <code>.ozalid</code>, dans un répertoire par prestataire.</p>
       <!-- Ce que le démarrage n'a pas pu lire dans <code>pods/</code>. Au-dessus de la
@@ -308,9 +308,9 @@
              marges chez deux POD. -->
         <select id="inAjoutPod" aria-label="Imprimeur à ajouter"></select>
         <select id="inAjoutFormat" aria-label="Format du livrable à ajouter"></select>
-        <button id="btAjouterDestinataire" type="button">Ajouter</button>
+        <button id="btAjouterLivrable" type="button">Ajouter</button>
       </div>
-      <div id="destinataires" class="destinataires"></div>
+      <div id="livrables" class="livrables"></div>
       <div class="ligne">
         <button id="btPackager" type="button">Générer les packages</button>
         <span id="etatPackages" class="etat"></span>
@@ -324,7 +324,7 @@
         tous les chapitres, en PDF et en EPUB. Le PDF est le livre sans son imposition —
         marges symétriques, pas de page blanche de parité. Les fichiers sont écrits dans
         <code>ebook/</code>, à côté du <code>.ozalid</code>. Le format vient du
-        destinataire visé, en bas de la fenêtre.</p>
+        livrable visé, en bas de la fenêtre.</p>
       <div class="ligne">
         <button id="btEbooks" type="button">Générer les ebooks</button>
         <span id="etatEbooks" class="etat"></span>
@@ -342,7 +342,7 @@
     <div class="bande dedicataires">
       <h2>Dédicataires</h2>
       <div class="ligne">
-        <!-- Même parti que le select d'ajout d'un destinataire : posé contre son bouton,
+        <!-- Même parti que le select d'ajout d'un livrable : posé contre son bouton,
              il se lit comme le geste d'ajout, et l'`aria-label` le dit à qui ne le voit
              pas. -->
         <input type="text" id="inDedicataire" placeholder="à qui ?"
@@ -365,7 +365,7 @@
       <p class="note" id="etatPolice"></p>
     </div>
 
-    <!-- Le rail : toutes les pages du destinataire visé. Cliquer une vignette déplace
+    <!-- Le rail : toutes les pages du livrable visé. Cliquer une vignette déplace
          l'envoi sur cette page — c'est le seul moyen d'en changer, et c'est pourquoi il
          n'y a pas de champ « page ». -->
     <div class="bande rail">
@@ -485,7 +485,7 @@
 </main>
 
 <!-- Le pointeur : pour qui l'on compose, et sous quel format on regarde. Il est ici
-     parce que c'est vrai partout — on change de destinataire sans quitter la Couverture
+     parce que c'est vrai partout — on change de livrable sans quitter la Couverture
      qu'on est en train de régler. -->
 <!-- La légende de ce que la dernière composition a mesuré. Elle n'est ni un compte rendu
      de travail long — personne n'a cliqué —, ni un refus de saisie : c'est la troisième
@@ -494,7 +494,7 @@
      Un élément par mention plutôt qu'un seul texte : le lien réclame un enfant, et un
      élément qui mêlerait texte et enfants ne se lirait plus par `textContent`. -->
 <footer id="pied">
-  <label id="visee"><span>Vu pour</span><select id="inDestinataire"></select></label>
+  <label id="visee"><span>Vu pour</span><select id="inLivrable"></select></label>
   <p id="piedMesure"></p>
   <p id="piedDos"></p>
   <p id="piedInterieur"></p>

@@ -108,12 +108,12 @@ const souris = (x, y) => ({
 const PLACE_DEFAUT = { page: 3, x: 0.5, y: 0.8, taille: 0.6, angle: 0 };
 
 /**
- * Le Rust de façade. Il tient la liste des destinataires pour de vrai : depuis le lot 3,
+ * Le Rust de façade. Il tient la liste des livrables pour de vrai : depuis le lot 3,
  * le prestataire visé vit dans le projet, et un faux qui rendrait toujours le même
  * projet ne montrerait jamais les gestes qui le déplacent.
  */
 function atelier({
-  recents = [], sur = {}, providers = [LULU], destinataires, courant,
+  recents = [], sur = {}, providers = [LULU], livrables, courant,
   dejaCompose = false,
   acces = { url: '', modele: '', cle_posee: false }, composition,
 } = {}) {
@@ -121,12 +121,12 @@ function atelier({
   // Le gabarit de départ vit dans les préférences de la machine, pas dans le projet :
   // le faux le tient donc à part, comme le Rust le tient hors du `.ozalid`.
   let gabaritDefaut = GABARIT_MAISON;
-  const liste = (destinataires ?? [dest(providers[0])]).map((d) => ({ ...d }));
+  const liste = (livrables ?? [dest(providers[0])]).map((d) => ({ ...d }));
   let livraison = {
     livrables: liste, courant: courant ?? liste[0].cle, deja_compose: dejaCompose,
   };
   // Les règles du Rust, modélisées ici parce que le front les lit désormais dans le
-  // projet au lieu de les tenir lui-même : une mesure entre chez le destinataire pour
+  // projet au lieu de les tenir lui-même : une mesure entre chez le livrable pour
   // qui elle a été faite, et tout ce qui pagine les efface toutes.
   const oublier = () => {
     livraison = {
@@ -134,7 +134,7 @@ function atelier({
       livrables: livraison.livrables.map(({ compose, ...d }) => d),
     };
   };
-  // Les envois sont tenus pour de vrai, comme les destinataires : depuis que la main
+  // Les envois sont tenus pour de vrai, comme les livrables : depuis que la main
   // appartient à l'exemplaire, un faux qui rendrait toujours la même liste ne montrerait
   // jamais qu'un envoi neuf hérite du précédent.
   let envois = sur.envois ?? { gabarit: '', liste: [] };
@@ -715,7 +715,7 @@ const COMPOSITION = {
 const attendreComposition = () => new Promise((r) => setTimeout(r, 700));
 
 /** Ce que le pied donne à lire : le livrable visé, puis l'état de son dos. */
-const pied = (els) => `${els.get('inDestinataire').value} ${els.get('piedDos').textContent}`.trim();
+const pied = (els) => `${els.get('inLivrable').value} ${els.get('piedDos').textContent}`.trim();
 // Le témoin du dos périmé : il a quitté l'onglet Intérieur pour le pied, qui portait
 // déjà le dos. Le texte et le rouge sont deux affirmations distinctes — l'un dit ce
 // qu'on lit, l'autre qu'on le remarque sans le chercher.
@@ -729,7 +729,7 @@ test('le pied nomme le prestataire et dit le dos non composé', async () => {
   assert.equal(els.get('visee').hidden, false);
   // Le libellé dit le papier, et la reliure seulement là où le POD en offre plusieurs.
   // Lulu n'en a qu'une : la nommer n'y distinguerait rien et alourdirait la lecture.
-  assert.deepEqual(els.get('inDestinataire').textes('option'),
+  assert.deepEqual(els.get('inLivrable').textes('option'),
     ['Lulu — poche 108 × 175 — Papier standard']);
   assert.equal(pied(els), 'lulu-108x175-broche-standard · dos non composé');
 });
@@ -774,7 +774,7 @@ test('fermer le projet efface le pied', async () => {
 
   assert.equal(els.get('visee').hidden, true);
   assert.equal(els.get('piedDos').textContent, '');
-  assert.equal(els.get('inDestinataire').children.length, 0);
+  assert.equal(els.get('inLivrable').children.length, 0);
 });
 
 const KDP = {
@@ -795,14 +795,14 @@ const COOLLIBRI = {
 
 /**
  * Un atelier qui compose, pour partir d'un pied qui porte un dos. Tous les prestataires
- * de la liste y sont destinataires : c'est ce qui rend le pointeur déplaçable.
+ * de la liste y sont livrables : c'est ce qui rend le pointeur déplaçable.
  */
 function atelierCompose(liste, composition = COMPOSITION) {
-  return atelier({ providers: liste, destinataires: liste.map(dest), composition }).invoke;
+  return atelier({ providers: liste, livrables: liste.map(dest), composition }).invoke;
 }
 
 /**
- * Les deux causes que le pied porte lui-même : le destinataire qu'il vise, et le papier
+ * Les deux causes que le pied porte lui-même : le livrable qu'il vise, et le papier
  * qui périme le dos sans rien changer d'autre à l'écran. Un pied qui ne repart pas sur
  * ces gestes-là dit un dos qui vaut pour un autre livre que celui qu'on regarde.
  *
@@ -811,14 +811,14 @@ function atelierCompose(liste, composition = COMPOSITION) {
  * jamais composé et un livre dont la mesure vient d'être périmée ne réclament pas la
  * même chose.
  */
-test('viser un autre destinataire renomme le pied et lui retire le dos', async () => {
+test('viser un autre livrable renomme le pied et lui retire le dos', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
   assert.equal(pied(els), 'lulu-108x175-broche-standard · dos 16,5 mm');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
 
   assert.equal(pied(els), 'kdp-6x9-broche-creme · dos périmé');
 });
@@ -840,8 +840,8 @@ test('changer de papier garde le dos et fait suivre le pointeur', async () => {
   await faireComposer(els);
   assert.equal(pied(els), 'kdp-6x9-broche-creme · dos 16,5 mm');
 
-  els.get('dest-papier-kdp-6x9-broche-creme').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9-broche-creme').declenche('change');
+  els.get('liv-papier-kdp-6x9-broche-creme').value = 'blanc';
+  await els.get('liv-papier-kdp-6x9-broche-creme').declenche('change');
 
   assert.equal(pied(els), 'kdp-6x9-broche-blanc · dos 16,5 mm');
 });
@@ -998,8 +998,8 @@ test('un dos périmé par un changement de gabarit allume le témoin du pied', a
   await faireComposer(els);
   assert.equal(piedAlerte(els), false, 'un dos frais ne périme rien');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
 
   assert.equal(piedAlerte(els), true);
 });
@@ -1013,8 +1013,8 @@ test('recomposer éteint le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
   assert.equal(piedAlerte(els), true, 'le dos devait être périmé avant');
 
   await faireComposer(els);
@@ -1061,8 +1061,8 @@ test('un dos jamais composé n\'allume pas le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
 
   assert.equal(pied(els), 'kdp-6x9-broche-creme · dos non composé');
   assert.equal(piedAlerte(els), false);
@@ -1079,8 +1079,8 @@ test('changer de papier n\'allume pas le témoin du pied', async () => {
   await faireComposer(els);
   assert.equal(piedAlerte(els), false);
 
-  els.get('dest-papier-kdp-6x9-broche-creme').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9-broche-creme').declenche('change');
+  els.get('liv-papier-kdp-6x9-broche-creme').value = 'blanc';
+  await els.get('liv-papier-kdp-6x9-broche-creme').declenche('change');
 
   assert.equal(piedAlerte(els), false);
 });
@@ -1547,7 +1547,7 @@ test('recomposer refait le rail', async () => {
 });
 
 /**
- * Le pied vit sous l'étape : on change de destinataire **sans la quitter**, et c'est
+ * Le pied vit sous l'étape : on change de livrable **sans la quitter**, et c'est
  * le seul chemin qui change la pagination pendant qu'on la regarde.
  *
  * Oublier les vignettes ne suffit pas alors : le cache se vide, mais celles d'avant
@@ -1555,10 +1555,10 @@ test('recomposer refait le rail', async () => {
  * page 264 d'un intérieur qui n'en fait plus que 190 —, et seul le refus à la
  * génération le dirait, une fois le mot écrit.
  */
-test('changer de destinataire au pied refait le rail sans quitter l\'étape', async () => {
+test('changer de livrable au pied refait le rail sans quitter l\'étape', async () => {
   const a = atelier({
     providers: [LULU, KDP],
-    destinataires: [LULU, KDP].map(dest),
+    livrables: [LULU, KDP].map(dest),
     composition: { pages: 100, gouttiere: 20, blanche: false, dos: 7 },
     sur: {
       envois: {
@@ -1574,24 +1574,24 @@ test('changer de destinataire au pied refait le rail sans quitter l\'étape', as
   const avant = a.appels.filter(([c]) => c === 'envoi_vignettes').length;
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
   await new Promise((r) => setImmediate(r));
 
   assert.ok(a.appels.filter(([c]) => c === 'envoi_vignettes').length > avant,
-    'le rail montre encore les pages du destinataire d\'avant');
+    'le rail montre encore les pages du livrable d\'avant');
 });
 
 /**
- * Revenir à un destinataire **déjà composé** ne recompose rien : sa mesure est là. Le
+ * Revenir à un livrable **déjà composé** ne recompose rien : sa mesure est là. Le
  * rail n'a donc aucune recomposition à laquelle s'accrocher, et pourtant il montre les
  * pages de l'autre — deux paginations n'ont ni le même nombre de pages ni la même
  * gouttière. C'est le changement de visée qui périme les vignettes, pas la composition.
  */
-test('revenir à un destinataire déjà composé refait aussi le rail', async () => {
+test('revenir à un livrable déjà composé refait aussi le rail', async () => {
   const a = atelier({
     providers: [LULU, KDP],
-    destinataires: [LULU, KDP].map(dest),
+    livrables: [LULU, KDP].map(dest),
     composition: { pages: 100, gouttiere: 20, blanche: false, dos: 7 },
     sur: {
       envois: {
@@ -1604,22 +1604,22 @@ test('revenir à un destinataire déjà composé refait aussi le rail', async ()
   const { els } = await charge({ invoke: a.invoke });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
   await faireComposer(els);
   await allerAuxEnvois(els);
   const avant = a.appels.filter(([c]) => c === 'envoi_vignettes').length;
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
   // Lulu est composé : rien ne repagine, et c'est tout le sujet.
-  els.get('inDestinataire').value = 'lulu-108x175-broche-standard';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'lulu-108x175-broche-standard';
+  await els.get('inLivrable').declenche('change');
   await new Promise((r) => setImmediate(r));
 
   assert.equal(a.appels.filter(([c]) => c === 'composer').length, 2,
     'le décor a bougé : ce retour a recomposé, il ne prouve plus rien');
   assert.ok(a.appels.filter(([c]) => c === 'envoi_vignettes').length > avant,
-    'le rail garde les pages de l\'autre destinataire');
+    'le rail garde les pages de l\'autre livrable');
 });
 
 /**
@@ -2029,7 +2029,7 @@ test('un seuil se commet au relâchement, pas à chaque cran', async () => {
 /**
  * Sans fond teinté, le réglage du détourage se ferait à l'aveugle : un fond résiduel
  * gris pâle ne se distingue pas du blanc de l'écran, et c'est précisément ce qu'on
- * cherche à voir. La teinte suit le papier du destinataire visé — c'est lui qu'on tire,
+ * cherche à voir. La teinte suit le papier du livrable visé — c'est lui qu'on tire,
  * et changer de papier doit changer ce que le canevas montre.
  */
 test('le canevas prend la couleur du papier visé', async () => {
@@ -2052,7 +2052,7 @@ test('le canevas prend la couleur du papier visé', async () => {
   // disjointes aujourd'hui, mais deux sens pour un nom se croisent le jour où l'un est
   // posé plus haut.
   assert.equal(els.get('canevas').style.getPropertyValue('--papier-canevas'), '#f7f0e0',
-    'le canevas ne prend pas le crème du destinataire visé');
+    'le canevas ne prend pas le crème du livrable visé');
 });
 
 /**

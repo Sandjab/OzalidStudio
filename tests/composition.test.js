@@ -163,7 +163,7 @@ const MESURE = { pages: 262, gouttiere: 25, blanche: true, dos: 16.513 };
  * Ce que `composer` rend.
  *
  * Les chiffres du dessus sont une **copie de lecture** ; ce qui compte est le `projet`,
- * où la mesure est rangée chez son destinataire. C'est de là que le pied la lit — et
+ * où la mesure est rangée chez son livrable. C'est de là que le pied la lit — et
  * c'est ce qui la fait survivre à la réouverture du livre, là où un panneau rempli
  * depuis le retour de commande se serait tu.
  *
@@ -192,7 +192,7 @@ const composition = (p = LULU, m = {}, pdf = PDF) => {
 
 const COMPOSITION = composition();
 
-/* ---------- destinataires ---------- */
+/* ---------- livrables ---------- */
 
 /** Un projet ouvert, visé sur le prestataire donné. */
 async function ouvre(p, sur = {}) {
@@ -207,20 +207,20 @@ async function ouvre(p, sur = {}) {
 
 test('le choix du papier n\'est offert que quand il y en a plusieurs', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche-standard').disabled, true);
-  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche-standard').children.length, 1);
+  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').disabled, true);
+  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').children.length, 1);
 
   const { els: chezKdp } = await ouvre(KDP);
-  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9-broche-creme').disabled, false);
+  assert.strictEqual(chezKdp.get('liv-papier-kdp-6x9-broche-creme').disabled, false);
   assert.deepStrictEqual(
-    [...chezKdp.get('dest-papier-kdp-6x9-broche-creme').children].map((o) => o.value),
+    [...chezKdp.get('liv-papier-kdp-6x9-broche-creme').children].map((o) => o.value),
     ['creme', 'blanc']
   );
 });
 
 test('un prestataire à gabarit annonce que le fond perdu se relève', async () => {
   const { els } = await ouvre(COOLLIBRI);
-  const note = els.get('destinataires').textContent;
+  const note = els.get('livrables').textContent;
   assert.match(note, /148,0 × 210,0 mm/);
   assert.match(note, /relever sur le gabarit/);
   assert.doesNotMatch(note, /fond perdu \d/, 'aucun chiffre de fond perdu inventé');
@@ -232,10 +232,10 @@ test('un prestataire à gabarit annonce que le fond perdu se relève', async () 
  */
 test('le pied nomme le livrable visé et l\'état de son dos', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('inDestinataire').value, 'lulu-108x175-broche-standard');
+  assert.strictEqual(els.get('inLivrable').value, 'lulu-108x175-broche-standard');
   // Le libellé dit le papier, et la reliure seulement là où le POD en offre plusieurs.
   // Lulu n'en a qu'une : la nommer n'y distinguerait rien et alourdirait la lecture.
-  assert.deepStrictEqual(els.get('inDestinataire').textes('option'),
+  assert.deepStrictEqual(els.get('inLivrable').textes('option'),
     ['Lulu — poche 108 × 175 — Papier standard']);
   assert.match(els.get('piedDos').textContent, /dos non composé/);
 });

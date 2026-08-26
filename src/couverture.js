@@ -791,7 +791,7 @@ async function rendreApercu() {
   }
   $('etatApercu').textContent = 'composition de l\'aperçu…';
   try {
-    // Ni gabarit ni fond perdu à passer : ils viennent du destinataire visé, que le
+    // Ni gabarit ni fond perdu à passer : ils viennent du livrable visé, que le
     // Rust lit dans le projet.
     poserApercu(await invoke('couverture_apercu', { face, dosMm: dosCourant() }));
     $('etatApercu').textContent = '';
