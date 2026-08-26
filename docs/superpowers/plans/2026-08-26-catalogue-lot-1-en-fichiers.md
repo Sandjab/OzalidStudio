@@ -1006,8 +1006,12 @@ Les deux signatures de `commands.rs` — `couple` (`:467`) et `papier` (`:1890`)
 
 Ce que le compilateur signalera, et qui est attendu :
 - `pr.cle` et `pr.libelle` sont des `String` et non plus des `&'static str`. Les
-  `cle: p.cle.into()` de `ProviderVue` continuent de compiler ; un `pr.cle` passé là où un
-  `&str` est attendu devient `&pr.cle`.
+  `cle: p.cle.into()` de `ProviderVue` **ne compilent pas**, contrairement à ce que cette
+  rédaction a d'abord écrit : `String` n'étant pas `Copy`, `into()` déplacerait un champ
+  derrière une référence partagée (E0507). Ils passent en `.clone()` — ce qui était de
+  toute façon le coût réel, `into()` de `String` vers `String` n'étant qu'un déplacement
+  déguisé. Un `pr.cle` passé là où un `&str` est attendu devient `&pr.cle`, et
+  `racine.join(pr.cle)` devient `racine.join(&pr.cle)`.
 - `pr.gouttieres[0].2` (`interieur.rs:105`) et `pr.papiers` continuent de compiler,
   `Vec<T>` s'indexant et s'itérant comme `&[T]`.
 - `PapierVue`, dans `commands.rs`, lit `pa.libelle` : le catalogue dit `nom`. La ligne
