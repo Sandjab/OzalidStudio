@@ -1115,6 +1115,49 @@ git commit -m "La ligne se règle en trois axes, et la reliure grisée dit pourq
 
 ---
 
+### Tâche 4bis : La table plate porte toutes les reliures composables
+
+*Tâche insérée après coup, le 26/08, sur une trouvaille de la revue de la tâche 4 —
+arbitrée par l'utilisateur : on corrige la cause.*
+
+**Fichiers :**
+- Modifier : `src-tauri/src/catalogue.rs` — `aplatit` et son test
+- Modifier : `tests/packages.test.js` — le commentaire des deux constantes `TBE_*`
+
+**Le défaut.** `aplatit` n'émet qu'une entrée par couple POD × format, construite sur la
+**première** reliure composable (via `pod.fabrication_defaut()`). Tant que la reliure d'un
+livrable était figée, aucun livrable ne pouvait désigner un gabarit absent de cette table.
+La tâche 2 a rendu la reliure réglable : chez un POD à **deux** reliures composables,
+régler la reliure produit un `cle_gabarit` que la table plate ne contient pas, et le front
+dégrade **en silence** — ligne intitulée par sa clé brute, note de format disparue, champ
+« Fond perdu » jamais proposé (le test `p?.fond_perdu === null` est faux quand `p` est
+absent), pied et sélecteur « Vu pour » escamotés.
+
+**Ce qui le rendait invisible.** Aucun POD fourni n'a deux reliures composables — BoD en a
+deux, dont une non outillée sur laquelle aucun livrable ne peut vivre. Le cas demande un
+`<config>/pods/*.toml` déposé. Et le test qui aurait dû l'attraper l'endormait : il servait
+une table plate à deux entrées pour un même POD × format, que `aplatit` ne savait pas
+produire.
+
+**La correction.** Une entrée par POD × format × reliure composable, chacune portant la
+pagination de **sa** reliure — ce que la spec dit déjà : la pagination vit sur la reliure
+« précisément parce que TheBookEdition accepte 40 à 750 pages en dos carré collé et 24 à
+300 en rigide, au même format ». Les reliures bouclent **à l'extérieur** des formats, pour
+que la première entrée reste (première reliure composable, premier format) et que
+l'invariant de `Pod::fabrication_defaut` tienne — un livre neuf et la première ligne de la
+table doivent désigner le même livrable.
+
+Le `libelle` ne gagne **pas** la reliure : elle se lit dans son propre contrôle sur la
+ligne (décision 5). C'est le libellé du **livrable** qui la porte, à la tâche 6, parce
+qu'il sert le pied et les comptes rendus de package, où aucun contrôle ne se lit.
+
+**Ce qui ne doit pas bouger.** Aucun POD livré n'ayant deux reliures composables, la table
+plate est identique sur le catalogue fourni : les tests d'ancrage des quatorze livrables,
+le témoin (**98 pages, dos 7,21 mm**) et la suite JS doivent passer sans modification. Un
+écart signalerait que la correction a débordé.
+
+---
+
 ### Tâche 5 : La disposition d'une ligne à quatre contrôles
 
 **Fichiers :**

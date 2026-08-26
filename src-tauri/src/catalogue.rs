@@ -619,43 +619,63 @@ impl Provider {
     }
 }
 
-/// Aplatit une liste de POD en une entrée par couple POD × format.
+/// Aplatit une liste de POD en une entrée par triplet POD × format × reliure composable.
 ///
-/// La reliure composable du POD donne la pagination admise ; un POD qui n'en aurait
-/// aucune ne produit aucune entrée plate, faute de pouvoir dire ce qu'il accepte.
-/// Qu'elle porte cette pagination est en revanche acquis : la lecture le vérifie.
+/// Le triple produit et non le couple POD × format : c'est la reliure qui porte la
+/// pagination admise — TheBookEdition accepte 40 à 750 pages en dos carré collé et 24 à
+/// 300 en rigide, au même format —, donc elle change le gabarit d'intérieur, donc
+/// l'entrée. Depuis que la reliure se règle sur la ligne (spec § 6), une table bâtie sur
+/// la seule reliure d'office ne contiendrait pas le gabarit d'un livrable ainsi réglé, et
+/// l'écran dégraderait sans le dire.
+///
+/// Les reliures au dehors, les formats au dedans : la tête de la table reste ainsi
+/// (première reliure composable, premier format), qui est la fabrication qu'un livre neuf
+/// se donne — l'invariant que `Pod::fabrication_defaut` documente.
+///
+/// Une reliure non outillée ne produit rien : on ne peut pas annoncer un gabarit qu'on ne
+/// sait pas composer. Un POD qui n'en aurait aucune de composable ne produit donc aucune
+/// entrée — `Pod::verifie` le refuse en amont plutôt que de le laisser s'évanouir ici.
 pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
     let mut v = Vec::new();
     for pod in pods {
-        let Some(r) = pod.reliure_composable() else {
-            continue;
-        };
-        let pagination = r
-            .pages
-            .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
-        for f in &pod.formats {
-            let fabrication = Fabrication {
-                format: f.cle.clone(),
-                ..pod.fabrication_defaut().expect(
-                    "reliure composable et papier : `reliure_composable` vient d'en trouver une",
-                )
-            };
-            v.push(Provider {
-                cle: fabrication.cle_gabarit(),
-                libelle: format!("{} — {}", pod.nom, f.nom),
-                // La vue plate garde les tuples de la table historique : c'est ce qui
-                // dispense `interieur` de traduire quoi que ce soit pour les lire.
-                format: (f.mm.largeur, f.mm.hauteur),
-                marge_haut: f.marges.haut,
-                marge_bas: f.marges.bas,
-                exterieur: f.marges.exterieur,
-                gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
-                fond_perdu: f.fond_perdu.or(pod.fond_perdu),
-                pages_min: pagination.min,
-                pages_max: pagination.max,
-                papiers: pod.papiers.clone(),
-                fabrication,
-            });
+        for r in pod.reliures.iter().filter(|r| r.geometrie.is_some()) {
+            let pagination = r.pages.expect(
+                "une reliure composable porte sa pagination : `verifie_reliure` la réclame",
+            );
+            for f in &pod.formats {
+                let fabrication = Fabrication {
+                    pod: pod.cle.clone(),
+                    format: f.cle.clone(),
+                    reliure: r.cle.clone(),
+                    papier: pod
+                        .papiers
+                        .first()
+                        .expect("tout POD lu porte un papier : `Pod::verifie` le réclame")
+                        .cle
+                        .clone(),
+                };
+                v.push(Provider {
+                    cle: fabrication.cle_gabarit(),
+                    // Le libellé ne dit pas la reliure : elle se lit dans son propre
+                    // contrôle sur la ligne, et deux entrées d'un même format y portent
+                    // donc le même nom. Le libellé du **livrable**, qui sert le pied et
+                    // les comptes rendus de package, est un autre libellé.
+                    libelle: format!("{} — {}", pod.nom, f.nom),
+                    // La vue plate garde les tuples de la table historique : c'est ce qui
+                    // dispense `interieur` de traduire quoi que ce soit pour les lire.
+                    format: (f.mm.largeur, f.mm.hauteur),
+                    marge_haut: f.marges.haut,
+                    marge_bas: f.marges.bas,
+                    exterieur: f.marges.exterieur,
+                    gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
+                    fond_perdu: f.fond_perdu.or(pod.fond_perdu),
+                    // La pagination de **cette** reliure, pas celle de la première.
+                    pages_min: pagination.min,
+                    pages_max: pagination.max,
+                    papiers: pod.papiers.clone(),
+                    fabrication,
+                });
+            }
         }
     }
     v
@@ -673,7 +693,7 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
 /// parce qu'`initialiser` les pose sur deux lignes voisines.
 static PLATS: OnceLock<Vec<Provider>> = OnceLock::new();
 
-/// Tous les couples POD × format connus.
+/// Tous les gabarits d'intérieur connus : un par POD × format × reliure composable.
 pub fn providers() -> &'static [Provider] {
     PLATS.get_or_init(|| aplatit(pods()))
 }
@@ -1891,6 +1911,108 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
                     "creme-70"
                 ),
             ]
+        );
+    }
+
+    /// Deux reliures composables chez un même POD : une entrée plate **par reliure**, et
+    /// la pagination de chacune.
+    ///
+    /// C'est la reliure qui porte la pagination admise — TheBookEdition accepte 40 à 750
+    /// pages en dos carré collé et 24 à 300 en rigide, au même format —, donc c'est elle
+    /// qui décide du gabarit d'intérieur, donc de l'entrée. Une table plate bâtie sur la
+    /// seule reliure d'office ne contient pas le gabarit d'un livrable dont on a réglé la
+    /// reliure sur la ligne (spec § 6) : l'écran retombe alors sur la clé brute en guise
+    /// de libellé, n'offre plus le fond perdu et escamote son pied — en silence.
+    ///
+    /// Aucun POD fourni n'a deux reliures composables ; le cas s'obtient par un fichier
+    /// déposé sur le poste, que l'application accepte explicitement. D'où ce POD d'essai.
+    #[test]
+    fn deux_reliures_composables_donnent_une_entree_plate_chacune() {
+        // Un second format, pour que l'assertion porte sur le produit des deux axes et non
+        // sur une addition qui passerait aussi bien.
+        const A5: &str = r#"
+[[format]]
+cle = "148x210"
+nom = "A5"
+mm = { largeur = 148.0, hauteur = 210.0 }
+marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
+gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
+"#;
+        // La même géométrie que `RELIURE`, forcément : le dos carré collé est la seule
+        // que l'application compose, donc deux reliures composables la partagent — c'est
+        // leur **pagination** qui les sépare, et rien d'autre. Une clé à tiret par-dessus
+        // le marché, pour que le gabarit à quatre tirets passe la fabrique de clés.
+        //
+        // Pagination différente de celle de `RELIURE` (24–900) : c'est le cœur du test.
+        // Une implémentation qui prendrait la pagination de la première reliure passerait
+        // toutes les autres assertions.
+        const ECONOMIQUE: &str = r#"
+[[reliure]]
+cle = "broche-eco"
+nom = "Broché — tirage économique"
+geometrie = "dos-carre-colle"
+pages = { min = 40, max = 300 }
+parite = "paire"
+"#;
+        let lu = Pod::depuis_toml(&pod(&[FORMAT, A5, RELIURE, ECONOMIQUE, PAPIER])).unwrap();
+        let plats = aplatit(std::slice::from_ref(&lu));
+
+        let vue: Vec<(&str, u32, u32)> = plats
+            .iter()
+            .map(|p| (p.cle.as_str(), p.pages_min, p.pages_max))
+            .collect();
+        assert_eq!(
+            vue,
+            [
+                ("essai-135x215-broche", 24, 900),
+                ("essai-148x210-broche", 24, 900),
+                ("essai-135x215-broche-eco", 40, 300),
+                ("essai-148x210-broche-eco", 40, 300),
+            ]
+        );
+
+        // Le libellé ne dit pas la reliure, délibérément : elle se lit dans son propre
+        // contrôle sur la ligne, et deux entrées d'un même format y portent le même nom.
+        assert!(plats
+            .iter()
+            .all(|p| p.libelle == "Imprimeur d'essai — 13,5 × 21,5 cm"
+                || p.libelle == "Imprimeur d'essai — A5"));
+
+        // L'invariant que `Pod::fabrication_defaut` documente, sur le seul POD qui puisse
+        // le mettre en défaut : deux reliures composables, et la tête de la table doit
+        // porter la **première**. `Livraison::default` naît sur `fabrication_defaut()` ;
+        // une autre entrée en tête et le premier livrable d'un livre neuf ne serait plus
+        // celui que la liste propose en premier, sans que rien ne le dise.
+        assert_eq!(plats[0].fabrication, lu.fabrication_defaut().unwrap());
+    }
+
+    /// Le même invariant sur le catalogue livré, et sur un POD dont la première reliure
+    /// du fichier n'est **pas** composable : c'est « la première composable » qui fait la
+    /// tête, jamais « la première ». Aucun fichier fourni n'écrit sa non outillée en
+    /// premier — mais rien ne l'interdit à un fichier déposé, et l'ordre d'un POD est
+    /// celui de son fichier, qu'on ne réordonne nulle part.
+    #[test]
+    fn la_premiere_entree_plate_est_la_fabrication_d_office_du_premier_pod() {
+        let premier = &pods()[0];
+        assert_eq!(
+            providers()[0].fabrication,
+            premier
+                .fabrication_defaut()
+                .expect("tout POD lu porte format, papier et reliure composable"),
+        );
+
+        // Et sur un POD dont la première reliure du fichier n'est **pas** composable :
+        // c'est « la première composable » qui fait la tête, jamais « la première ».
+        const RIGIDE: &str = r#"
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "géométrie du casewrap non relevée"
+"#;
+        let lu = Pod::depuis_toml(&pod(&[FORMAT, RIGIDE, RELIURE, PAPIER])).unwrap();
+        assert_eq!(
+            aplatit(std::slice::from_ref(&lu))[0].fabrication,
+            lu.fabrication_defaut().unwrap(),
         );
     }
 

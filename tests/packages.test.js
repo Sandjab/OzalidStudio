@@ -532,6 +532,12 @@ const DEUX_RELIURES = {
   finitions: [],
   papiers: [{ cle: 'munken-80', libelle: 'Munken 80 g', teinte: '#f7f0e0', dos_publie: true }],
 };
+// Les deux entrées plates ci-dessous sont exactement ce qu'`aplatit` rend pour ce POD :
+// une par POD × format × reliure composable, même libellé — le libellé de ligne ne dit
+// pas la reliure, qui se lit dans son propre contrôle. Tant qu'`aplatit` ne produisait
+// qu'une entrée par POD × format, cette fixture décrivait un catalogue impossible, et
+// c'est ce qui masquait le trou : régler la reliure désignait un gabarit absent de la
+// table, et l'écran dégradait en silence.
 const TBE_BROCHE = {
   cle: 'tbe-148x210-broche', pod: 'tbe', format: '148x210', reliure: 'broche',
   libelle: 'TheBookEdition — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
