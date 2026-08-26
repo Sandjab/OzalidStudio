@@ -24,7 +24,7 @@ use serde::Deserialize;
 
 /// Épaisseur du dos. Trois formes, parce que les prestataires en publient trois.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
-#[serde(tag = "forme", rename_all = "lowercase")]
+#[serde(tag = "forme", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Dos {
     /// Lulu : `pages / par + plus` mm. Gardée sous forme de division, comme le guide
     /// l'écrit — la convertir en facteur décimal introduirait une dérive.
@@ -208,6 +208,25 @@ fn fini_non_negatif(v: f64) -> bool {
     v.is_finite() && v >= 0.0
 }
 
+/// Une clé vide ne se choisit pas dans l'interface et ne se retrouve pas dans un
+/// `.ozalid` : elle ne désigne rien.
+fn cle_non_vide(pod: &str, quoi: &str, cle: &str) -> Result<(), String> {
+    if cle.trim().is_empty() {
+        return Err(format!("{pod} : {quoi} sans clé."));
+    }
+    Ok(())
+}
+
+/// La clé héritée nomme un répertoire de package : elle doit être un nom de fichier et
+/// rien d'autre. `../../ailleurs` s'écrit sans peine dans un TOML, et `package` en ferait
+/// un chemin.
+fn est_un_nom(cle: &str) -> bool {
+    !cle.is_empty()
+        && cle
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 /// Refuse deux entrées de même clé : le `find` des appelants en prendrait une des deux
 /// sans que rien ne dise laquelle.
 fn sans_doublon<'a>(
@@ -243,6 +262,37 @@ impl Pod {
                     "{} : aucun bloc [[{quoi}]]. Choisir un livrable en suppose au moins \
                      un, et le premier papier fait le défaut.",
                     self.cle
+                ));
+            }
+        }
+
+        if self.cle.trim().is_empty() {
+            return Err("un POD sans clé : rien ne pourrait le désigner.".to_string());
+        }
+        for (quoi, cle) in self
+            .formats
+            .iter()
+            .map(|f| ("un format", f.cle.as_str()))
+            .chain(
+                self.reliures
+                    .iter()
+                    .map(|r| ("une reliure", r.cle.as_str())),
+            )
+            .chain(
+                self.finitions
+                    .iter()
+                    .map(|f| ("une finition", f.cle.as_str())),
+            )
+            .chain(self.papiers.iter().map(|p| ("un papier", p.cle.as_str())))
+        {
+            cle_non_vide(&self.cle, quoi, cle)?;
+        }
+        for f in &self.formats {
+            if !est_un_nom(&f.cle_heritee) {
+                return Err(format!(
+                    "{} / {} : clé héritée « {} ». Elle nomme un répertoire de package : \
+                     minuscules, chiffres et tirets, rien d'autre.",
+                    self.cle, f.cle, f.cle_heritee
                 ));
             }
         }
@@ -294,6 +344,10 @@ impl Pod {
 
     fn verifie_format(&self, f: &Format) -> Result<(), String> {
         let ou = format!("{} / {}", self.cle, f.cle);
+
+        // Chaque valeur d'abord, les relations entre elles ensuite : une gouttière
+        // infinie rend « marges plus larges que la page » vrai, et le message
+        // désignerait alors le mauvais coupable.
         if !fini_positif(f.mm.largeur) || !fini_positif(f.mm.hauteur) {
             return Err(format!(
                 "{ou} : format de rognage impossible ({} × {} mm).",
@@ -309,6 +363,17 @@ impl Pod {
                 return Err(format!("{ou} : marge {bord} impossible ({v} mm)."));
             }
         }
+        if let Some(fp) = f.fond_perdu {
+            if !fini_non_negatif(fp) {
+                return Err(format!("{ou} : fond perdu impossible ({fp} mm)."));
+            }
+        }
+        if f.gouttieres.is_empty() {
+            return Err(format!(
+                "{ou} : aucune tranche de gouttière. Un format qui n'en porte aucune ne \
+                 compose aucune pagination."
+            ));
+        }
         for t in &f.gouttieres {
             if t.de > t.a {
                 return Err(format!(
@@ -316,13 +381,44 @@ impl Pod {
                     t.de, t.a
                 ));
             }
+            if t.de == 0 {
+                return Err(format!(
+                    "{ou} : tranche de gouttière à partir de zéro page. Un livre de zéro \
+                     page n'existe pas plus qu'un format de zéro millimètre."
+                ));
+            }
             if !fini_non_negatif(t.mm) {
                 return Err(format!("{ou} : gouttière impossible ({} mm).", t.mm));
             }
         }
-        if let Some(fp) = f.fond_perdu {
-            if !fini_non_negatif(fp) {
-                return Err(format!("{ou} : fond perdu impossible ({fp} mm)."));
+
+        // Les relations. Des marges qui débordent la page laissent un bloc de texte nul
+        // ou négatif, et l'intérieur composerait sans broncher une page fausse.
+        if f.marges.haut + f.marges.bas >= f.mm.hauteur {
+            return Err(format!(
+                "{ou} : marges plus hautes que la page ({} + {} ≥ {} mm).",
+                f.marges.haut, f.marges.bas, f.mm.hauteur
+            ));
+        }
+        for (rang, t) in f.gouttieres.iter().enumerate() {
+            // Deux tranches qui se recouvrent, et l'appelant prend la première qui
+            // correspond : l'autre gouttière, relevée au guide, meurt sans un mot.
+            for suivante in &f.gouttieres[rang + 1..] {
+                if t.de <= suivante.a && suivante.de <= t.a {
+                    return Err(format!(
+                        "{ou} : deux tranches de gouttière se chevauchent ({}–{} et \
+                         {}–{} pages).",
+                        t.de, t.a, suivante.de, suivante.a
+                    ));
+                }
+            }
+            // La gouttière vit sur la tranche : la largeur utile s'y contrôle aussi.
+            if f.marges.exterieur + t.mm >= f.mm.largeur {
+                return Err(format!(
+                    "{ou} : marges plus larges que la page ({} + {} ≥ {} mm) sur la \
+                     tranche {}–{} pages.",
+                    f.marges.exterieur, t.mm, f.mm.largeur, t.de, t.a
+                ));
             }
         }
         Ok(())
@@ -348,6 +444,14 @@ impl Pod {
                      de trancher."
                 ))
             }
+            (None, Some(_)) if r.pages.is_some() || r.parite.is_some() => {
+                return Err(format!(
+                    "{ou} : une reliure non outillée porte une pagination ou une parité \
+                     qu'on n'appliquera pas — on contrôlerait une donnée dont on a décidé \
+                     qu'elle ne sert pas. Ce qu'on garde pour mémoire s'écrit en \
+                     commentaire TOML."
+                ))
+            }
             (Some(_), None) if r.pages.is_none() || r.parite.is_none() => {
                 return Err(format!(
                     "{ou} : une reliure outillée doit porter sa pagination admise et sa \
@@ -357,6 +461,12 @@ impl Pod {
             _ => {}
         }
         if let Some(p) = r.pages {
+            if p.min == 0 {
+                return Err(format!(
+                    "{ou} : pagination admise à partir de zéro page. Un livre de zéro \
+                     page n'existe pas."
+                ));
+            }
             if p.min > p.max {
                 return Err(format!(
                     "{ou} : pagination admise à l'envers ({}–{} pages).",
@@ -369,6 +479,13 @@ impl Pod {
 
     fn verifie_papier(&self, p: &Papier) -> Result<(), String> {
         let ou = format!("{} / {}", self.cle, p.cle);
+        // Non vide, et rien de plus : le doc dit « notation CSS », et restreindre à
+        // `#rrggbb` rétrécirait un contrat écrit.
+        if p.teinte.trim().is_empty() {
+            return Err(format!(
+                "{ou} : teinte vide. Le canevas la prendrait pour une couleur."
+            ));
+        }
         match p.dos {
             Dos::Divise { par, plus } | Dos::Multiplie { par, plus } => {
                 if !fini_positif(par) {
@@ -390,7 +507,7 @@ mod tests {
 
     // Le socle d'un POD valide. Les tests de refus n'écrivent que le bloc qu'ils mettent
     // en cause : sans ce socle ils échoueraient sur une liste vide, et leur assertion sur
-    // la clé fautive ne dirait plus rien de ce qu'ils testent.
+    // le refus attendu ne dirait plus rien de ce qu'ils testent.
     const FORMAT: &str = r#"
 [[format]]
 cle = "135x215"
@@ -408,6 +525,12 @@ nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
 pages = { min = 24, max = 900 }
 parite = "paire"
+"#;
+
+    const FINITION: &str = r#"
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
 "#;
 
     const PAPIER: &str = r##"
@@ -430,6 +553,12 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
     /// Remplace un morceau d'un bloc du socle, en refusant de rendre le bloc intact : un
     /// gabarit qu'on retoucherait sans corriger le test le viderait de sa substance sans
     /// le faire échouer.
+    ///
+    /// Sa limite, pour qui s'en servira sur un cas plus retors : il garantit que l'aiguille
+    /// a été trouvée, pas que le TOML obtenu dit ce qu'on croit. Un `avant` trop court
+    /// frappe ailleurs qu'on ne pense, et un `apres` mal formé fait échouer le test sur une
+    /// erreur de syntaxe qui ressemble à un refus. D'où l'assertion sur le message attendu,
+    /// et non sur le seul fait qu'il y ait erreur.
     fn sauf(bloc: &str, avant: &str, apres: &str) -> String {
         let modifie = bloc.replace(avant, apres);
         assert_ne!(modifie, bloc, "« {avant} » ne figure plus dans le gabarit");
@@ -449,7 +578,7 @@ fond_perdu = 5.0
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-cle_heritee = "essai"
+cle_heritee = "essai-135x215"
 mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
@@ -497,6 +626,10 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
             pod.reliures[0].pages,
             Some(Pagination { min: 24, max: 900 })
         );
+        // La finition ne porte rien d'autre que son nom, et c'est ce nom que l'interface
+        // affiche : rien d'autre ne le lirait si ce test ne le lisait pas.
+        assert_eq!(pod.finitions[0].cle, "mat");
+        assert_eq!(pod.finitions[0].nom, "Pelliculage mat");
         assert_eq!(pod.papiers[0].teinte, "#f7f0e0");
         // Comparaison à la tolérance : 0,0675 n'a pas de représentation binaire
         // exacte, et `280 × 0,0675 + 0,6` ne vaut pas `19.5` au bit près.
@@ -537,6 +670,7 @@ nom = "Couverture rigide"
 "#;
         let e = Pod::depuis_toml(&pod(&[FORMAT, rigide, PAPIER])).unwrap_err();
         assert!(e.contains("rigide"), "{e}");
+        assert!(e.contains("ni géométrie ni raison"), "{e}");
     }
 
     /// Une reliure qui porte à la fois sa géométrie et sa raison de ne pas en avoir dit
@@ -547,6 +681,7 @@ nom = "Couverture rigide"
         let r = format!("{RELIURE}non_outille = \"géométrie non relevée\"\n");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
         assert!(e.contains("broche"), "{e}");
+        assert!(e.contains("une raison de ne pas en avoir"), "{e}");
     }
 
     /// Le chemin qu'aucun autre test ne parcourt : une reliure non outillée est **lue**,
@@ -566,6 +701,27 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
         assert!(raison.contains("casewrap"), "{raison}");
     }
 
+    /// Mais elle ne porte ni pagination ni parité : elles seraient contrôlées puis
+    /// ignorées, ce qui est le comble — on vérifierait une donnée dont on a décidé
+    /// qu'elle ne sert pas. Ce qu'on garde pour mémoire s'écrit en commentaire TOML.
+    #[test]
+    fn une_reliure_non_outillee_ne_porte_ni_pagination_ni_parite() {
+        for ligne in ["pages = { min = 24, max = 300 }", "parite = \"paire\""] {
+            let rigide = format!(
+                r#"
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "géométrie du casewrap non relevée"
+{ligne}
+"#
+            );
+            let e = Pod::depuis_toml(&pod(&[FORMAT, &rigide, PAPIER])).unwrap_err();
+            assert!(e.contains("rigide"), "{ligne} : {e}");
+            assert!(e.contains("qu'on n'appliquera pas"), "{ligne} : {e}");
+        }
+    }
+
     /// Une reliure outillée sans pagination admise laisserait `package` accepter
     /// n'importe quel compte de pages : le refus de pagination est un contrôle, pas une
     /// décoration.
@@ -574,6 +730,7 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
         let r = sauf(RELIURE, "pages = { min = 24, max = 900 }\n", "");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
         assert!(e.contains("broche"), "{e}");
+        assert!(e.contains("pagination admise et sa parité"), "{e}");
     }
 
     /// Même chose pour la parité : sans elle, `interieur` ne sait pas s'il doit ajouter
@@ -583,6 +740,7 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
         let r = sauf(RELIURE, "parite = \"paire\"\n", "");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
         assert!(e.contains("broche"), "{e}");
+        assert!(e.contains("pagination admise et sa parité"), "{e}");
     }
 
     /// Un facteur de dos non fini, nul ou négatif produit un dos NaN, infini ou rentrant,
@@ -595,32 +753,89 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
             let p = sauf(PAPIER, "par = 0.0675", &format!("par = {par}"));
             let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
             assert!(e.contains("creme-90"), "par = {par} : {e}");
+            assert!(e.contains("facteur de dos impossible"), "par = {par} : {e}");
         }
         for plus in ["nan", "-1.0"] {
             let p = sauf(PAPIER, "plus = 0.6", &format!("plus = {plus}"));
             let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
             assert!(e.contains("creme-90"), "plus = {plus} : {e}");
+            assert!(
+                e.contains("constante de dos impossible"),
+                "plus = {plus} : {e}"
+            );
         }
+    }
+
+    /// Une teinte vide ne peint rien, et le canevas la prendrait pour une couleur. On
+    /// n'exige pas davantage : le contrat écrit dit « notation CSS », et le restreindre à
+    /// `#rrggbb` rétrécirait ce qu'on a promis.
+    #[test]
+    fn une_teinte_vide_est_refusee() {
+        let p = sauf(PAPIER, "teinte = \"#f7f0e0\"", "teinte = \"\"");
+        let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
+        assert!(e.contains("creme-90"), "{e}");
+        assert!(e.contains("teinte vide"), "{e}");
     }
 
     /// Même refus pour la géométrie de la page : un format de rognage nul ou non fini, une
     /// marge négative, un fond perdu impossible traversent tout aussi loin — jusqu'au
     /// gabarit de l'intérieur, où ils ne provoquent pas une erreur mais une page fausse.
+    /// Chaque bord est éprouvé : une boucle qui n'en contrôlerait qu'un passerait.
     #[test]
     fn une_dimension_ou_une_marge_impossible_est_refusee() {
-        for (avant, apres) in [
-            ("largeur = 135.0", "largeur = 0.0"),
-            ("hauteur = 215.0", "hauteur = nan"),
-            ("bas = 28.0", "bas = -28.0"),
-            ("mm = 20.0", "mm = inf"),
+        for (avant, apres, attendu) in [
+            (
+                "largeur = 135.0",
+                "largeur = 0.0",
+                "format de rognage impossible",
+            ),
+            (
+                "hauteur = 215.0",
+                "hauteur = nan",
+                "format de rognage impossible",
+            ),
+            ("haut = 18.8", "haut = nan", "marge haute impossible"),
+            ("bas = 28.0", "bas = -28.0", "marge basse impossible"),
+            (
+                "exterieur = 15.0",
+                "exterieur = -1.0",
+                "marge extérieure impossible",
+            ),
+            ("mm = 20.0", "mm = inf", "gouttière impossible"),
         ] {
             let f = sauf(FORMAT, avant, apres);
             let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
-            assert!(e.contains("135x215"), "{apres} : {e}");
+            assert!(e.contains(attendu), "{apres} : {e}");
         }
+
+        // Le fond perdu s'écrit au POD et se surcharge au format : les deux se contrôlent.
         let e =
             Pod::depuis_toml(&pod(&["fond_perdu = -5.0\n", FORMAT, RELIURE, PAPIER])).unwrap_err();
-        assert!(e.contains("essai"), "{e}");
+        assert!(e.contains("fond perdu impossible"), "{e}");
+        let f = format!("{FORMAT}fond_perdu = nan\n");
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(
+            e.contains("135x215") && e.contains("fond perdu impossible"),
+            "{e}"
+        );
+    }
+
+    /// Des marges qui débordent la page laissent un bloc de texte nul ou négatif.
+    /// `interieur` ne lèvera pas d'erreur pour autant : il composera une page fausse. La
+    /// gouttière vit sur la tranche, le contrôle de largeur s'y fait donc aussi.
+    #[test]
+    fn une_marge_plus_grande_que_la_page_est_refusee() {
+        let f = sauf(FORMAT, "exterieur = 15.0", "exterieur = 500.0");
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(e.contains("plus larges que la page"), "{e}");
+
+        let f = sauf(
+            FORMAT,
+            "haut = 18.8, bas = 28.0",
+            "haut = 200.0, bas = 200.0",
+        );
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(e.contains("plus hautes que la page"), "{e}");
     }
 
     /// Une tranche dont la borne basse dépasse la haute n'admet aucune valeur : elle
@@ -630,11 +845,86 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
     fn une_tranche_a_l_envers_est_refusee() {
         let r = sauf(RELIURE, "min = 24, max = 900", "min = 900, max = 24");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
-        assert!(e.contains("broche"), "{e}");
+        assert!(e.contains("broche") && e.contains("à l'envers"), "{e}");
 
         let f = sauf(FORMAT, "de = 24, a = 900", "de = 900, a = 24");
         let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
-        assert!(e.contains("135x215"), "{e}");
+        assert!(e.contains("135x215") && e.contains("à l'envers"), "{e}");
+    }
+
+    /// Un livre de zéro page n'existe pas plus qu'un format de zéro millimètre : les
+    /// entiers ont le même plancher que les flottants, sans quoi une tranche partant de
+    /// zéro promettrait une pagination que rien ne compose.
+    #[test]
+    fn une_pagination_qui_part_de_zero_est_refusee() {
+        let r = sauf(RELIURE, "min = 24", "min = 0");
+        let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
+        assert!(e.contains("broche") && e.contains("zéro page"), "{e}");
+
+        let f = sauf(FORMAT, "de = 24", "de = 0");
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(e.contains("135x215") && e.contains("zéro page"), "{e}");
+    }
+
+    /// Deux tranches qui se chevauchent, et l'appelant prend la première qui correspond :
+    /// la seconde gouttière, relevée au guide, meurt sans un mot. C'est l'argument de
+    /// `sans_doublon`, appliqué aux tranches.
+    #[test]
+    fn deux_tranches_de_gouttiere_qui_se_chevauchent_sont_refusees() {
+        let f = sauf(
+            FORMAT,
+            "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]",
+            "gouttieres = [{ de = 24, a = 900, mm = 20.0 }, { de = 100, a = 200, mm = 15.0 }]",
+        );
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(e.contains("135x215") && e.contains("se chevauchent"), "{e}");
+    }
+
+    /// Un format sans aucune tranche ne compose aucune pagination : c'est la même
+    /// amputation qu'un POD sans format, et elle se refuse pareillement.
+    #[test]
+    fn un_format_sans_tranche_de_gouttiere_est_refuse() {
+        let f = sauf(
+            FORMAT,
+            "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]",
+            "gouttieres = []",
+        );
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(
+            e.contains("135x215") && e.contains("aucune tranche de gouttière"),
+            "{e}"
+        );
+    }
+
+    /// Une clé vide ne se choisit pas et ne se retrouve pas dans un `.ozalid`. La clé
+    /// héritée, elle, nomme un répertoire de package : `../../ailleurs` s'écrit sans peine
+    /// dans un TOML, et `package` en ferait un chemin.
+    #[test]
+    fn une_cle_vide_ou_qui_n_est_pas_un_nom_est_refusee() {
+        for (bloc, avant) in [
+            (FORMAT, "cle = \"135x215\""),
+            (RELIURE, "cle = \"broche\""),
+            (FINITION, "cle = \"mat\""),
+            (PAPIER, "cle = \"creme-90\""),
+        ] {
+            let ampute = sauf(bloc, avant, "cle = \"\"");
+            let blocs: Vec<&str> = [FORMAT, RELIURE, FINITION, PAPIER]
+                .iter()
+                .map(|b| if *b == bloc { ampute.as_str() } else { *b })
+                .collect();
+            let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
+            assert!(e.contains("sans clé"), "{avant} : {e}");
+        }
+
+        for cle_heritee in ["", "../../ailleurs", "Essai 135x215"] {
+            let f = sauf(
+                FORMAT,
+                "cle_heritee = \"essai-135x215\"",
+                &format!("cle_heritee = \"{cle_heritee}\""),
+            );
+            let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+            assert!(e.contains("clé héritée"), "{cle_heritee} : {e}");
+        }
     }
 
     /// Un champ que le catalogue ne connaît pas est refusé, jamais ignoré. `fond-perdu`
@@ -654,31 +944,66 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
         );
         let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
         assert!(e.contains("profondeur"), "{e}");
+
+        // Y compris dans la formule de dos, qui est celle qui porte les chiffres.
+        let p = sauf(
+            PAPIER,
+            "plus = 0.6 }",
+            "plus = 0.6, soucre = \"le 20/08\" }",
+        );
+        let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
+        assert!(e.contains("soucre"), "{e}");
     }
 
     /// Deux entrées de même clé, et le `find` des appelants en prend une sans que rien ne
     /// dise laquelle — deux papiers homonymes aux dos différents donneraient deux
-    /// épaisseurs selon l'appelant. La `cle_heritee` compte double : elle nomme un
-    /// répertoire de package.
+    /// épaisseurs selon l'appelant. Les cinq listes se contrôlent, la clé héritée comprise :
+    /// elle nomme un répertoire de package.
     #[test]
     fn deux_cles_identiques_sont_refusees() {
-        let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, PAPIER, PAPIER])).unwrap_err();
-        assert!(e.contains("creme-90"), "{e}");
-
         let autre = sauf(FORMAT, "cle = \"135x215\"", "cle = \"148x210\"");
-        let e = Pod::depuis_toml(&pod(&[FORMAT, &autre, RELIURE, PAPIER])).unwrap_err();
-        assert!(e.contains("essai-135x215"), "{e}");
+        for (blocs, attendu) in [
+            (
+                vec![FORMAT, FORMAT, RELIURE, PAPIER],
+                "deux formats portent la clé « 135x215 »",
+            ),
+            (
+                vec![FORMAT, autre.as_str(), RELIURE, PAPIER],
+                "deux formats (clé héritée) portent la clé « essai-135x215 »",
+            ),
+            (
+                vec![FORMAT, RELIURE, RELIURE, PAPIER],
+                "deux reliures portent la clé « broche »",
+            ),
+            (
+                vec![FORMAT, RELIURE, FINITION, FINITION, PAPIER],
+                "deux finitions portent la clé « mat »",
+            ),
+            (
+                vec![FORMAT, RELIURE, PAPIER, PAPIER],
+                "deux papiers portent la clé « creme-90 »",
+            ),
+        ] {
+            let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
+            assert!(e.contains(attendu), "attendu « {attendu} », reçu : {e}");
+        }
     }
 
     /// `papier_defaut()` indexera `papiers[0]`, et le choix d'un format comme d'une
     /// reliure suppose qu'il en existe au moins un. L'invariant que `&'static [Papier]`
     /// tenait par construction n'a plus que le chargement où vivre : un POD amputé doit
-    /// être refusé, pas faire paniquer l'application au premier clic.
+    /// être refusé, pas faire paniquer l'application au premier clic. Le message doit
+    /// nommer **ce qui manque** : c'est lui qui dit quoi faire.
     #[test]
     fn un_pod_sans_format_reliure_ou_papier_est_refuse() {
-        for blocs in [[RELIURE, PAPIER], [FORMAT, PAPIER], [FORMAT, RELIURE]] {
+        for (manquant, blocs) in [
+            ("format", [RELIURE, PAPIER]),
+            ("reliure", [FORMAT, PAPIER]),
+            ("papier", [FORMAT, RELIURE]),
+        ] {
             let e = Pod::depuis_toml(&pod(&blocs)).unwrap_err();
-            assert!(e.contains("essai"), "{blocs:?} : {e}");
+            let attendu = format!("aucun bloc [[{manquant}]]");
+            assert!(e.contains(&attendu), "attendu « {attendu} », reçu : {e}");
         }
     }
 
