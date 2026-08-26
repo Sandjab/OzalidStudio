@@ -55,10 +55,14 @@ async function afficherRefusCatalogue() {
 /**
  * La liste des livrables du livre, et de quoi en ajouter un.
  *
- * Une ligne par livrable : son papier, le format de son gabarit, et les relevés que
- * les prestataires à gabarit exigent — dos et fond perdu, qu'eux seuls ne publient pas.
- * Plus de cases à cocher : être dans la liste *est* le fait d'être livrable, et le
- * prestataire n'est plus désigné deux fois.
+ * Une ligne par livrable : ses trois réglages — reliure, finition, papier —, le format
+ * de son gabarit, et les relevés que les prestataires à gabarit exigent — dos et fond
+ * perdu, qu'eux seuls ne publient pas. Plus de cases à cocher : être dans la liste *est*
+ * le fait d'être livrable, et le prestataire n'est plus désigné deux fois.
+ *
+ * Les trois réglages se construisent sur l'**arbre** du catalogue, seul à savoir ce que
+ * ce POD offre ; la table plate ne sert plus qu'au format et au fond perdu, qu'elle
+ * seule sait dire.
  *
  * Chaque identifiant de DOM prend la clé du **livrable**, à quatre axes : deux
  * livrables du même gabarit coexistent, et les nommer par le gabarit leur donnerait le
@@ -70,32 +74,83 @@ function afficherDestinataires() {
   const declares = projet.livraison.livrables;
   for (const d of declares) {
     const p = providers.find((pr) => pr.cle === d.gabarit);
+    const pod = pods.find((x) => x.cle === d.pod);
     const ligne = h('div', undefined, 'destinataire');
     let releve;
+    let raison;
     ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
 
-    if (p) {
+    if (pod) {
+      // Les reliures du POD, la non outillée grisée : le Rust la refuse déjà en citant
+      // sa raison (`catalogue::resout`), et l'écran ne fait que rendre ce refus lisible
+      // avant le clic. Le fichier tranche — une reliure porte une géométrie **ou** une
+      // raison de ne pas en avoir, jamais les deux.
+      const reliure = h('select');
+      reliure.id = `dest-reliure-${d.cle}`;
+      for (const r of pod.reliures) {
+        const o = new Option(r.nom, r.cle);
+        o.disabled = r.non_outille !== null;
+        reliure.append(o);
+      }
+      reliure.value = d.reliure;
+      // Éteint seulement quand le POD n'a **qu'une** reliure, toutes confondues : un
+      // select éteint ne s'ouvre pas, et l'éteindre dès qu'il n'y a qu'une composable
+      // cacherait justement le grisé que la spec § 6 demande de montrer — c'est le cas
+      // de BoD, le seul POD fourni qui en porte un.
+      reliure.disabled = pod.reliures.length < 2;
+      reliure.addEventListener('change', () => reglerLivrable(d));
+      ligne.append(reliure);
+
+      // La raison, en clair et sur sa propre ligne. Pas une infobulle : c'est la seule
+      // partie du message qui distingue « ce POD ne le fait pas » de « l'application ne
+      // le compose pas », et elle doit se lire sans survol.
+      const grisees = pod.reliures.filter((r) => r.non_outille !== null);
+      if (grisees.length) {
+        raison = h('p', undefined, 'note raison');
+        raison.id = `dest-reliure-raison-${d.cle}`;
+        raison.textContent = grisees
+          .map((r) => `${r.nom} — ${r.non_outille}`)
+          .join(' · ');
+      }
+
+      // La finition ne paraît que là où il y en a : un contrôle vide se lit comme un
+      // choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Aucun POD
+      // fourni n'en déclare aujourd'hui ; c'est le lot 4 du chantier qui les relèvera.
+      if (pod.finitions.length) {
+        const finition = h('select');
+        finition.id = `dest-finition-${d.cle}`;
+        // Le vide en tête : aucune finition est le cas courant, et il doit rester
+        // choisissable après en avoir pris une.
+        finition.append(new Option('—', ''));
+        for (const f of pod.finitions) finition.append(new Option(f.nom, f.cle));
+        finition.value = d.finition ?? '';
+        finition.addEventListener('change', () => reglerLivrable(d));
+        ligne.append(finition);
+      }
+
       const papier = h('select');
       papier.id = `dest-papier-${d.cle}`;
-      for (const pa of p.papiers) papier.append(new Option(pa.libelle, pa.cle));
+      for (const pa of pod.papiers) papier.append(new Option(pa.libelle, pa.cle));
       papier.value = d.papier;
-      papier.disabled = p.papiers.length < 2;
+      papier.disabled = pod.papiers.length < 2;
       papier.addEventListener('change', () => reglerLivrable(d));
       ligne.append(papier);
 
-      // Fabriqué ici, avec le prestataire qui le motive, mais posé après le bouton :
-      // le relevé prend une ligne à lui, et l'insérer avant renvoyait le format et le
-      // bouton « Retirer » au rang suivant, décalés de ceux des voisins. Ordre du
-      // balisage et ordre de lecture restent les mêmes — c'est le CSS qui met le
-      // relevé à la ligne, pas un `order`.
-      if (!p.dos_publie || p.fond_perdu === null) {
+      // Fabriqué ici, avec le POD qui le motive, mais posé après le bouton : le relevé
+      // prend une ligne à lui, et l'insérer avant renverrait le format et le bouton
+      // « Retirer » au rang suivant, décalés de ceux des voisins. Ordre du balisage et
+      // ordre de lecture restent les mêmes — c'est le CSS qui met le relevé à la ligne.
+      // Le dos se réclame d'après **le papier retenu**, jamais d'après le POD : un POD
+      // peut publier une formule pour l'un de ses papiers et pas pour l'autre.
+      const dosPublie = pod.papiers.find((pa) => pa.cle === d.papier)?.dos_publie ?? false;
+      if (!dosPublie || p?.fond_perdu === null) {
         releve = h('span', undefined, 'releve');
         const champ = (quoi, libelle, valeur) =>
           releve.append(champReleve(`dest-${quoi}-${d.cle}`, libelle, valeur, d));
-        if (!p.dos_publie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
-        if (p.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
+        if (!dosPublie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
+        if (p?.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
       }
-      ligne.append(h('span', noteFormat(p), 'note'));
+      if (p) ligne.append(h('span', noteFormat(p), 'note'));
     }
 
     const retirer = h('button', 'Retirer');
@@ -108,6 +163,7 @@ function afficherDestinataires() {
       afficherProjet(await invoke('livrable_retirer', { cle: d.cle }))));
     ligne.append(retirer);
     if (releve) ligne.append(releve);
+    if (raison) ligne.append(raison);
     box.append(ligne);
   }
 
@@ -194,14 +250,18 @@ async function reglerLivrable(d) {
     const v = $(id)?.value.trim();
     return v ? Number(v) : null;
   };
+  // Un contrôle absent laisse la valeur qu'il portait : la finition n'a pas de contrôle
+  // chez un POD qui n'en déclare aucune, et la ligne ne doit pas l'effacer pour autant.
+  const choix = (id, defaut) => $(id)?.value ?? defaut;
   await tente(async () => afficherProjet(await invoke('livrable_regler', {
     cle: d.cle,
     livrable: {
       pod: d.pod,
       format: d.format,
-      reliure: d.reliure,
-      papier: $(`dest-papier-${d.cle}`).value,
-      finition: d.finition ?? null,
+      reliure: choix(`dest-reliure-${d.cle}`, d.reliure),
+      papier: choix(`dest-papier-${d.cle}`, d.papier),
+      // La chaîne vide du choix « — » est une absence, pas une finition nommée.
+      finition: choix(`dest-finition-${d.cle}`, d.finition ?? '') || null,
       dos_mm: lu(`dest-dos-${d.cle}`),
       fond_perdu_mm: lu(`dest-fp-${d.cle}`),
     },

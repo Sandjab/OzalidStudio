@@ -10,13 +10,13 @@ const { charge } = require('./dom_shim');
 const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
   cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
   libelle: 'Amazon KDP — 6 × 9 po',
-  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
+  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 // Le même imprimeur dans son autre format. La cascade offre les deux, la table plate
@@ -26,13 +26,13 @@ const KDP = {
 const KDP_5X8 = {
   cle: 'kdp-5x8-broche', pod: 'kdp', format: '5x8', reliure: 'broche',
   libelle: 'Amazon KDP — 5 × 8 po',
-  largeur: 127, hauteur: 203.2, fond_perdu: 3.175, dos_publie: true,
+  largeur: 127, hauteur: 203.2, fond_perdu: 3.175,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
-  largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
+  largeur: 148, hauteur: 210, fond_perdu: null,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
@@ -160,11 +160,17 @@ function paquet(sur = {}) {
  * Depuis le lot 3, le prestataire vit dans le projet et non dans un contrôle : le front
  * relit la liste à chaque retour de commande. Un faux qui rendrait toujours le même
  * projet ne prouverait donc plus rien — il masquerait justement le câblage qu'on vérifie.
+ *
+ * `pods` sert `PODS` à défaut, et non une liste vide : depuis que les trois réglages de
+ * la ligne se construisent sur l'arbre, un test qui ne le passerait pas verrait la ligne
+ * perdre **tous** ses contrôles — et échouerait loin de la cause. C'est aussi ce que
+ * font les huit autres fichiers de tests, qui rendent l'arbre sans condition, et ce que
+ * fait le Rust, qui ne sait pas servir un catalogue à moitié.
  */
 async function ouvre(
   providers,
   sur = {},
-  { couverture = null, destinataires, dejaCompose = false, dosParPapier = {}, pods = [] } = {}
+  { couverture = null, destinataires, dejaCompose = false, dosParPapier = {}, pods = PODS } = {}
 ) {
   const appels = [];
   const liste = (destinataires ?? [chez(providers[0])]).map((d) => ({ ...d }));
@@ -226,11 +232,15 @@ async function ouvre(
         : { ...d, compose: { ...d.compose, dos: dosParPapier[d.papier] } });
       // Le papier change l'identité du livrable, jamais son gabarit : la mesure vit
       // sous le gabarit, et **survit** au réglage. Le faux ne la touche donc plus.
+      // La reliure, elle, emporte le gabarit avec elle : `LivrableVue.gabarit` est
+      // recalculé sur les trois axes à chaque vue, et le laisser figé ici rendrait un
+      // livrable en spirale dont le gabarit dirait encore « broché ».
       const l = args.livrable;
-      const neuve = `${l.pod}-${l.format}-${l.reliure}-${l.papier}`;
+      const gabarit = `${l.pod}-${l.format}-${l.reliure}`;
+      const neuve = `${gabarit}-${l.papier}`;
       const majee = maj({
         livrables: projet.livraison.livrables.map((d) => (
-          d.cle === args.cle ? redos({ ...d, ...l, cle: neuve }) : d
+          d.cle === args.cle ? redos({ ...d, ...l, gabarit, cle: neuve }) : d
         )),
       });
       return projet.livraison.courant === args.cle ? maj({ courant: neuve }) : majee;
@@ -474,6 +484,123 @@ test('le dernier destinataire ne peut pas être retiré', async () => {
     els.get('dest-retirer-lulu-108x175-broche-standard').disabled,
     true,
     'le dernier destinataire reste retirable'
+  );
+});
+
+/**
+ * Le grisé motivé, tel que la spec § 6 le demande : ce que le POD n'outille pas reste
+ * visible et se refuse en disant pourquoi. « Ce POD ne le fait pas » et « l'application
+ * ne le compose pas » sont deux choses, et l'écran doit les distinguer.
+ */
+test('la ligne offre les reliures du POD, la non outillée grisée avec sa raison', async () => {
+  const { els } = await ouvre([KDP], {}, { pods: PODS, destinataires: [chez(KDP)] });
+
+  const reliures = els.get('dest-reliure-kdp-6x9-broche-creme');
+  // Dans l'ordre du fichier, non outillée comprise : l'ordre d'un POD est celui de son
+  // catalogue, et `PODS` déclare la rigide **avant** la brochée chez KDP — c'est ce que
+  // le test de l'ajout exploite pour distinguer « la première composable » de « la
+  // première tout court ». Réordonner à l'affichage inventerait une règle que rien ne
+  // demande, et masquerait cet ordre-là.
+  assert.deepStrictEqual(
+    reliures.textes('option'),
+    ['Couverture rigide', 'Broché — dos carré collé']
+  );
+
+  const [rigide, broche] = reliures.children;
+  assert.strictEqual(broche.disabled, false);
+  assert.strictEqual(rigide.disabled, true, 'une reliure non outillée doit être grisée');
+
+  // La raison en clair, sous la ligne — pas dans une infobulle : c'est la différence
+  // entre « ce POD ne le fait pas » et « l'application ne le compose pas », et elle
+  // doit se lire à l'écran.
+  const raison = els.get('dest-reliure-raison-kdp-6x9-broche-creme');
+  assert.match(raison.textContent, /casewrap/);
+});
+
+// Deux reliures composables chez le même POD : le cas que la reliure réglable rend
+// possible, et qu'aucun POD fourni n'offre encore — BoD a bien deux reliures, mais l'une
+// n'est pas outillée, et un livrable ne peut pas vivre dessus. Le catalogue le permet
+// depuis le lot 1 : `pages` et `parite` vivent sur la reliure, précisément parce que deux
+// reliures d'un même format n'admettent pas la même pagination.
+const DEUX_RELIURES = {
+  cle: 'tbe', nom: 'TheBookEdition',
+  formats: [{ cle: '148x210', nom: 'A5' }],
+  reliures: [
+    { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    { cle: 'spirale', nom: 'Reliure spirale', non_outille: null },
+  ],
+  finitions: [],
+  papiers: [{ cle: 'munken-80', libelle: 'Munken 80 g', teinte: '#f7f0e0', dos_publie: true }],
+};
+const TBE_BROCHE = {
+  cle: 'tbe-148x210-broche', pod: 'tbe', format: '148x210', reliure: 'broche',
+  libelle: 'TheBookEdition — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
+  papiers: DEUX_RELIURES.papiers,
+};
+const TBE_SPIRALE = { ...TBE_BROCHE, cle: 'tbe-148x210-spirale', reliure: 'spirale' };
+
+test('régler la reliure renvoie les quatre axes au Rust', async () => {
+  const { els, appels } = await ouvre(
+    [TBE_BROCHE, TBE_SPIRALE],
+    {},
+    { pods: [DEUX_RELIURES], destinataires: [chez(TBE_BROCHE)] }
+  );
+
+  const reliures = els.get('dest-reliure-tbe-148x210-broche-munken-80');
+  reliures.value = 'spirale';
+  await reliures.declenche('change');
+
+  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_regler');
+  assert.strictEqual(args.cle, 'tbe-148x210-broche-munken-80');
+  assert.strictEqual(args.livrable.reliure, 'spirale');
+  assert.strictEqual(args.livrable.pod, 'tbe');
+  assert.strictEqual(args.livrable.format, '148x210');
+});
+
+test('la finition ne paraît que chez un POD qui en déclare', async () => {
+  const chezKdp = await ouvre([KDP], {}, { pods: PODS, destinataires: [chez(KDP)] });
+  const finitions = chezKdp.els.get('dest-finition-kdp-6x9-broche-creme');
+  assert.ok(finitions, 'KDP déclare une finition : le contrôle doit être là');
+  // Le vide en tête : aucune finition est le cas courant, et il doit rester choisissable.
+  assert.deepStrictEqual(finitions.textes('option'), ['—', 'Pelliculage mat']);
+
+  const chezLulu = await ouvre([LULU], {}, { pods: PODS });
+  assert.ok(
+    !chezLulu.els.get('dest-finition-lulu-108x175-broche-standard'),
+    'un POD sans finition ne doit pas offrir un contrôle vide'
+  );
+});
+
+test('le relevé de dos suit le papier, pas le POD', async () => {
+  // Un POD dont un papier publie sa formule et l'autre pas : le cas que la table plate
+  // ne savait pas dire, puisqu'elle tranchait sur le papier d'office.
+  const mixte = {
+    cle: 'mixte', nom: 'Mixte',
+    formats: [{ cle: 'a5', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché', non_outille: null }],
+    finitions: [],
+    papiers: [
+      { cle: 'formule', libelle: 'Papier à formule', teinte: '#ffffff', dos_publie: true },
+      { cle: 'gabarit', libelle: 'Papier à relever', teinte: '#ffffff', dos_publie: false },
+    ],
+  };
+  const plat = {
+    cle: 'mixte-a5-broche', pod: 'mixte', format: 'a5', reliure: 'broche',
+    libelle: 'Mixte — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
+    papiers: mixte.papiers,
+  };
+  const { els } = await ouvre([plat], {}, { pods: [mixte] });
+
+  assert.ok(
+    !els.get('dest-dos-mixte-a5-broche-formule'),
+    'le papier à formule ne doit pas réclamer de relevé'
+  );
+
+  els.get('dest-papier-mixte-a5-broche-formule').value = 'gabarit';
+  await els.get('dest-papier-mixte-a5-broche-formule').declenche('change');
+  assert.ok(
+    els.get('dest-dos-mixte-a5-broche-gabarit'),
+    'le papier à relever doit réclamer son dos'
   );
 });
 

@@ -16,7 +16,7 @@ const GABARIT_MAISON = 'une écriture manuscrite : {envoi}, signé {paraphe}';
 const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
   papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff' }],
 };
 
@@ -780,7 +780,7 @@ test('fermer le projet efface le pied', async () => {
 const KDP = {
   cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
   libelle: 'Amazon KDP — 6 × 9 po',
-  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
+  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
   papiers: [{ cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0' },
     { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff' }],
 };
@@ -789,7 +789,7 @@ const KDP = {
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
-  largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
+  largeur: 148, hauteur: 210, fond_perdu: null,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff' }],
 };
 

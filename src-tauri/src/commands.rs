@@ -64,9 +64,6 @@ pub struct ProviderVue {
     largeur: f64,
     hauteur: f64,
     fond_perdu: Option<f64>,
-    /// Vrai quand le prestataire publie de quoi calculer le dos. Faux, l'interface
-    /// réclame un relevé plutôt que de laisser croire à un chiffre.
-    dos_publie: bool,
     papiers: Vec<PapierVue>,
 }
 
@@ -106,7 +103,6 @@ impl From<&Provider> for ProviderVue {
             largeur: p.format.0,
             hauteur: p.format.1,
             fond_perdu: p.fond_perdu,
-            dos_publie: p.papier_defaut().dos.publie(),
             papiers: p.papiers.iter().map(PapierVue::from).collect(),
         }
     }

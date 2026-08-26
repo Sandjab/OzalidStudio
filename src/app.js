@@ -384,7 +384,7 @@ function majPied() {
   const perime = dosPerime(projet);
   const dos = dosCourant();
   const etat = perime ? 'dos périmé'
-    : !p.dos_publie ? 'dos relevé sur le gabarit'
+    : !papierCourant()?.dos_publie ? 'dos relevé sur le gabarit'
       : dos === null ? 'dos non composé'
         : `dos ${nb(dos, 1)} mm`;
   $('piedDos').textContent = `· ${etat}`;
@@ -494,6 +494,17 @@ async function chargerProviders() {
 function providerCourant() {
   const d = livrableCourant();
   return providers.find((p) => p.cle === d?.gabarit);
+}
+
+/**
+ * Le papier du livrable visé, tel que le catalogue le décrit.
+ *
+ * L'arbre et non la table plate : c'est le papier retenu qui dit si le dos se calcule,
+ * et la projection ne connaît que celui d'office de son POD.
+ */
+function papierCourant() {
+  const d = livrableCourant();
+  return pods.find((p) => p.cle === d?.pod)?.papiers.find((pa) => pa.cle === d?.papier);
 }
 
 /** Le livrable visé : son papier, sa finition et ses relevés. */

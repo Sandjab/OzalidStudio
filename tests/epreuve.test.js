@@ -11,7 +11,7 @@ const { charge } = require('./dom_shim');
 const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 
