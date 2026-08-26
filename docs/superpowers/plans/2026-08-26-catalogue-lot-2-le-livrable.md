@@ -2,7 +2,7 @@
 
 > **Pour un exécutant agentique :** SOUS-COMPÉTENCE REQUISE : `superpowers:subagent-driven-development`
 > (recommandé) ou `superpowers:executing-plans` pour exécuter ce plan tâche par tâche. Les
-> étapes sont des cases à cocher (`- [ ]`).
+> étapes sont des cases à cocher (`- [x]`).
 
 **But :** un destinataire devient un **livrable** — l'identité à quatre axes (POD, format,
 reliure, papier), le `.ozalid` migré en v5, la mesure rangée sous le gabarit d'intérieur
@@ -132,7 +132,7 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
 Rien de ce que cette tâche ajoute n'est encore consommé hors tests : elle pose l'identité,
 sa résolution et la fabrique de `Provider`, que les tâches 3 à 6 branchent.
 
-- [ ] **Étape 1 : écrire les tests, les voir rouges**
+- [x] **Étape 1 : écrire les tests, les voir rouges**
 
 Dans le `mod tests` de `catalogue.rs` (les types n'existant pas, le rouge est une erreur de
 compilation — c'est le rouge attendu) :
@@ -257,12 +257,12 @@ fn l_empreinte_ne_bouge_qu_avec_ce_qui_pagine() {
 > si le fichier en dit d'autres, c'est le fichier qui fait foi — relever la valeur, pas la
 > forcer.
 
-- [ ] **Étape 2 : lancer, constater le rouge**
+- [x] **Étape 2 : lancer, constater le rouge**
 
 `cd src-tauri && cargo test la_cle_d_un_livrable -- --nocapture` — attendu : échec de
 compilation (`cannot find type Fabrication`).
 
-- [ ] **Étape 3 : implémenter**
+- [x] **Étape 3 : implémenter**
 
 Dans `catalogue.rs`. D'abord l'import (`Serialize` manque) :
 
@@ -467,11 +467,11 @@ pub fn initialiser(config: Option<&Path>) -> Result<Vec<Refus>, String> {
 }
 ```
 
-- [ ] **Étape 4 : vérifier le vert**
+- [x] **Étape 4 : vérifier le vert**
 
 `cargo test --lib catalogue` — les nouveaux tests passent, les 464 existants aussi.
 
-- [ ] **Étape 5 : Commit**
+- [x] **Étape 5 : Commit**
 
 `git add src-tauri/src/catalogue.rs` puis commit :
 « L'identité d'un livrable tient en quatre clés, et se résout contre le catalogue »
@@ -490,7 +490,7 @@ nomment les répertoires de package à partir de la tâche 4. Refuser à la lect
 que slugifier à l'écriture : le fichier fautif se nomme à la Livraison, et l'utilisateur
 voit quelle clé corriger.
 
-- [ ] **Étape 1 : écrire les tests, les voir rouges**
+- [x] **Étape 1 : écrire les tests, les voir rouges**
 
 Dans le `mod tests` de `catalogue.rs`, à côté des refus existants (reprendre le socle
 `FORMAT`/`RELIURE`/`PAPIER` des constantes de test déjà en place ; **attention au
@@ -550,7 +550,7 @@ gouttieres = [[1, 900, 10.0]]
 
 Lancer : rouge (les trois passent la lecture aujourd'hui).
 
-- [ ] **Étape 2 : implémenter**
+- [x] **Étape 2 : implémenter**
 
 Dans `verifie`, remplacer la boucle `cle_non_vide` et le contrôle du POD par `est_un_nom`,
 et supprimer `cle_non_vide` (le vide est un non-nom comme un autre) :
@@ -584,7 +584,7 @@ for (quoi, cle) in self
 Le doc-commentaire d'`est_un_nom` change de sujet : il ne parle plus de la seule clé
 héritée mais de **toute** clé du catalogue.
 
-- [ ] **Étape 3 : réparer les tests de refus existants**
+- [x] **Étape 3 : réparer les tests de refus existants**
 
 Les tests qui attendaient « sans clé » (clé vide) doivent maintenant attendre le nouveau
 message. Chercher : `grep -n "sans clé" src-tauri/src/catalogue.rs` — adapter chaque
@@ -593,7 +593,7 @@ assertion au message réel, sans affaiblir ce qu'elle vérifie (le refus doit to
 `cargo test --lib catalogue` doit rendre `les_six_fichiers_fournis_se_lisent` vert
 (toutes les clés des six fichiers sont déjà `[a-z0-9-]`, `tbe` papier `120` compris).
 
-- [ ] **Étape 4 : Commit**
+- [x] **Étape 4 : Commit**
 
 « Une clé de catalogue est un nom, quel que soit l'axe qui la porte »
 
@@ -613,7 +613,7 @@ gabarit) de la planche (par livrable), et donne au packager un lot mémoïsé. L
 passent la clé du prestataire actuel (`pr.cle`) : le comportement est identique tant que
 l'identité n'a pas basculé, et c'est ce que le témoin prouve.
 
-- [ ] **Étape 1 : écrire les tests, les voir rouges**
+- [x] **Étape 1 : écrire les tests, les voir rouges**
 
 ```rust
 /// Le rempla­cement du test `les_sorties_portent_la_cle_du_prestataire` : le nom vient
@@ -781,7 +781,7 @@ fn livre_d_essai() -> crate::projet::Livre {
 
 Lancer : rouge (signatures inexistantes).
 
-- [ ] **Étape 2 : implémenter dans `package.rs`**
+- [x] **Étape 2 : implémenter dans `package.rs`**
 
 ```rust
 /// Nom de fichier des sorties d'un livrable. Le nom porte la clé entière : deux
@@ -966,7 +966,7 @@ pub fn lot(
 compose des intérieurs **avec trace**, distincts par nature : elle garde son propre
 chemin, seuls les `nom(pr, …)` deviennent `nom(cle, …)`).
 
-- [ ] **Étape 3 : adapter les appelants, à comportement constant**
+- [x] **Étape 3 : adapter les appelants, à comportement constant**
 
 - `commands::packager` : la boucle actuelle construit des `Cible` puis appelle `lot` —
   les erreurs de résolution (`provider` inconnu, papier inconnu) restent des `Resultat`
@@ -1015,12 +1015,12 @@ chemin, seuls les `nom(pr, …)` deviennent `nom(cle, …)`).
 - Le test `les_sorties_portent_la_cle_du_prestataire` (`package.rs:497`) est **supprimé**,
   remplacé à l'étape 1 — c'est un retrait délibéré, son successeur est nommé.
 
-- [ ] **Étape 4 : vérifier**
+- [x] **Étape 4 : vérifier**
 
 `cargo test --lib package` vert, puis la suite entière, puis le témoin : **98 pages,
 dos 7,21 mm** — l'intérieur composé en deux temps ne déplace rien.
 
-- [ ] **Étape 5 : Commit**
+- [x] **Étape 5 : Commit**
 
 « Le nom d'une sortie vient d'une clé de livrable, et l'intérieur se compose une fois par gabarit »
 
@@ -1046,7 +1046,7 @@ C'est **un seul commit** : la forme de `Livraison` et la migration doivent atter
 ensemble (sans `migre_livraison`, plus aucun `.ozalid` v4 ne s'ouvre), et `commands.rs`
 suit parce que le crate compile en entier.
 
-- [ ] **Étape 1 : les types, dans `projet.rs`**
+- [x] **Étape 1 : les types, dans `projet.rs`**
 
 `Destinataire` disparaît, `Livrable` prend sa place (verdict 2 pour la forme sérialisée —
 `flatten` marche en TOML et en JSON, le `f64` traverse intact ; il désactive
@@ -1259,7 +1259,7 @@ impl Livraison {
 }
 ```
 
-- [ ] **Étape 2 : la migration, dans `projet.rs`**
+- [x] **Étape 2 : la migration, dans `projet.rs`**
 
 `VERSION` passe à **5**. Dans `migre`, à l'intérieur du bloc `if version < VERSION`,
 avant l'estampille de version, l'appel `migre_livraison(&mut v);` et la fonction — sur le
@@ -1342,7 +1342,7 @@ fn migre_livraison(v: &mut toml::Value) {
 }
 ```
 
-- [ ] **Étape 3 : la couche de compatibilité, dans `commands.rs`**
+- [x] **Étape 3 : la couche de compatibilité, dans `commands.rs`**
 
 `vise` — le point de passage unique, sans `&'static` (verdict 1c : le correctif aval est
 neuf `&` et deux `.clone()`) :
@@ -1612,7 +1612,7 @@ reçoit `&d.cle()`.
 (la ligne `let cle = args.next();` et son commentaire partent avec lui ; l'usage en
 entête suit).
 
-- [ ] **Étape 4 : réécrire les tests condamnés, écrire les neufs**
+- [x] **Étape 4 : réécrire les tests condamnés, écrire les neufs**
 
 Dans `projet.rs`, la quinzaine du § 6 de la reconnaissance. Les remplaçants, avec leur
 intention (chacun vu rouge : écrits avant l'implémentation qui les concerne, ou
@@ -1747,13 +1747,13 @@ Dans `commands.rs` : `le_destinataire_de_l_interface_se_lit` (2141) vise désorm
 `un_releve_absent_reste_absent` (2159) de même. Ils seront réécrits une seconde fois à la
 tâche 6 contre `Livrable` — c'est prévu, pas un oubli.
 
-- [ ] **Étape 5 : vérifier, largement**
+- [x] **Étape 5 : vérifier, largement**
 
 `cargo test` complet (attendu : ~470+, 0 échec), `node --test tests/*.test.js` **sans y
 avoir touché** (247 passés — c'est la preuve que la couche de compatibilité tient), le
 témoin : **98 pages, dos 7,21 mm**.
 
-- [ ] **Étape 6 : Commit**
+- [x] **Étape 6 : Commit**
 
 « Le projet porte des livrables, et la mesure vit sous son gabarit d'intérieur »
 
@@ -1773,7 +1773,7 @@ La clé de la vue plate cesse d'être la clé héritée : elle devient la clé d
 le test d'ancrage de la tâche 1 (`le_livrable_resolu_fabrique_le_provider_de_la_vue_plate`)
 gagne alors sa dernière assertion : les clés aussi sont égales.
 
-- [ ] **Étape 1 : `Provider` porte sa fabrication, `aplatit` change de clé**
+- [x] **Étape 1 : `Provider` porte sa fabrication, `aplatit` change de clé**
 
 `Provider` gagne un champ (et `aplatit` comme `Resolu::provider()` le remplissent) :
 
@@ -1809,7 +1809,7 @@ la tâche 3 : le refus de pagination de `package::assembler` cite désormais la 
 `… que {} accepte en {}.` avec `pr.libelle` et `pr.fabrication.reliure` (spec § 7), en
 adaptant le test qui porte ce message s'il en fige le texte.
 
-- [ ] **Étape 2 : `provider()` se relègue aux tests**
+- [x] **Étape 2 : `provider()` se relègue aux tests**
 
 Plus aucun code de production n'appelle `provider(cle)` après la tâche 4 (le vérifier :
 `grep -n "catalogue::provider(" src-tauri/src src-tauri/examples -r` ne doit montrer que
@@ -1836,7 +1836,7 @@ clé en littéral (`"bod"`), il devient le seul à retoucher : la source Typst p
 désormais `bod-135x215-broche` — adapter l'assertion, c'est un changement voulu (le
 commentaire d'entête du PDF nomme le gabarit).
 
-- [ ] **Étape 3 : la compat de `commands.rs` parle en clés de gabarit**
+- [x] **Étape 3 : la compat de `commands.rs` parle en clés de gabarit**
 
 Supprimer `fabrication_de`/`cle_plate` au profit de la vue plate elle-même — le front
 envoie ce que `providers_liste` lui a donné, c'est-à-dire dorénavant la clé de gabarit :
@@ -1856,7 +1856,7 @@ fn plat(cle: &str) -> Result<&'static Provider, String> {
 - `livraison_vue` : `provider: liv.fabrication.cle_gabarit()` — plus de table inverse.
 - `ProviderVue` sert la nouvelle clé sans changer de forme (il copie `p.cle`).
 
-- [ ] **Étape 4 : fixtures JS, exemples, test d'intégration**
+- [x] **Étape 4 : fixtures JS, exemples, test d'intégration**
 
 - Tests JS : **les valeurs seulement**. `'lulu'` → `'lulu-108x175-broche'`,
   `'kdp-6x9'` → `'kdp-6x9-broche'`, `'coollibri-148x210'` → `'coollibri-148x210-broche'`,
@@ -1893,7 +1893,7 @@ const FABRICATION: (&str, &str, &str, &str) = ("bod", "135x215", "broche", "crem
   `OnceLock` `PODS` est posé par `initialiser` depuis la tâche 1 — c'est ici qu'on le
   prouve sur le vrai chemin de démarrage). Toujours **un seul** `#[test]`.
 
-- [ ] **Étape 5 : vérifier puis Commit**
+- [x] **Étape 5 : vérifier puis Commit**
 
 Suites complètes + témoin. Commit :
 « La vue plate se nomme par son gabarit, la clé héritée ne sert plus qu'aux tests »
@@ -1911,7 +1911,7 @@ Suites complètes + témoin. Commit :
 Le flip atomique : Rust et JS changent ensemble, en un commit, parce que la forme des
 commandes et celle de la vue sont un seul contrat (`contrats.test.js` existe pour ça).
 
-- [ ] **Étape 1 : les commandes, côté Rust**
+- [x] **Étape 1 : les commandes, côté Rust**
 
 ```rust
 /// Ajoute un livrable au livre.
@@ -2074,7 +2074,7 @@ fn deux_livrables_identiques_sur_les_quatre_axes_sont_refuses() {
 }
 ```
 
-- [ ] **Étape 2 : le front — `app.js`**
+- [x] **Étape 2 : le front — `app.js`**
 
 Renommages (chaque site listé par la reconnaissance § 2) :
 
@@ -2150,7 +2150,7 @@ $('btAjouterDestinataire').addEventListener('click', () => tente(async () => {
   — ce qui suppose `ProviderVue` enrichi : ajouter `pod`, `format`, `reliure` (les clés de
   `p.fabrication`) à `ProviderVue` et son `From<&Provider>` (Rust, même commit).
 
-- [ ] **Étape 3 : le front — `livraison.js`, `couverture.js`, `envois.js`**
+- [x] **Étape 3 : le front — `livraison.js`, `couverture.js`, `envois.js`**
 
 `livraison.js`, `afficherDestinataires()` : la boucle passe sur
 `projet.livraison.livrables`, et **tous les identifiants de DOM prennent `d.cle`**
@@ -2223,7 +2223,7 @@ function teintePapier() {
 }
 ```
 
-- [ ] **Étape 4 : les 9 fichiers de test JS**
+- [x] **Étape 4 : les 9 fichiers de test JS**
 
 Un seul mouvement par fichier : le faux Rust **et** ses lecteurs (verdict § 6 — jamais
 l'un sans l'autre). Concrètement :
@@ -2269,7 +2269,7 @@ test('un courant qui ne désigne aucun livrable n’arme pas la veille', async (
   (S'aligner sur l'outillage réel du fichier — faux timers ou attente courte — plutôt que
   d'en inventer un ; les tests de veille voisins montrent le geste exact.)
 
-- [ ] **Étape 5 : vérifier**
+- [x] **Étape 5 : vérifier**
 
 `node --test tests/*.test.js` : la suite **rend la main** et elle est verte — si elle ne
 rend pas la main, c'est la boucle du verdict § 6 : un lecteur et un faux Rust désaccordés.
@@ -2277,7 +2277,7 @@ rend pas la main, c'est la boucle du verdict § 6 : un lecteur et un faux Rust d
 `cargo run` et l'étape Livraison : ajouter KDP 6×9 deux fois, changer le papier de la
 première ligne — deux lignes distinctes, le refus du vrai doublon en clair.
 
-- [ ] **Étape 6 : Commit**
+- [x] **Étape 6 : Commit**
 
 « Les commandes parlent en livrables, et l'écran distingue deux papiers d'un même gabarit »
 
@@ -2290,7 +2290,7 @@ première ligne — deux lignes distinctes, le refus du vrai doublon en clair.
 - Modifier : `src-tauri/src/catalogue.rs` (`Format`, `verifie`, `charge`)
 - Modifier : `src-tauri/tests/catalogue_initialise.rs` (si une assertion la lit encore)
 
-- [ ] **Étape 1 : la retirer partout**
+- [x] **Étape 1 : la retirer partout**
 
 - Les six fichiers `src-tauri/pods/*.toml` : supprimer les 14 lignes `cle_heritee = "…"`.
 - `Format` : supprimer le champ `cle_heritee` (avec `deny_unknown_fields`, un fichier du
@@ -2307,12 +2307,12 @@ première ligne — deux lignes distinctes, le refus du vrai doublon en clair.
   résout, et elle a quatorze entrées — c'est l'ancrage des `.ozalid` anciens, il ne
   disparaîtra qu'avec la migration v5 elle-même.
 
-- [ ] **Étape 2 : prouver le vide**
+- [x] **Étape 2 : prouver le vide**
 
 `grep -rn "cle_heritee" src-tauri/ tests/ src/` → **zéro** occurrence hors
 `docs/`. `cargo test` complet, `node --test`, témoin.
 
-- [ ] **Étape 3 : Commit**
+- [x] **Étape 3 : Commit**
 
 « La clé héritée quitte les fichiers : l'identité à quatre axes est seule »
 
@@ -2325,16 +2325,16 @@ première ligne — deux lignes distinctes, le refus du vrai doublon en clair.
 
 Les trois corrections relevées par la reconnaissance, plus la décision d'arbitrage :
 
-- [ ] § 3 : « les deux seules signatures `&'static Provider` hors tests —
+- [x] § 3 : « les deux seules signatures `&'static Provider` hors tests —
   `commands.rs:467` et `commands.rs:1890` » → la fonction s'appelle **`vise`** (pas
   `couple`), elle était aux lignes **479 et 1904**, et le lot 2 a retiré ces `&'static`
   (verdict 1c) — reformuler au passé.
-- [ ] § 4 : `bod-135x215-broche-creme90/` → **`bod-135x215-broche-creme-90/`**, avec une
+- [x] § 4 : `bod-135x215-broche-creme90/` → **`bod-135x215-broche-creme-90/`**, avec une
   phrase qui fixe la règle : les quatre clés jointes par des tirets, telles quelles,
   jamais transformées, jamais re-découpées (décision du 26/08).
-- [ ] § 8, risque « gabarit réécrit » : noter qu'il est **fermé** par l'empreinte de
+- [x] § 8, risque « gabarit réécrit » : noter qu'il est **fermé** par l'empreinte de
   gabarit portée par la mesure et comparée à l'ouverture.
-- [ ] Commit : « La spec rejoint le code : vise, cinq segments, l'empreinte »
+- [x] Commit : « La spec rejoint le code : vise, cinq segments, l'empreinte »
 
 ---
 

@@ -234,8 +234,9 @@ porte l'invariant « une mesure présente vaut toujours, et ce qui pourrait la p
 à la source » ; mais `Livraison::normalise` n'efface une mesure que si le **papier** a disparu.
 Réécrire `<config>/pods/bod.toml` avec d'autres marges, une autre gouttière ou une autre
 formule de dos, sans toucher aux clés, laisse la mesure d'hier en place. Portée réelle,
-vérifiée : le package, lui, **recompose** — `package::assembler` repasse par `interieur::converge`
-avec le gabarit courant —, donc aucune couverture fausse ne part à l'impression. Ce qui
+vérifiée : le package, lui, **recompose** — `package::composer_interieur`, appelé par
+`lot` une fois par gabarit, repasse par `interieur::converge` avec le gabarit courant —,
+donc aucune couverture fausse ne part à l'impression. Ce qui
 traverse est le **dos affiché** et le placement des envois. C'est la politique d'invalidation
 des mesures qu'il faut reprendre, pas le catalogue : le lot 2 la déplace déjà sous la clé
 (POD, format, reliure), c'est là qu'elle se traite. **Fermé par le lot 2** : la mesure

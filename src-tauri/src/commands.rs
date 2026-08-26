@@ -1309,7 +1309,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     let o = garde.as_ref().ok_or_else(aucun_projet)?;
     let livrables = o.projet.meta.livraison.livrables.clone();
     if livrables.is_empty() {
-        return Err("aucun destinataire : en déclarer un.".into());
+        return Err("aucun livrable : en déclarer un.".into());
     }
     let typst = typst()?;
 
