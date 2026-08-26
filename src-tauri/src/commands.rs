@@ -77,6 +77,23 @@ pub struct PapierVue {
     /// La couleur du papier, telle que le canevas des envois la peint. Elle traverse
     /// jusqu'ici parce que c'est l'écran qui s'en sert, jamais la composition.
     teinte: String,
+    /// Vrai quand **ce papier** publie de quoi calculer le dos. Faux, la ligne réclame
+    /// un relevé plutôt que de laisser croire à un chiffre. Porté par le papier et non
+    /// par le POD : un POD peut publier une formule pour l'un et pas pour l'autre, et
+    /// c'est le papier retenu qui décide.
+    dos_publie: bool,
+}
+
+impl From<&catalogue::Papier> for PapierVue {
+    fn from(pa: &catalogue::Papier) -> Self {
+        Self {
+            cle: pa.cle.clone(),
+            libelle: pa.nom.clone(),
+            teinte: pa.teinte.clone(),
+            // Une pagination quelconque suffit à savoir si une formule existe.
+            dos_publie: pa.dos.mm(100).is_some(),
+        }
+    }
 }
 
 impl From<&Provider> for ProviderVue {
@@ -92,17 +109,49 @@ impl From<&Provider> for ProviderVue {
             fond_perdu: p.fond_perdu,
             // Une pagination quelconque suffit à savoir si une formule existe.
             dos_publie: p.papier_defaut().dos.mm(100).is_some(),
-            papiers: p
-                .papiers
-                .iter()
-                .map(|pa| PapierVue {
-                    cle: pa.cle.clone(),
-                    libelle: pa.nom.clone(),
-                    teinte: pa.teinte.clone(),
-                })
-                .collect(),
+            papiers: p.papiers.iter().map(PapierVue::from).collect(),
         }
     }
+}
+
+/// Ce qu'un POD offre, en arbre : la cascade de l'ajout y lit ses formats, les trois
+/// réglages de la ligne y lisent ses reliures, ses finitions et ses papiers.
+///
+/// Distincte de `ProviderVue`, et non un champ de plus sur elle : celle-là est une
+/// projection POD × format, qui n'a pas de place pour dire ce qu'un POD offre d'autre.
+/// Les deux cohabitent — la plate pour ce que la projection sait seule dire (format en
+/// mm, fond perdu effectif, libellé composé), l'arbre pour les choix.
+#[derive(Serialize)]
+pub struct PodVue {
+    cle: String,
+    nom: String,
+    formats: Vec<FormatVue>,
+    reliures: Vec<ReliureVue>,
+    finitions: Vec<FinitionVue>,
+    papiers: Vec<PapierVue>,
+}
+
+#[derive(Serialize)]
+pub struct FormatVue {
+    cle: String,
+    nom: String,
+}
+
+#[derive(Serialize)]
+pub struct ReliureVue {
+    cle: String,
+    nom: String,
+    /// Pourquoi on ne la compose pas, telle que le fichier l'écrit — `null` chez une
+    /// reliure composable. C'est le fichier qui tranche : `verifie_reliure` refuse une
+    /// reliure qui porterait à la fois une géométrie et une raison de ne pas en avoir,
+    /// donc l'écran n'a pas à interroger la géométrie pour savoir quoi griser.
+    non_outille: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FinitionVue {
+    cle: String,
+    nom: String,
 }
 
 /// Ce que l'interface affiche d'un projet ouvert.
@@ -172,6 +221,50 @@ pub fn providers_liste() -> Vec<ProviderVue> {
     catalogue::providers()
         .iter()
         .map(ProviderVue::from)
+        .collect()
+}
+
+/// L'arbre du catalogue : un POD, ses formats, ses reliures, ses finitions, ses papiers.
+///
+/// Ne sont rendus que les POD chez qui l'on sait composer — au moins une reliure
+/// outillée —, la règle qu'`aplatit` applique déjà à la table plate. Un POD dont aucune
+/// reliure n'aurait de géométrie relevée n'offre rien à ajouter, et le faire paraître
+/// grisé en entier serait une fonction que personne n'a demandée.
+#[tauri::command]
+pub fn pods_liste() -> Vec<PodVue> {
+    catalogue::pods()
+        .iter()
+        .filter(|pod| pod.reliure_composable().is_some())
+        .map(|pod| PodVue {
+            cle: pod.cle.clone(),
+            nom: pod.nom.clone(),
+            formats: pod
+                .formats
+                .iter()
+                .map(|f| FormatVue {
+                    cle: f.cle.clone(),
+                    nom: f.nom.clone(),
+                })
+                .collect(),
+            reliures: pod
+                .reliures
+                .iter()
+                .map(|r| ReliureVue {
+                    cle: r.cle.clone(),
+                    nom: r.nom.clone(),
+                    non_outille: r.non_outille.clone(),
+                })
+                .collect(),
+            finitions: pod
+                .finitions
+                .iter()
+                .map(|f| FinitionVue {
+                    cle: f.cle.clone(),
+                    nom: f.nom.clone(),
+                })
+                .collect(),
+            papiers: pod.papiers.iter().map(PapierVue::from).collect(),
+        })
         .collect()
 }
 
@@ -2460,6 +2553,72 @@ nom = "Pelliculage mat"
         assert_ne!(
             creme, blanc,
             "les deux papiers rendent le même dos : le dos ne suit pas le papier du livrable"
+        );
+    }
+
+    /// La vue d'arbre porte ce que la vue plate tait : les reliures d'un POD, la raison de
+    /// celles qu'on n'outille pas, ses finitions. C'est elle qui alimente la cascade, et
+    /// c'est le fichier qui tranche « composable » — `verifie_reliure` interdit qu'une
+    /// reliure porte à la fois une géométrie et une raison de ne pas en avoir.
+    #[test]
+    fn la_vue_d_arbre_porte_les_reliures_avec_leur_raison() {
+        let pods = pods_liste();
+        let bod = pods
+            .iter()
+            .find(|p| p.cle == "bod")
+            .expect("BoD est un POD fourni");
+
+        assert_eq!(bod.nom, "BoD");
+        assert!(
+            bod.formats.iter().any(|f| f.cle == "135x215"),
+            "le format de BoD manque"
+        );
+
+        let broche = bod
+            .reliures
+            .iter()
+            .find(|r| r.cle == "broche")
+            .expect("BoD brochera toujours");
+        assert!(
+            broche.non_outille.is_none(),
+            "le broché est composable : aucune raison à afficher"
+        );
+
+        let rigide = bod
+            .reliures
+            .iter()
+            .find(|r| r.cle == "rigide")
+            .expect("BoD publie une couverture rigide qu'on n'outille pas");
+        let raison = rigide
+            .non_outille
+            .as_deref()
+            .expect("une reliure non outillée dit pourquoi");
+        assert!(raison.contains("casewrap"), "{raison}");
+    }
+
+    /// Le relevé de dos suit le **papier**, jamais le premier de la liste : un POD peut
+    /// publier une formule pour l'un et n'en publier aucune pour l'autre, et c'est la ligne
+    /// du livrable qui réclame alors la mesure.
+    #[test]
+    fn dos_publie_est_porte_par_chaque_papier() {
+        let pods = pods_liste();
+
+        let kdp = pods
+            .iter()
+            .find(|p| p.cle == "kdp")
+            .expect("KDP est fourni");
+        assert!(
+            kdp.papiers.iter().all(|pa| pa.dos_publie),
+            "KDP publie une formule pour ses deux papiers"
+        );
+
+        let coollibri = pods
+            .iter()
+            .find(|p| p.cle == "coollibri")
+            .expect("CoolLibri est fourni");
+        assert!(
+            coollibri.papiers.iter().all(|pa| !pa.dos_publie),
+            "CoolLibri ne publie aucune formule : le dos se relève sur son gabarit"
         );
     }
 

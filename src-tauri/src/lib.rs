@@ -94,6 +94,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::providers_liste,
+            commands::pods_liste,
             commands::catalogue_refus,
             commands::projet_importer,
             commands::projet_ouvrir,
