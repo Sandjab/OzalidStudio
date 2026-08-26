@@ -65,6 +65,12 @@ cargo test
 
 Depuis la racine : `node --test tests/*.test.js`.
 
+Et `cargo test -- --ignored` (depuis `src-tauri/`, ~1,3 s) si `package.rs`,
+`interieur.rs`, `planche.rs` ou `typst.rs` a changé : quatre tests y composent
+réellement avec le sidecar, dont le **seul** qui prouve qu'un gabarit ne compose son
+intérieur qu'une fois — `cargo test` nu reste vert quand la mémoïsation disparaît
+(mesuré à la tâche 3).
+
 Et, tout fichier de `src-tauri/` ayant changé dans la tâche :
 `cd src-tauri && cargo run --example temoin`. Attendu, à chaque tâche, sans exception :
 **98 pages, dos 7,21 mm**. Un écart n'est pas à corriger dans le témoin : c'est le signe
