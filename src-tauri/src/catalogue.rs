@@ -80,8 +80,32 @@ pub struct Marges {
     pub exterieur: f64,
 }
 
+/// Dimensions d'un format de rognage, en mm. Nommées et non positionnelles : ces fichiers
+/// s'éditent à la main, et une largeur prise pour une hauteur donne un livre à l'italienne
+/// que rien ne rattrape avant l'aperçu de la planche.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dimensions {
+    pub largeur: f64,
+    pub hauteur: f64,
+}
+
 /// Une tranche de pagination et la gouttière (marge intérieure) qu'elle impose.
-pub type Tranche = (u32, u32, f64);
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tranche {
+    pub de: u32,
+    pub a: u32,
+    pub mm: f64,
+}
+
+/// Pagination admise, bornes comprises.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pagination {
+    pub min: u32,
+    pub max: u32,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -91,8 +115,8 @@ pub struct Format {
     /// **Transitoire.** La clé plate que portent encore le `.ozalid`, les répertoires de
     /// package et l'interface. Elle disparaît au lot 2, avec la migration des projets.
     pub cle_heritee: String,
-    /// Format de rognage en mm (largeur, hauteur).
-    pub mm: (f64, f64),
+    /// Format de rognage, en mm.
+    pub mm: Dimensions,
     pub marges: Marges,
     /// Seules les tranches vérifiées dans le guide du prestataire figurent ici. Hors
     /// tranche, on refuse plutôt qu'inventer.
@@ -116,7 +140,7 @@ pub struct Reliure {
     /// c'est elle qui la détermine — TheBookEdition accepte 40 à 750 pages en dos carré
     /// collé et 24 à 300 en rigide, au même format.
     #[serde(default)]
-    pub pages: Option<(u32, u32)>,
+    pub pages: Option<Pagination>,
     #[serde(default)]
     pub parite: Option<Parite>,
     /// Pourquoi cette reliure n'est pas composable. Décrit **notre** état, jamais celui
@@ -270,10 +294,10 @@ impl Pod {
 
     fn verifie_format(&self, f: &Format) -> Result<(), String> {
         let ou = format!("{} / {}", self.cle, f.cle);
-        if !fini_positif(f.mm.0) || !fini_positif(f.mm.1) {
+        if !fini_positif(f.mm.largeur) || !fini_positif(f.mm.hauteur) {
             return Err(format!(
                 "{ou} : format de rognage impossible ({} × {} mm).",
-                f.mm.0, f.mm.1
+                f.mm.largeur, f.mm.hauteur
             ));
         }
         for (bord, v) in [
@@ -285,14 +309,15 @@ impl Pod {
                 return Err(format!("{ou} : marge {bord} impossible ({v} mm)."));
             }
         }
-        for &(basse, haute, gouttiere) in &f.gouttieres {
-            if basse > haute {
+        for t in &f.gouttieres {
+            if t.de > t.a {
                 return Err(format!(
-                    "{ou} : tranche de gouttière à l'envers ({basse}–{haute} pages)."
+                    "{ou} : tranche de gouttière à l'envers ({}–{} pages).",
+                    t.de, t.a
                 ));
             }
-            if !fini_non_negatif(gouttiere) {
-                return Err(format!("{ou} : gouttière impossible ({gouttiere} mm)."));
+            if !fini_non_negatif(t.mm) {
+                return Err(format!("{ou} : gouttière impossible ({} mm).", t.mm));
             }
         }
         if let Some(fp) = f.fond_perdu {
@@ -331,10 +356,11 @@ impl Pod {
             }
             _ => {}
         }
-        if let Some((basse, haute)) = r.pages {
-            if basse > haute {
+        if let Some(p) = r.pages {
+            if p.min > p.max {
                 return Err(format!(
-                    "{ou} : pagination admise à l'envers ({basse}–{haute} pages)."
+                    "{ou} : pagination admise à l'envers ({}–{} pages).",
+                    p.min, p.max
                 ));
             }
         }
@@ -370,9 +396,9 @@ mod tests {
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "essai-135x215"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
 "#;
 
     const RELIURE: &str = r#"
@@ -380,7 +406,7 @@ gouttieres = [[24, 900, 20.0]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 "#;
 
@@ -424,15 +450,15 @@ fond_perdu = 5.0
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "essai"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 
 [[finition]]
@@ -450,11 +476,27 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 
         assert_eq!(pod.cle, "essai");
         assert_eq!(pod.fond_perdu, Some(5.0));
-        assert_eq!(pod.formats[0].mm, (135.0, 215.0));
+        assert_eq!(
+            pod.formats[0].mm,
+            Dimensions {
+                largeur: 135.0,
+                hauteur: 215.0
+            }
+        );
         assert_eq!(pod.formats[0].marges.bas, 28.0);
-        assert_eq!(pod.formats[0].gouttieres, vec![(24, 900, 20.0)]);
+        assert_eq!(
+            pod.formats[0].gouttieres,
+            vec![Tranche {
+                de: 24,
+                a: 900,
+                mm: 20.0
+            }]
+        );
         assert_eq!(pod.reliures[0].geometrie, Some(Geometrie::DosCarreColle));
-        assert_eq!(pod.reliures[0].pages, Some((24, 900)));
+        assert_eq!(
+            pod.reliures[0].pages,
+            Some(Pagination { min: 24, max: 900 })
+        );
         assert_eq!(pod.papiers[0].teinte, "#f7f0e0");
         // Comparaison à la tolérance : 0,0675 n'a pas de représentation binaire
         // exacte, et `280 × 0,0675 + 0,6` ne vaut pas `19.5` au bit près.
@@ -529,7 +571,7 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
     /// décoration.
     #[test]
     fn une_reliure_outillee_sans_pagination_est_refusee() {
-        let r = sauf(RELIURE, "pages = [24, 900]\n", "");
+        let r = sauf(RELIURE, "pages = { min = 24, max = 900 }\n", "");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
         assert!(e.contains("broche"), "{e}");
     }
@@ -567,13 +609,10 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
     #[test]
     fn une_dimension_ou_une_marge_impossible_est_refusee() {
         for (avant, apres) in [
-            ("mm = [135.0, 215.0]", "mm = [0.0, 215.0]"),
-            ("mm = [135.0, 215.0]", "mm = [135.0, nan]"),
+            ("largeur = 135.0", "largeur = 0.0"),
+            ("hauteur = 215.0", "hauteur = nan"),
             ("bas = 28.0", "bas = -28.0"),
-            (
-                "gouttieres = [[24, 900, 20.0]]",
-                "gouttieres = [[24, 900, inf]]",
-            ),
+            ("mm = 20.0", "mm = inf"),
         ] {
             let f = sauf(FORMAT, avant, apres);
             let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
@@ -589,11 +628,11 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
     /// coquille de saisie, et elle doit se voir au chargement plutôt qu'à la composition.
     #[test]
     fn une_tranche_a_l_envers_est_refusee() {
-        let r = sauf(RELIURE, "pages = [24, 900]", "pages = [900, 24]");
+        let r = sauf(RELIURE, "min = 24, max = 900", "min = 900, max = 24");
         let e = Pod::depuis_toml(&pod(&[FORMAT, &r, PAPIER])).unwrap_err();
         assert!(e.contains("broche"), "{e}");
 
-        let f = sauf(FORMAT, "[[24, 900, 20.0]]", "[[900, 24, 20.0]]");
+        let f = sauf(FORMAT, "de = 24, a = 900", "de = 900, a = 24");
         let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
         assert!(e.contains("135x215"), "{e}");
     }
@@ -606,6 +645,15 @@ non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur d
         let e =
             Pod::depuis_toml(&pod(&["fond-perdu = 5.0\n", FORMAT, RELIURE, PAPIER])).unwrap_err();
         assert!(e.contains("fond-perdu"), "{e}");
+
+        // Y compris dans une table en ligne, où le champ de trop se remarque moins.
+        let f = sauf(
+            FORMAT,
+            "largeur = 135.0",
+            "largeur = 135.0, profondeur = 1.0",
+        );
+        let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
+        assert!(e.contains("profondeur"), "{e}");
     }
 
     /// Deux entrées de même clé, et le `find` des appelants en prend une sans que rien ne
