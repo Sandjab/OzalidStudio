@@ -64,6 +64,17 @@ fn le_demarrage_charge_les_fichiers_du_poste_et_refuse_un_second_chargement() {
         "quatorze fournis, plus le déposé"
     );
 
+    // `resout` interroge `PODS`, que `providers()` — donc l'assertion ci-dessus — n'initialise
+    // pas : oublier de le remplir dans `initialiser` resterait vert sans cette preuve-ci.
+    let r = catalogue::resout(&catalogue::Fabrication {
+        pod: "essai".into(),
+        format: "100x150".into(),
+        reliure: "broche".into(),
+        papier: "standard".into(),
+    })
+    .expect("le POD du poste n'est pas dans PODS");
+    assert_eq!(r.provider().format, (100.0, 150.0));
+
     // Un second appel est un défaut d'ordonnancement : il doit s'entendre, sans quoi les
     // fichiers du poste seraient ignorés en silence.
     assert_eq!(

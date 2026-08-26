@@ -27,6 +27,11 @@ pages = { min = 24, max = 900 }
 parite = "paire"
 source = "validation du calculateur officiel : nombre pair obligatoire"
 
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur des cartons"
+
 # BoD : dos = pages × épaisseur_feuille/2 + 0,6 mm de couverture 250 g. L'épaisseur dépend
 # du papier ; retenu le crème 90 g, défaut de BoD et papier de roman. Le blanc 90 g, le
 # photo mat 120 g et le brillant 130 g ne sont pas en table — leurs épaisseurs n'ont pas

@@ -32,7 +32,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Épaisseur du dos. Trois formes, parce que les prestataires en publient trois.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
@@ -633,27 +633,225 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
     v
 }
 
-/// La vue plate des fournis.
-pub fn plats() -> Result<Vec<Provider>, String> {
-    Ok(aplatit(&fournis()?))
-}
-
 /// Le catalogue chargé, une fois pour la vie du processus.
 ///
 /// `OnceLock` et non un état Tauri : deux signatures de `commands` rendent un
 /// `&'static Provider`, et une table immuable chargée une fois les satisfait sans que
 /// rien d'autre ne change. Hors application — les tests, le témoin —, il s'initialise
 /// tout seul sur les seuls fournis.
+///
+/// Projection de `PODS` : `providers()` l'aplatit à la demande, il ne se pose plus lui-même.
+/// Les deux tables viennent donc du même chargement **par construction**, et non plus
+/// parce qu'`initialiser` les pose sur deux lignes voisines.
 static PLATS: OnceLock<Vec<Provider>> = OnceLock::new();
 
 /// Tous les couples POD × format connus.
 pub fn providers() -> &'static [Provider] {
-    PLATS.get_or_init(|| plats().expect("catalogue fourni illisible"))
+    PLATS.get_or_init(|| aplatit(pods()))
 }
 
 /// Le provider de cette clé, ou `None`.
 pub fn provider(cle: &str) -> Option<&'static Provider> {
     providers().iter().find(|p| p.cle == cle)
+}
+
+/* ---------- l'identité d'un livrable ---------- */
+
+/// L'identité de fabrication d'un livrable : les quatre axes qui changent le fichier
+/// produit. La finition n'y est pas — mat ou brillant donnent le même PDF (spec § 4).
+///
+/// Sans `deny_unknown_fields`, **exprès** : la tâche 4 l'aplatit dans `Livrable` par
+/// `#[serde(flatten)]`, que serde interdit de combiner avec `deny_unknown_fields` — et le
+/// `flatten` rend de toute façon l'attribut inopérant sur les champs qu'il capture
+/// (reconnaissance, verdict 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fabrication {
+    pub pod: String,
+    pub format: String,
+    pub reliure: String,
+    pub papier: String,
+}
+
+impl Fabrication {
+    /// La clé du livrable : les quatre clés jointes par des tirets, telles quelles.
+    /// Elle nomme le répertoire de package et l'identifiant de DOM. Elle se fabrique et
+    /// se compare — jamais ne se découpe : le séparateur vit déjà dans les valeurs
+    /// (`creme-90`).
+    pub fn cle(&self) -> String {
+        format!(
+            "{}-{}-{}-{}",
+            self.pod, self.format, self.reliure, self.papier
+        )
+    }
+
+    /// La clé du gabarit d'intérieur : ce qui détermine la pagination. Ni le papier ni
+    /// la finition n'y sont — c'est elle qui range la mesure (spec § 5).
+    pub fn cle_gabarit(&self) -> String {
+        format!("{}-{}-{}", self.pod, self.format, self.reliure)
+    }
+}
+
+/// La table des quatorze clés plates historiques et du triplet qui les remplace.
+///
+/// Deux maîtres : la migration v4→v5 des `.ozalid` (`projet::migre`), et le helper de
+/// test `provider`. **Gelée** : un format neuf naît en triplet et n'y entre jamais, quand
+/// bien même la vue plate grandirait au lot 4.
+///
+/// `expect(dead_code)` : cette tâche (1/lot 2) la pose sans encore la brancher hors tests —
+/// `projet::migre` la consomme à la tâche 4, ce qui rendra l'attente non tenue et
+/// l'attribut caduc de lui-même. Restreint à `not(test)` : `mod tests` l'utilise déjà, et
+/// l'attente y serait déçue dans l'autre sens.
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) const HERITEES: [(&str, &str, &str, &str); 14] = [
+    ("lulu", "lulu", "108x175", "broche"),
+    ("bod", "bod", "135x215", "broche"),
+    ("kdp-5x8", "kdp", "5x8", "broche"),
+    ("kdp-55x85", "kdp", "55x85", "broche"),
+    ("kdp-6x9", "kdp", "6x9", "broche"),
+    ("coollibri-110x170", "coollibri", "110x170", "broche"),
+    ("coollibri-148x210", "coollibri", "148x210", "broche"),
+    ("coollibri-160x240", "coollibri", "160x240", "broche"),
+    ("tbe-110x170", "tbe", "110x170", "broche"),
+    ("tbe-120x180", "tbe", "120x180", "broche"),
+    ("tbe-1485x210", "tbe", "1485x210", "broche"),
+    ("bookvault-127x203", "bookvault", "127x203", "broche"),
+    ("bookvault-129x198", "bookvault", "129x198", "broche"),
+    ("bookvault-148x210", "bookvault", "148x210", "broche"),
+];
+
+/// Les POD chargés, une fois pour la vie du processus — le pendant de `PLATS`, en
+/// profondeur : c'est lui que `resout` interroge, et lui seul qu'`initialiser` pose ;
+/// `PLATS` s'en déduit. Hors application, les seuls fournis.
+static PODS: OnceLock<Vec<Pod>> = OnceLock::new();
+
+/// Tous les POD connus.
+pub fn pods() -> &'static [Pod] {
+    PODS.get_or_init(|| fournis().expect("catalogue fourni illisible"))
+}
+
+/// Le POD de cette clé, ou `None`.
+pub fn pod(cle: &str) -> Option<&'static Pod> {
+    pods().iter().find(|p| p.cle == cle)
+}
+
+/// Un livrable résolu contre le catalogue : quatre références dans une table qui vit
+/// aussi longtemps que le processus. `Copy` — rien ici n'est possédé.
+#[derive(Debug, Clone, Copy)]
+pub struct Resolu {
+    pub pod: &'static Pod,
+    pub format: &'static Format,
+    pub reliure: &'static Reliure,
+    pub papier: &'static Papier,
+}
+
+/// Résout une fabrication, ou la refuse en nommant l'axe fautif.
+///
+/// C'est ici que la reliure non outillée se refuse **par le Rust** (spec § 9), avec la
+/// raison écrite dans le fichier : le refus tombe au moment du choix, jamais après une
+/// couverture réglée.
+pub fn resout(f: &Fabrication) -> Result<Resolu, String> {
+    let pod = pod(&f.pod).ok_or_else(|| format!("POD inconnu : {}.", f.pod))?;
+    let format = pod
+        .formats
+        .iter()
+        .find(|x| x.cle == f.format)
+        .ok_or_else(|| format!("{} ne fait pas le format {}.", pod.nom, f.format))?;
+    let reliure = pod
+        .reliures
+        .iter()
+        .find(|x| x.cle == f.reliure)
+        .ok_or_else(|| format!("{} ne fait pas la reliure {}.", pod.nom, f.reliure))?;
+    if reliure.geometrie.is_none() {
+        return Err(match &reliure.non_outille {
+            Some(raison) => format!("{} — {raison}", reliure.nom),
+            None => format!("{} n'est pas composable.", reliure.nom),
+        });
+    }
+    let papier = pod
+        .papiers
+        .iter()
+        .find(|x| x.cle == f.papier)
+        .ok_or_else(|| format!("papier inconnu chez {} : {}.", pod.nom, f.papier))?;
+    Ok(Resolu {
+        pod,
+        format,
+        reliure,
+        papier,
+    })
+}
+
+impl Resolu {
+    /// Le fond perdu du format à défaut, celui du POD sinon — la règle d'`aplatit`.
+    pub fn fond_perdu(&self) -> Option<f64> {
+        self.format.fond_perdu.or(self.pod.fond_perdu)
+    }
+
+    /// La `Fabrication` d'où ce livrable vient : le chemin de retour de `Resolu` vers la
+    /// clé à quatre segments, dont les tâches 3 à 6 auront besoin.
+    pub fn fabrication(&self) -> Fabrication {
+        Fabrication {
+            pod: self.pod.cle.clone(),
+            format: self.format.cle.clone(),
+            reliure: self.reliure.cle.clone(),
+            papier: self.papier.cle.clone(),
+        }
+    }
+
+    /// La vue plate de ce livrable, telle que `interieur`, `planche` et `package` la
+    /// consomment. Sa clé est celle du **gabarit** : c'est elle qui entre dans la source
+    /// Typst et nomme le PDF de travail de `composer` — deux papiers du même gabarit
+    /// composent le même intérieur.
+    ///
+    /// Le prix, nommable : quelques `String` et un `Vec<Papier>` clonés par commande,
+    /// devant une composition Typst de plusieurs secondes (verdict 1c).
+    pub fn provider(&self) -> Provider {
+        let pagination = self
+            .reliure
+            .pages
+            .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
+        Provider {
+            cle: self.fabrication().cle_gabarit(),
+            libelle: format!("{} — {}", self.pod.nom, self.format.nom),
+            format: (self.format.mm.largeur, self.format.mm.hauteur),
+            marge_haut: self.format.marges.haut,
+            marge_bas: self.format.marges.bas,
+            exterieur: self.format.marges.exterieur,
+            gouttieres: self
+                .format
+                .gouttieres
+                .iter()
+                .map(|t| (t.de, t.a, t.mm))
+                .collect(),
+            fond_perdu: self.fond_perdu(),
+            pages_min: pagination.min,
+            pages_max: pagination.max,
+            papiers: self.pod.papiers.clone(),
+        }
+    }
+
+    /// L'empreinte de ce qui pagine : format, marges, gouttières — rien d'autre.
+    ///
+    /// Retenue **avec la mesure** : un `<config>/pods/*.toml` réécrit avec d'autres
+    /// marges ne périme la mesure qu'à travers elle (spec § 8). Le dos et le fond perdu
+    /// n'y sont pas : ils ne paginent pas, et l'affichage les recalcule à chaque vue.
+    pub fn empreinte(&self) -> String {
+        let m = &self.format.marges;
+        let g: Vec<String> = self
+            .format
+            .gouttieres
+            .iter()
+            .map(|t| format!("{}-{}-{}", t.de, t.a, t.mm))
+            .collect();
+        format!(
+            "{}x{}|{}|{}|{}|{}",
+            self.format.mm.largeur,
+            self.format.mm.hauteur,
+            m.haut,
+            m.bas,
+            m.exterieur,
+            g.join(",")
+        )
+    }
 }
 
 /// Un fichier de catalogue que le poste porte et que l'application n'a pas pu lire.
@@ -767,10 +965,12 @@ pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
 /// À appeler avant toute commande. Un second appel est un défaut d'ordonnancement et se
 /// refuse : sans quoi les fichiers du poste seraient silencieusement ignorés, un
 /// `providers()` antérieur ayant déjà figé les seuls fournis.
+///
+/// Ne pose que `PODS` : `PLATS` en est une projection, calculée à la demande par
+/// `providers()`, jamais par lui.
 pub fn initialiser(config: Option<&Path>) -> Result<Vec<Refus>, String> {
     let (pods, refus) = charge(config);
-    PLATS
-        .set(aplatit(&pods))
+    PODS.set(pods)
         .map_err(|_| "le catalogue a déjà été chargé".to_string())?;
     Ok(refus)
 }
@@ -1804,5 +2004,122 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
                 );
             }
         }
+    }
+
+    /* ---------- l'identité à quatre axes ---------- */
+
+    fn fabrication(pod: &str, format: &str, reliure: &str, papier: &str) -> Fabrication {
+        Fabrication {
+            pod: pod.into(),
+            format: format.into(),
+            reliure: reliure.into(),
+            papier: papier.into(),
+        }
+    }
+
+    fn pod_de(cle: &str) -> &'static Pod {
+        // `pod` est ombré ici par le helper de fabrique de TOML du même nom, `fn pod(blocs:
+        // &[&str])` (plus haut dans ce module) : qualifié pour viser sans ambiguïté celui du
+        // module.
+        super::pod(cle).unwrap_or_else(|| panic!("POD inconnu : {cle}"))
+    }
+
+    #[test]
+    fn la_cle_d_un_livrable_joint_les_quatre_axes_sans_les_transformer() {
+        let f = fabrication("bod", "135x215", "broche", "creme-90");
+        // Décision du 26/08 : cinq segments visibles, aucune transformation — le tiret de
+        // `creme-90` reste. Une clé se fabrique et se compare, elle ne se découpe jamais.
+        assert_eq!(f.cle(), "bod-135x215-broche-creme-90");
+        assert_eq!(f.cle_gabarit(), "bod-135x215-broche");
+    }
+
+    #[test]
+    fn resoudre_un_livrable_rend_les_quatre_references() {
+        let r = resout(&fabrication("bod", "135x215", "broche", "creme-90")).unwrap();
+        assert_eq!(r.pod.cle, "bod");
+        assert_eq!(r.format.cle, "135x215");
+        assert_eq!(r.reliure.cle, "broche");
+        assert_eq!(r.papier.cle, "creme-90");
+        // Le fond perdu du format à défaut, celui du POD sinon : BoD le publie au POD.
+        assert_eq!(r.fond_perdu(), Some(5.0));
+    }
+
+    #[test]
+    fn un_pod_inconnu_est_refuse_en_le_nommant() {
+        let e = resout(&fabrication("imaginaire", "135x215", "broche", "creme-90")).unwrap_err();
+        assert!(e.contains("imaginaire"), "{e}");
+    }
+
+    #[test]
+    fn un_format_etranger_au_pod_est_refuse_en_nommant_les_deux() {
+        let e = resout(&fabrication("bod", "108x175", "broche", "creme-90")).unwrap_err();
+        assert!(e.contains("BoD") && e.contains("108x175"), "{e}");
+    }
+
+    #[test]
+    fn un_papier_etranger_au_pod_est_refuse() {
+        let e = resout(&fabrication("bod", "135x215", "broche", "standard")).unwrap_err();
+        assert!(e.contains("standard"), "{e}");
+    }
+
+    /// Spec § 9 : une reliure non outillée ne peut pas être choisie, par le Rust, même si
+    /// l'interface offrait le contrôle. Le refus porte la raison écrite dans le fichier.
+    #[test]
+    fn une_reliure_non_outillee_est_refusee_avec_sa_raison() {
+        let e = resout(&fabrication("bod", "135x215", "rigide", "creme-90")).unwrap_err();
+        assert!(e.contains("rigide"), "{e}");
+        assert!(
+            e.contains("non relevée"),
+            "la raison du fichier doit traverser : {e}"
+        );
+    }
+
+    /// L'ancrage de la fabrique : pour chacune des quatorze clés héritées, le `Provider`
+    /// fabriqué depuis le triplet (et le papier par défaut du POD) est **identique** à celui
+    /// de la vue plate — la clé exceptée, neutralisée dans la comparaison, qui change de
+    /// convention à la tâche 5. La comparaison porte sur `Provider` entier : un champ ajouté
+    /// et renseigné d'un seul côté devient rouge tout seul, sans qu'il faille l'énumérer ici.
+    #[test]
+    fn le_livrable_resolu_fabrique_le_provider_de_la_vue_plate() {
+        for (heritee, pod, format, reliure) in HERITEES {
+            let plat = provider(heritee).unwrap_or_else(|| panic!("clé plate absente : {heritee}"));
+            let papier = &pod_de(pod).papiers[0].cle;
+            let fait = resout(&fabrication(pod, format, reliure, papier))
+                .unwrap()
+                .provider();
+            assert_eq!(
+                fait,
+                Provider {
+                    cle: fait.cle.clone(),
+                    ..plat.clone()
+                }
+            );
+        }
+    }
+
+    /// La table de migration est ancrée sur les fichiers : chaque ligne désigne un triplet
+    /// qui se résout, et la clé héritée qu'elle remplace est bien celle que le format porte
+    /// encore. La seconde moitié tombe à la tâche 7 avec `cle_heritee`.
+    #[test]
+    fn chaque_cle_heritee_a_son_triplet() {
+        for (heritee, pod, format, reliure) in HERITEES {
+            let r = resout(&Fabrication {
+                pod: pod.into(),
+                format: format.into(),
+                reliure: reliure.into(),
+                papier: pod_de(pod).papiers[0].cle.clone(),
+            })
+            .unwrap_or_else(|e| panic!("{heritee} : {e}"));
+            assert_eq!(r.format.cle_heritee, heritee);
+        }
+    }
+
+    /// L'empreinte ne voit que ce qui pagine : le format, les marges, les gouttières.
+    /// Ni le papier, ni le fond perdu, ni la formule de dos — le dos affiché se recalcule,
+    /// lui, à chaque vue.
+    #[test]
+    fn l_empreinte_ne_bouge_qu_avec_ce_qui_pagine() {
+        let r = resout(&fabrication("bod", "135x215", "broche", "creme-90")).unwrap();
+        assert_eq!(r.empreinte(), "135x215|18.8|28|15|24-900-20");
     }
 }
