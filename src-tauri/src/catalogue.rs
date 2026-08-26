@@ -250,6 +250,31 @@ fn sans_doublon<'a>(
 }
 
 impl Pod {
+    /// La reliure sur laquelle ce POD compose : la première qu'on ait outillée.
+    ///
+    /// `None` chez un POD dont aucune reliure n'a de géométrie relevée : on ne sait rien
+    /// composer chez lui, et c'est aux appelants d'en décider — `aplatit` l'ignore,
+    /// `fabrication_defaut` ne propose rien.
+    pub fn reliure_composable(&self) -> Option<&Reliure> {
+        self.reliures.iter().find(|r| r.geometrie.is_some())
+    }
+
+    /// La fabrication qu'on propose d'office chez ce POD : son premier format, sa
+    /// première reliure composable, son premier papier.
+    ///
+    /// La règle vit ici et non chez ses appelants : elle était écrite dans `aplatit` —
+    /// qui met cette entrée en tête — et dans `Livraison::default`, et un troisième site
+    /// l'aurait fait diverger en silence. Un livre neuf et la première ligne de la table
+    /// plate doivent désigner le même livrable.
+    pub fn fabrication_defaut(&self) -> Option<Fabrication> {
+        Some(Fabrication {
+            pod: self.cle.clone(),
+            format: self.formats.first()?.cle.clone(),
+            reliure: self.reliure_composable()?.cle.clone(),
+            papier: self.papiers.first()?.cle.clone(),
+        })
+    }
+
     /// Lit un POD depuis son TOML, et le refuse s'il promet ce que le code ne tient pas.
     pub fn depuis_toml(s: &str) -> Result<Self, String> {
         let pod: Pod = toml::from_str(s).map_err(|e| e.to_string())?;
@@ -610,7 +635,7 @@ impl Provider {
 pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
     let mut v = Vec::new();
     for pod in pods {
-        let Some(r) = pod.reliures.iter().find(|r| r.geometrie.is_some()) else {
+        let Some(r) = pod.reliure_composable() else {
             continue;
         };
         let pagination = r
@@ -699,13 +724,8 @@ impl Fabrication {
 ///
 /// Deux maîtres : la migration v4→v5 des `.ozalid` (`projet::migre`), et le helper de
 /// test `provider`. **Gelée** : un format neuf naît en triplet et n'y entre jamais, quand
-/// bien même la vue plate grandirait au lot 4.
-///
-/// `expect(dead_code)` : cette tâche (1/lot 2) la pose sans encore la brancher hors tests —
-/// `projet::migre` la consomme à la tâche 4, ce qui rendra l'attente non tenue et
-/// l'attribut caduc de lui-même. Restreint à `not(test)` : `mod tests` l'utilise déjà, et
-/// l'attente y serait déçue dans l'autre sens.
-#[cfg_attr(not(test), expect(dead_code))]
+/// bien même la vue plate grandirait au lot 4. Elle ne sert donc qu'à relire le passé —
+/// ce que le poste dépose aujourd'hui se lit dans `cle_heritee`, pas ici.
 pub(crate) const HERITEES: [(&str, &str, &str, &str); 14] = [
     ("lulu", "lulu", "108x175", "broche"),
     ("bod", "bod", "135x215", "broche"),

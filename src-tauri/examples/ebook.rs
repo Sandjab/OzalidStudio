@@ -3,7 +3,7 @@
 //! C'est le seul moyen de vérifier ce qu'aucun test ne peut dire : que Typst avale la
 //! source à couverture insérée, et qu'une liseuse ouvre l'archive.
 //!
-//! Usage : cargo run --example ebook -- <projet.ozalid> <sortie> [prestataire]
+//! Usage : cargo run --example ebook -- <projet.ozalid> <sortie>
 
 use std::path::{Path, PathBuf};
 
@@ -17,28 +17,25 @@ fn main() -> Result<(), String> {
     let (ozalid, sortie) = match (args.next(), args.next()) {
         (Some(a), Some(b)) => (a, b),
         _ => {
-            eprintln!("usage : ebook <projet.ozalid> <sortie> [prestataire]");
+            eprintln!("usage : ebook <projet.ozalid> <sortie>");
             std::process::exit(2);
         }
     };
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
 
-    // Le gabarit vient du destinataire visé, comme dans l'application. L'argument n'est
-    // là que pour en essayer un autre sans toucher au projet.
-    let cle = args.next();
+    // Le gabarit vient du livrable visé, comme dans l'application.
     let d = projet
         .meta
         .livraison
         .courant()
-        .ok_or("aucun destinataire dans ce projet.")?;
-    let cle = cle.unwrap_or_else(|| d.provider.clone());
-    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+        .ok_or("aucun livrable dans ce projet.")?;
+    let pr = catalogue::resout(&d.fabrication)?.provider();
 
     // Les polices embarquées, comme `composer` et `epreuve` : sans elles, la police du
     // projet est introuvable et le PDF part en repli, l'EPUB dans l'écriture du lecteur.
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
-    let r = ebook::generer(&projet, pr, d.dos_mm, &PathBuf::from(&sortie), &typst)?;
+    let r = ebook::generer(&projet, &pr, d.dos_mm, &PathBuf::from(&sortie), &typst)?;
 
     println!("{}  ({} Ko)", r.pdf, r.octets_pdf / 1024);
     println!("{}  ({} Ko)", r.epub, r.octets_epub / 1024);

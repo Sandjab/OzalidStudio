@@ -34,7 +34,14 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 /// La version du format `.ozalid`.
 ///
-/// **v4** : la main de l'envoi descend du livre dans l'exemplaire, et le gabarit de
+/// **v5** : le destinataire devient un **livrable** — POD, format, reliure, papier —, et
+/// la mesure quitte le destinataire pour une map rangée par gabarit d'intérieur. Deux
+/// champs se déplacent, et la clé plate d'hier ne nomme plus rien : aucune structure de
+/// la v5 ne sait lire un `[[livraison.destinataires]]`, et un binaire v4 ouvrant un
+/// projet v5 se retrouverait sans aucun destinataire — donc sans format de couverture.
+/// Monter la version fait refuser ce projet, ce qui est vrai et réparable.
+///
+/// Version 4 : la main de l'envoi descend du livre dans l'exemplaire, et le gabarit de
 /// diffusion remonte sur `Envois`. Contrairement aux sections facultatives ajoutées
 /// depuis la v3, qu'un binaire d'avant traverse sans dommage, un champ se **déplace**
 /// ici : un binaire v3 ouvrant un projet v4 ne verrait aucune main d'envoi, et son
@@ -48,7 +55,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 ///
 /// Version 2 : la maquette de couverture y est typée, dans le vocabulaire du moteur
 /// Typst, là où la 1 conservait le bloc de réglages brut de l'atelier HTML.
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 5;
 const PROJET_TOML: &str = "projet.toml";
 const MANUSCRIT_MD: &str = "manuscrit.md";
 const IMAGES: &str = "images/";
@@ -229,46 +236,69 @@ pub struct Couverture {
     pub maquette: Option<crate::couverture::Couverture>,
 }
 
-/// Un destinataire du livre : le prestataire chez qui on livre, son papier, et — pour
-/// ceux qui ne publient ni dos ni fond perdu — ce qui a été relevé sur leur gabarit.
+/// Un livrable du livre : la fabrication qu'on déclare — POD, format, reliure, papier —
+/// la finition qui paraîtra au récapitulatif sans changer le fichier, et, pour les POD
+/// qui ne publient ni dos ni fond perdu, ce qui a été relevé sur leur gabarit.
 ///
 /// Les relevés naissent absents, jamais préremplis : une valeur inventée qui ressemble
 /// à une mesure est pire qu'un champ vide, et le refus de composer dit quoi faire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Destinataire {
-    pub provider: String,
-    pub papier: String,
+pub struct Livrable {
+    #[serde(flatten)]
+    pub fabrication: crate::catalogue::Fabrication,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finition: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dos_mm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fond_perdu_mm: Option<f64>,
-    /// Ce que la dernière composition a mesuré pour ce destinataire-là.
-    ///
-    /// **Une mesure présente vaut toujours.** C'est l'invariant de tout le dispositif :
-    /// rien ici n'est estampillé, rien n'est à comparer avant de s'en servir, et ce qui
-    /// pourrait la périmer l'efface à la source. Absente, il n'y a rien à afficher.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compose: Option<Mesure>,
 }
 
-/// Ce qu'une composition mesure, et que le projet retient.
+impl Livrable {
+    /// La clé du livrable — quatre axes, l'identité entière (spec § 4).
+    pub fn cle(&self) -> String {
+        self.fabrication.cle()
+    }
+
+    /// Un livrable neuf sur cette fabrication : aucun relevé, aucune finition.
+    pub fn pour(f: crate::catalogue::Fabrication) -> Self {
+        Self {
+            fabrication: f,
+            finition: None,
+            dos_mm: None,
+            fond_perdu_mm: None,
+        }
+    }
+}
+
+/// Ce qu'une composition mesure, et que le projet retient — par **gabarit d'intérieur**
+/// (POD, format, reliure), jamais par livrable : la pagination ne dépend ni du papier ni
+/// de la finition, et c'est ce partage qui rend la comparaison de deux papiers gratuite
+/// (spec § 5). Le dos n'y est plus : il dépend du papier, il se **recalcule** à chaque
+/// vue depuis la formule du papier du livrable qu'on regarde.
 ///
-/// Retenue par destinataire et dans le `.ozalid`, et non dans une variable de
-/// l'interface : le même livre a autant de paginations que de gabarits, et les
-/// redemander une à une à chaque changement de lunette faisait payer une composition
-/// entière pour un chiffre déjà connu — puis une deuxième fois à la réouverture.
-/// Plus `Copy` depuis qu'elle porte les polices de repli : un `Vec` ne se copie pas.
-/// C'est le seul prix du champ, et il se paie en `.clone()` aux rares endroits qui
-/// lisaient une mesure derrière une référence.
+/// Retenue dans le `.ozalid` et non dans une variable de l'interface : le même livre a
+/// autant de paginations que de gabarits, et les redemander une à une à chaque
+/// changement de lunette faisait payer une composition entière pour un chiffre déjà
+/// connu — puis une deuxième fois à la réouverture. Plus `Copy` depuis qu'elle porte
+/// les polices de repli : un `Vec` ne se copie pas. C'est le seul prix du champ, et il
+/// se paie en `.clone()` aux rares endroits qui lisent une mesure derrière une
+/// référence.
+///
+/// **Une mesure présente vaut toujours.** L'invariant tient, sur une clé plus large :
+/// rien n'est à comparer avant usage, et ce qui pourrait la périmer l'efface à la
+/// source — ou à l'ouverture, pour la seule cause qui échappe aux mutateurs : un
+/// gabarit réécrit dans `<config>/pods/` pendant que le livre était fermé. C'est ce que
+/// l'`empreinte` attrape (spec § 8).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Mesure {
     pub pages: u32,
     pub gouttiere: f64,
     pub blanche: bool,
-    /// Dos en mm, ou absent chez un prestataire qui ne publie pas de formule et dont le
-    /// relevé manque : composé ne veut pas dire chiffré.
+    /// L'empreinte du gabarit qui a composé (`Resolu::empreinte`). Comparée une seule
+    /// fois, à l'ouverture, par `normalise`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dos: Option<f64>,
+    pub empreinte: Option<String>,
     /// Familles que Typst n'a pas trouvées et a remplacées par une écriture de repli.
     ///
     /// Retenues **avec la mesure** et non dans une variable de l'écran : un PDF composé
@@ -282,29 +312,20 @@ pub struct Mesure {
     pub polices_introuvables: Vec<String>,
 }
 
-impl Destinataire {
-    /// Un destinataire neuf chez ce prestataire : son papier par défaut, aucun relevé,
-    /// aucune mesure — il n'a jamais été composé.
-    pub fn pour(pr: &crate::catalogue::Provider) -> Self {
-        Self {
-            provider: pr.cle.clone(),
-            papier: pr.papier_defaut().cle.clone(),
-            dos_mm: None,
-            fond_perdu_mm: None,
-            compose: None,
-        }
-    }
-}
-
-/// À qui le livre est destiné, et pour lequel de ces destinataires on regarde.
+/// À qui le livre est destiné, et pour lequel de ces livrables on regarde.
 ///
 /// Une seule liste et un pointeur dessus : l'intérieur se compose pour le courant, la
-/// couverture s'aperçoit à son format, la génération sert toute la liste. Le prestataire
+/// couverture s'aperçoit à son format, la génération sert toute la liste. Le livrable
 /// n'est donc désigné qu'une fois, là où il l'a toujours été deux.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Livraison {
-    pub destinataires: Vec<Destinataire>,
-    /// Clé du prestataire visé — toujours l'un des destinataires ci-dessus.
+    pub livrables: Vec<Livrable>,
+    /// Clé du livrable visé (`Livrable::cle`) — toujours l'un des livrables ci-dessus,
+    /// et une **clé**, jamais un index : un index décalé par un retrait désignerait un
+    /// autre livrable en silence, et un pointeur qui ne désigne rien fait boucler la
+    /// recomposition sans erreur (reconnaissance § 6). `normalise` garantit qu'elle
+    /// désigne toujours quelqu'un.
+    #[serde(default)]
     pub courant: String,
     /// Ce livre a été composé au moins une fois, pour n'importe lequel des
     /// destinataires. Posé à la première composition, **jamais repris** : c'est de
@@ -315,28 +336,37 @@ pub struct Livraison {
     /// premier ne réclame rien, le second réclame une recomposition.
     #[serde(default)]
     pub deja_compose: bool,
+    /// Les mesures, par clé de gabarit (`Fabrication::cle_gabarit`). Une map et non une
+    /// liste : deux entrées de même gabarit sont impossibles par construction.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub mesures: std::collections::BTreeMap<String, Mesure>,
 }
 
-/// Un livre naît avec un destinataire, le premier de la table : le pointeur ne doit
-/// jamais être vide, ne serait-ce que pour regarder une première de couverture, qui
-/// réclame un format sans réclamer aucune composition.
+/// Un livre naît avec un livrable : la fabrication d'office du premier POD du catalogue
+/// — c'est l'entrée que la table plate met en tête, et `Pod::fabrication_defaut` est ce
+/// qui garantit que les deux désignent le même. Le pointeur ne doit jamais être vide, ne
+/// serait-ce que pour regarder une première de couverture, qui réclame un format sans
+/// réclamer aucune composition.
 impl Default for Livraison {
     fn default() -> Self {
-        let pr = &crate::catalogue::providers()[0];
+        let l = Livrable::pour(
+            crate::catalogue::pods()[0]
+                .fabrication_defaut()
+                .expect("le premier POD du catalogue porte une reliure composable"),
+        );
         Self {
-            destinataires: vec![Destinataire::pour(pr)],
-            courant: pr.cle.clone(),
+            courant: l.cle(),
+            livrables: vec![l],
             deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
         }
     }
 }
 
 impl Livraison {
-    /// Le destinataire visé, s'il y en a un.
-    pub fn courant(&self) -> Option<&Destinataire> {
-        self.destinataires
-            .iter()
-            .find(|d| d.provider == self.courant)
+    /// Le livrable visé, s'il y en a un.
+    pub fn courant(&self) -> Option<&Livrable> {
+        self.livrables.iter().find(|l| l.cle() == self.courant)
     }
 
     /// Oublie ce que toutes les compositions ont mesuré.
@@ -349,52 +379,89 @@ impl Livraison {
     /// `deja_compose` survit : ce qui vient d'être perdu, c'est la mesure, pas le fait
     /// qu'on en ait déjà voulu une.
     pub fn oublier_mesures(&mut self) {
-        for d in &mut self.destinataires {
-            d.compose = None;
-        }
+        self.mesures.clear();
     }
 
-    /// Retient ce qu'une composition vient de mesurer pour un destinataire.
+    /// Retient ce qu'une composition vient de mesurer pour un gabarit.
     ///
-    /// Sans effet si le prestataire n'est plus de la liste : une composition dont le
+    /// Sans effet si plus aucun livrable ne porte ce gabarit : une composition dont le
     /// destinataire a disparu en chemin n'a personne à renseigner.
-    pub fn retenir_mesure(&mut self, provider: &str, mesure: Mesure) {
-        if let Some(d) = self
-            .destinataires
-            .iter_mut()
-            .find(|d| d.provider == provider)
+    pub fn retenir_mesure(&mut self, cle_gabarit: &str, mesure: Mesure) {
+        if self
+            .livrables
+            .iter()
+            .any(|l| l.fabrication.cle_gabarit() == cle_gabarit)
         {
-            d.compose = Some(mesure);
+            self.mesures.insert(cle_gabarit.to_string(), mesure);
             self.deja_compose = true;
         }
     }
 
-    /// Remet la liste d'accord avec la table des gabarits.
+    /// La mesure d'un gabarit, si une composition l'a faite.
+    pub fn mesure(&self, cle_gabarit: &str) -> Option<&Mesure> {
+        self.mesures.get(cle_gabarit)
+    }
+
+    /// Remet la liste d'accord avec le catalogue.
     ///
-    /// Un `.ozalid` peut nommer un prestataire ou un papier que la table ne porte plus,
-    /// ou le même prestataire deux fois. Élaguer vaut mieux que refuser d'ouvrir : le
-    /// reste du projet — le manuscrit, la maquette — est intact, et la liste des
-    /// destinataires se refait en trois clics. C'est le même arbitrage que les projets
-    /// récents dont le fichier a disparu.
+    /// Un `.ozalid` peut nommer un POD, un format, une reliure ou un papier que le
+    /// catalogue ne porte plus, ou le même livrable deux fois. Élaguer vaut mieux que
+    /// refuser d'ouvrir : le reste du projet — le manuscrit, la maquette — est intact,
+    /// et la liste des livrables se refait en trois clics. C'est le même arbitrage que
+    /// les projets récents dont le fichier a disparu.
     fn normalise(&mut self) {
         let mut vus = std::collections::BTreeSet::new();
-        self.destinataires.retain_mut(|d| {
-            let Some(pr) = crate::catalogue::provider(&d.provider) else {
-                return false;
-            };
-            if pr.papier(&d.papier).is_none() {
-                // Le papier change l'épaisseur d'une page sans toucher à la pagination :
-                // la mesure retenue ne vaut plus, et la garder ici la rendrait fausse
-                // dès l'ouverture, sans qu'aucun geste ne l'ait provoquée.
-                d.papier = pr.papier_defaut().cle.clone();
-                d.compose = None;
+        let vise = self.courant.clone();
+        // Le pointeur porte le papier depuis la v5 : un repli d'office renomme le
+        // livrable visé, et sans ce rattrapage `courant` ne le retrouverait plus — il
+        // sauterait sur le premier de la liste, faisant rouvrir le livre sur quelqu'un
+        // d'autre, en silence. La clé plate d'avant, elle, ne portait pas le papier.
+        let mut rebaptise: Option<String> = None;
+        self.livrables.retain_mut(|l| {
+            if crate::catalogue::resout(&l.fabrication).is_err() {
+                // Le papier est le seul axe qui se remplace sans changer le gabarit :
+                // les trois autres partis — ou la reliure plus outillée —, le livrable
+                // ne désigne plus rien de composable.
+                let Some(pod) = crate::catalogue::pod(&l.fabrication.pod) else {
+                    return false;
+                };
+                let avant = l.cle();
+                l.fabrication.papier = pod.papiers[0].cle.clone();
+                if crate::catalogue::resout(&l.fabrication).is_err() {
+                    return false;
+                }
+                if avant == vise {
+                    rebaptise = Some(l.cle());
+                }
+                // La mesure du gabarit survit : le papier ne pagine pas.
             }
-            vus.insert(d.provider.clone())
+            vus.insert(l.cle())
         });
-        if self.destinataires.is_empty() {
+        if let Some(c) = rebaptise {
+            self.courant = c;
+        }
+        // Une mesure ne vaut que pour un gabarit encore déclaré **et** inchangé : un
+        // `<config>/pods/*.toml` réécrit pendant que le livre était fermé est la seule
+        // cause de péremption qui échappe aux mutateurs (spec § 8). Une mesure sans
+        // empreinte — écrite avant elle — est périmée par prudence : recomposer coûte
+        // des secondes, un dos affiché faux coûte une confiance.
+        let gabarits: std::collections::BTreeMap<String, String> = self
+            .livrables
+            .iter()
+            .filter_map(|l| {
+                let r = crate::catalogue::resout(&l.fabrication).ok()?;
+                Some((l.fabrication.cle_gabarit(), r.empreinte()))
+            })
+            .collect();
+        self.mesures.retain(|cle, m| {
+            gabarits
+                .get(cle)
+                .is_some_and(|e| m.empreinte.as_deref() == Some(e))
+        });
+        if self.livrables.is_empty() {
             *self = Self::default();
         } else if self.courant().is_none() {
-            self.courant = self.destinataires[0].provider.clone();
+            self.courant = self.livrables[0].cle();
         }
     }
 }
@@ -511,11 +578,91 @@ fn migre(mut v: toml::Value) -> Result<Metadonnees, String> {
                 }
             }
         }
+        migre_livraison(&mut v);
         if let Some(o) = v.get_mut("ozalid").and_then(toml::Value::as_table_mut) {
             o.insert("version".into(), toml::Value::Integer(VERSION as i64));
         }
     }
     v.try_into().map_err(|e| format!("{PROJET_TOML} : {e}"))
+}
+
+/// v4 → v5 : le destinataire devient un livrable, la mesure quitte le destinataire pour
+/// la map des gabarits, `courant` devient une clé à quatre axes. La table `HERITEES`
+/// donne le triplet de chaque clé plate ; un prestataire disparu est élagué, comme
+/// `normalise` l'aurait fait. Rejouée sur son propre résultat, elle ne bouge rien :
+/// `destinataires` absent, elle sort au premier pas.
+///
+/// Sur le `toml::Value` et non sur les types, comme les deux migrations qui la
+/// précèdent, et pour la même raison : en v5, plus aucune structure Rust ne sait lire un
+/// `destinataire`.
+fn migre_livraison(v: &mut toml::Value) {
+    let Some(l) = v.get_mut("livraison").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+    let Some(anciens) = l.remove("destinataires") else {
+        return; // déjà en v5, ou jamais de livraison écrite
+    };
+    // Les sorties anticipées d'abord : une `destinataires` qui n'est pas un tableau fait
+    // renoncer, et renoncer après avoir retiré `courant` emporterait le pointeur d'un
+    // fichier qu'on n'a pas su migrer.
+    let Some(anciens) = anciens.as_array() else {
+        return;
+    };
+    let ancien_courant = l
+        .get("courant")
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned);
+    l.remove("courant");
+    let mut livrables = toml::value::Array::new();
+    let mut mesures = toml::value::Table::new();
+    let mut courant: Option<String> = None;
+    for d in anciens {
+        let Some(t) = d.as_table() else { continue };
+        let Some(plate) = t.get("provider").and_then(toml::Value::as_str) else {
+            continue;
+        };
+        let Some((_, pod, format, reliure)) = crate::catalogue::HERITEES
+            .iter()
+            .find(|(h, ..)| *h == plate)
+        else {
+            continue; // prestataire disparu : élagué
+        };
+        let papier = t
+            .get("papier")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        let mut n = toml::value::Table::new();
+        n.insert("pod".into(), (*pod).into());
+        n.insert("format".into(), (*format).into());
+        n.insert("reliure".into(), (*reliure).into());
+        n.insert("papier".into(), papier.clone().into());
+        for champ in ["dos_mm", "fond_perdu_mm"] {
+            if let Some(x) = t.get(champ) {
+                n.insert(champ.into(), x.clone());
+            }
+        }
+        // La mesure quitte le destinataire. Son ancien champ `dos` voyage avec elle et
+        // meurt à la désérialisation typée — serde l'ignore, rien ne le réécrit. Sans
+        // empreinte, `normalise` la périmera : une recomposition, pas une perte.
+        if let Some(m) = t.get("compose") {
+            mesures
+                .entry(format!("{pod}-{format}-{reliure}"))
+                .or_insert_with(|| m.clone());
+        }
+        if ancien_courant.as_deref() == Some(plate) {
+            courant = Some(format!("{pod}-{format}-{reliure}-{papier}"));
+        }
+        livrables.push(toml::Value::Table(n));
+    }
+    l.insert("livrables".into(), toml::Value::Array(livrables));
+    if !mesures.is_empty() {
+        l.insert("mesures".into(), toml::Value::Table(mesures));
+    }
+    if let Some(c) = courant {
+        l.insert("courant".into(), toml::Value::String(c));
+    }
+    // `courant` absent ou orphelin : `normalise` le posera sur le premier livrable.
 }
 
 /// La version annoncée par le fichier, ou 0 s'il n'en porte pas.
@@ -1131,6 +1278,201 @@ mode = "image"
         assert_eq!(m.envois.liste[0].main, crate::envoi::Main::Image);
     }
 
+    /// Le Candide réel, tel qu'un `.ozalid` v4 le porte : une clé plate, un papier. Il
+    /// doit se rouvrir sur un livrable à quatre axes, sans que personne ne resaisisse
+    /// quoi que ce soit. Le TOML est écrit **littéralement** : ce sont les fichiers
+    /// d'hier qu'il s'agit de relire, et les types d'hier n'existent plus pour les
+    /// fabriquer.
+    #[test]
+    fn un_projet_v4_migre_ses_destinataires_en_livrables() {
+        let v4 = r#"
+[ozalid]
+version = 4
+[livre]
+titre = "Candide"
+auteur = "Voltaire"
+genre = "roman"
+[livraison]
+courant = "lulu"
+[[livraison.destinataires]]
+provider = "lulu"
+papier = "standard"
+"#;
+        let m = migre(toml::from_str(v4).expect("TOML v4 illisible")).expect("migration refusée");
+        assert_eq!(m.ozalid.version, VERSION);
+        assert_eq!(m.livraison.livrables.len(), 1);
+        assert_eq!(
+            m.livraison.livrables[0].cle(),
+            "lulu-108x175-broche-standard"
+        );
+        assert_eq!(m.livraison.courant, "lulu-108x175-broche-standard");
+        assert!(
+            m.livraison.mesures.is_empty(),
+            "une mesure sortie de nulle part"
+        );
+    }
+
+    /// La mesure quitte le destinataire pour la map des gabarits, les relevés restent
+    /// sur le livrable qui les a faits, et un prestataire que la table ne porte plus est
+    /// élagué — comme `normalise` l'aurait fait.
+    ///
+    /// Lu **avant** `normalise`, comme les tests v3 : la mesure migrée n'a pas
+    /// d'empreinte, `normalise` la périmerait, et c'est le déplacement lui-même qu'on
+    /// prouve ici.
+    #[test]
+    fn la_migration_deplace_la_mesure_sous_le_gabarit() {
+        let v4 = r#"
+[ozalid]
+version = 4
+[livre]
+titre = "Candide"
+auteur = "Voltaire"
+genre = "roman"
+[livraison]
+courant = "prestataire-disparu"
+deja_compose = true
+[[livraison.destinataires]]
+provider = "bod"
+papier = "creme-90"
+[livraison.destinataires.compose]
+pages = 98
+gouttiere = 14.0
+blanche = false
+dos = 7.21
+[[livraison.destinataires]]
+provider = "kdp-55x85"
+papier = "creme"
+dos_mm = 18.4
+fond_perdu_mm = 3.0
+[[livraison.destinataires]]
+provider = "prestataire-disparu"
+papier = "standard"
+"#;
+        let mut m =
+            migre(toml::from_str(v4).expect("TOML v4 illisible")).expect("migration refusée");
+        let cles: Vec<String> = m.livraison.livrables.iter().map(Livrable::cle).collect();
+        assert_eq!(
+            cles,
+            ["bod-135x215-broche-creme-90", "kdp-55x85-broche-creme"],
+            "le prestataire disparu n'a pas été élagué"
+        );
+
+        let mesure = m
+            .livraison
+            .mesure("bod-135x215-broche")
+            .expect("la mesure n'est pas sous son gabarit");
+        assert_eq!(mesure.pages, 98);
+        assert_eq!(mesure.gouttiere, 14.0);
+        assert_eq!(
+            mesure.empreinte, None,
+            "une empreinte inventée à la migration"
+        );
+        assert!(m.livraison.deja_compose);
+
+        let kdp = &m.livraison.livrables[1];
+        assert_eq!(kdp.dos_mm, Some(18.4));
+        assert_eq!(kdp.fond_perdu_mm, Some(3.0));
+
+        // Le pointeur désignait celui qui vient de disparaître : `migre` le laisse vide,
+        // `normalise` le repose sur le premier livrable.
+        assert_eq!(m.livraison.courant, "", "un pointeur inventé");
+        m.livraison.normalise();
+        assert_eq!(m.livraison.courant, "bod-135x215-broche-creme-90");
+    }
+
+    /// Rejouée sur son propre résultat, la migration ne bouge rien : `destinataires`
+    /// absent, elle sort au premier pas. Sans ce contrôle, un `.ozalid` réenregistré
+    /// verrait sa liste de livrables vidée à la relecture suivante.
+    #[test]
+    fn la_migration_rejouee_ne_bouge_rien() {
+        let v4 = r#"
+[ozalid]
+version = 4
+[livre]
+titre = "Candide"
+auteur = "Voltaire"
+genre = "roman"
+[livraison]
+courant = "bod"
+[[livraison.destinataires]]
+provider = "bod"
+papier = "creme-90"
+[livraison.destinataires.compose]
+pages = 98
+gouttiere = 14.0
+blanche = false
+dos = 7.21
+"#;
+        let une = migre(toml::from_str(v4).expect("TOML v4 illisible")).expect("migration refusée");
+        let deux = migre(toml::Value::try_from(&une).expect("v5 inécrivable"))
+            .expect("migration rejouée refusée");
+        assert_eq!(
+            toml::to_string_pretty(&une).unwrap(),
+            toml::to_string_pretty(&deux).unwrap()
+        );
+        assert_eq!(deux.livraison.livrables.len(), 1);
+    }
+
+    /// Le jumeau v4→v5 de `un_projet_v3_traverse_la_migration_sans_bouger` : tout ce que
+    /// la v5 ne déplace pas — le livre, la maquette, l'intérieur, les envois — traverse
+    /// au caractère près. Une migration qui remet à neuf un champ qu'elle ne devait pas
+    /// toucher perdrait du travail sans rien dire.
+    #[test]
+    fn un_projet_v4_complet_traverse_la_migration() {
+        let mut p = Projet::nouveau(livre(), String::new());
+        p.meta.couverture.maquette = Some(crate::maquettes::fournie("bandeau"));
+        p.meta.interieur = crate::interieur::Interieur {
+            police: "Cardo".into(),
+        };
+        p.meta.envois = crate::envoi::Envois {
+            gabarit: "une écriture à l'encre bleue : {envoi}".into(),
+            liste: vec![crate::envoi::Envoi {
+                dedicataire: "Léa".into(),
+                contenu: "Pour Léa.".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        // La v4 du même projet : sa version, et sa livraison dans la forme d'hier.
+        let mut v4 = toml::Value::try_from(&p.meta).expect("métadonnées inécrivables");
+        let t = v4.as_table_mut().unwrap();
+        t.insert("ozalid".into(), toml::toml! { version = 4 }.into());
+        t.insert(
+            "livraison".into(),
+            toml::toml! {
+                courant = "bod"
+                deja_compose = true
+                [[destinataires]]
+                provider = "bod"
+                papier = "creme-90"
+            }
+            .into(),
+        );
+
+        let m = migre(v4).expect("migration refusée");
+        assert_eq!(m.ozalid.version, VERSION);
+        let tel_quel = |a: &dyn Fn(&Metadonnees) -> String| a(&m) == a(&p.meta);
+        assert!(
+            tel_quel(&|x| toml::to_string_pretty(&x.livre).unwrap()),
+            "le livre a bougé"
+        );
+        assert!(
+            tel_quel(&|x| toml::to_string_pretty(&x.couverture).unwrap()),
+            "la maquette a bougé"
+        );
+        assert!(
+            tel_quel(&|x| toml::to_string_pretty(&x.interieur).unwrap()),
+            "l'intérieur a bougé"
+        );
+        assert!(
+            tel_quel(&|x| toml::to_string_pretty(&x.envois).unwrap()),
+            "les envois ont bougé"
+        );
+        assert_eq!(m.livraison.livrables.len(), 1);
+        assert!(m.livraison.deja_compose);
+    }
+
     /// Un projet en version 2, maquette Bandeau, avec les textes posés là où la v2 les
     /// rangeait — sous `couverture.maquette`.
     fn v2_avec(textes: &[(&[&str], &str)]) -> toml::Value {
@@ -1338,8 +1680,27 @@ auteur = "Ivan Pjig"
         assert_eq!(m.interieur.police, "EB Garamond");
     }
 
+    /// Une fabrication écrite en clair : les quatre axes, dans l'ordre de la clé.
+    fn fab(pod: &str, format: &str, reliure: &str, papier: &str) -> crate::catalogue::Fabrication {
+        crate::catalogue::Fabrication {
+            pod: pod.into(),
+            format: format.into(),
+            reliure: reliure.into(),
+            papier: papier.into(),
+        }
+    }
+
+    /// L'empreinte **réelle** du gabarit, telle que le catalogue la donne. Une mesure
+    /// qui n'en porte pas — ou en porte une autre — est périmée par `normalise` ; les
+    /// tests qui veulent voir une mesure survivre doivent donc écrire celle-ci.
+    fn empreinte_de(f: &crate::catalogue::Fabrication) -> String {
+        crate::catalogue::resout(f)
+            .expect("fabrication hors catalogue")
+            .empreinte()
+    }
+
     /// Le lot 3 ajoute `[livraison]` sans monter `VERSION` : les `.ozalid` déjà écrits
-    /// doivent s'ouvrir et se retrouver visés sur le premier gabarit de la table, comme
+    /// doivent s'ouvrir et se retrouver visés sur le premier gabarit du catalogue, comme
     /// le `select` s'y posait.
     #[test]
     fn un_projet_sans_section_livraison_prend_le_premier_gabarit() {
@@ -1353,46 +1714,62 @@ auteur = "Ivan Pjig"
 "#;
         let mut m: Metadonnees = toml::from_str(toml).expect("projet sans [livraison] refusé");
         m.livraison.normalise();
-        let attendu = crate::catalogue::providers()[0].cle.as_str();
-        assert_eq!(m.livraison.courant, attendu);
-        assert_eq!(m.livraison.destinataires.len(), 1);
-        assert_eq!(m.livraison.destinataires[0].provider, attendu);
+        assert_eq!(m.livraison.courant, "lulu-108x175-broche-standard");
+        assert_eq!(m.livraison.livrables.len(), 1);
+        assert_eq!(
+            m.livraison.livrables[0].fabrication.cle_gabarit(),
+            "lulu-108x175-broche"
+        );
     }
 
-    /// La liste des destinataires est du travail de l'utilisateur au même titre que la
-    /// maquette : la reperdre, c'est refaire ses relevés de gabarit à la main.
+    /// La liste des livrables est du travail de l'utilisateur au même titre que la
+    /// maquette : la reperdre, c'est refaire ses relevés de gabarit à la main. La
+    /// finition voyage avec eux, bien qu'elle ne change pas le fichier produit : elle
+    /// paraît au récapitulatif, et se ressaisir vaut se retrouver.
     #[test]
-    fn la_liste_des_destinataires_survit_a_l_aller_retour() {
+    fn la_liste_des_livrables_survit_a_l_aller_retour() {
         let mut p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
         p.meta.livraison = Livraison {
-            destinataires: vec![
-                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
-                Destinataire {
-                    provider: "coollibri-148x210".into(),
-                    papier: "mesure".into(),
+            livrables: vec![
+                Livrable {
+                    finition: Some("mat".into()),
+                    ..Livrable::pour(fab("bod", "135x215", "broche", "creme-90"))
+                },
+                Livrable {
                     dos_mm: Some(18.4),
                     fond_perdu_mm: Some(3.0),
-                    compose: None,
+                    ..Livrable::pour(fab("coollibri", "148x210", "broche", "mesure"))
                 },
             ],
-            courant: "coollibri-148x210".into(),
+            courant: "coollibri-148x210-broche-mesure".into(),
             deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
         };
 
         let r = aller_retour(&p);
-        assert_eq!(r.meta.livraison.courant, "coollibri-148x210");
+        assert_eq!(r.meta.livraison.courant, "coollibri-148x210-broche-mesure");
         let d = r.meta.livraison.courant().expect("courant perdu");
         assert_eq!(d.dos_mm, Some(18.4));
         assert_eq!(d.fond_perdu_mm, Some(3.0));
-        assert_eq!(r.meta.livraison.destinataires[0].provider, "lulu");
+        assert_eq!(
+            r.meta.livraison.livrables[0].cle(),
+            "bod-135x215-broche-creme-90"
+        );
+        assert_eq!(
+            r.meta.livraison.livrables[0].finition.as_deref(),
+            Some("mat"),
+            "la finition ne survit pas au fichier"
+        );
     }
 
     /// Une mesure quelconque : sa valeur n'importe jamais, seule sa présence est lue.
+    /// Sans empreinte — c'est le cas d'une mesure posée en mémoire et relue tout de
+    /// suite, sans passer par `normalise`.
     const MESURE: Mesure = Mesure {
         pages: 262,
         gouttiere: 25.0,
         blanche: true,
-        dos: Some(16.513),
+        empreinte: None,
         polices_introuvables: Vec::new(),
     };
 
@@ -1400,16 +1777,24 @@ auteur = "Ivan Pjig"
     /// la fermeture du livre. Sans ça, rouvrir un projet composé la veille redemande une
     /// composition entière pour retrouver un dos qui n'a pas bougé d'un micron.
     #[test]
-    fn la_mesure_d_un_destinataire_survit_a_l_aller_retour() {
+    fn la_mesure_d_un_gabarit_survit_a_l_aller_retour() {
+        let f = fab("bod", "135x215", "broche", "creme-90");
         let mut p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
+        p.meta.livraison.livrables = vec![Livrable::pour(f.clone())];
+        p.meta.livraison.courant = f.cle();
+        let mesure = Mesure {
+            empreinte: Some(empreinte_de(&f)),
+            ..MESURE
+        };
         p.meta
             .livraison
-            .retenir_mesure(&p.meta.livraison.courant.clone(), MESURE);
+            .retenir_mesure(&f.cle_gabarit(), mesure.clone());
 
         let r = aller_retour(&p);
         assert_eq!(
-            r.meta.livraison.courant().expect("courant perdu").compose,
-            Some(MESURE)
+            r.meta.livraison.mesure("bod-135x215-broche"),
+            Some(&mesure),
+            "la mesure du gabarit n'a pas traversé le fichier"
         );
         assert!(
             r.meta.livraison.deja_compose,
@@ -1423,33 +1808,55 @@ auteur = "Ivan Pjig"
     /// annoncé que tout allait bien devant un fichier qui ne suit pas la maquette.
     #[test]
     fn le_repli_de_police_survit_a_l_aller_retour() {
+        let f = fab("bod", "135x215", "broche", "creme-90");
         let mut p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
+        p.meta.livraison.livrables = vec![Livrable::pour(f.clone())];
+        p.meta.livraison.courant = f.cle();
         let mesure = Mesure {
+            empreinte: Some(empreinte_de(&f)),
             polices_introuvables: vec!["bodoni moda".into()],
             ..MESURE
         };
         p.meta
             .livraison
-            .retenir_mesure(&p.meta.livraison.courant.clone(), mesure);
+            .retenir_mesure(&f.cle_gabarit(), mesure.clone());
 
         let r = aller_retour(&p);
         assert_eq!(
-            r.meta.livraison.courant().expect("courant perdu").compose,
-            Some(Mesure {
-                polices_introuvables: vec!["bodoni moda".into()],
-                ..MESURE
-            })
+            r.meta
+                .livraison
+                .mesure("bod-135x215-broche")
+                .map(|m| m.polices_introuvables.clone()),
+            Some(vec!["bodoni moda".to_string()])
         );
     }
 
-    /// Une archive écrite avant ce champ se relit, et se relit **vide** — ce qui est
+    /// Une archive écrite avant ces champs se relit, et se relit **vide** — ce qui est
     /// exactement ce qu'elle voulait dire : rien n'avait été substitué, ou personne ne
-    /// le savait. C'est ce qui dispense `VERSION` de bouger.
+    /// le savait. Le TOML est écrit littéralement, sous la clé de gabarit qui range
+    /// désormais les mesures.
     #[test]
     fn une_mesure_sans_le_champ_se_relit_vide() {
-        let ancien = "pages = 262\ngouttiere = 25.0\nblanche = true\ndos = 16.513\n";
-        let m: Mesure = toml::from_str(ancien).expect("une mesure d'avant ne se relit plus");
+        let ancien = r#"
+[livraison]
+livrables = []
+
+[livraison.mesures.kdp-6x9-broche]
+pages = 262
+gouttiere = 25.0
+blanche = true
+"#;
+        #[derive(Deserialize)]
+        struct Seule {
+            livraison: Livraison,
+        }
+        let s: Seule = toml::from_str(ancien).expect("une mesure d'avant ne se relit plus");
+        let m = s
+            .livraison
+            .mesure("kdp-6x9-broche")
+            .expect("mesure introuvable");
         assert!(m.polices_introuvables.is_empty());
+        assert_eq!(m.empreinte, None);
         assert_eq!(m.pages, 262);
     }
 
@@ -1465,25 +1872,50 @@ auteur = "Ivan Pjig"
         );
     }
 
-    /// Chaque destinataire porte la sienne : le même manuscrit ne fait pas le même
-    /// nombre de pages en poche et en grand format, et une mesure commune serait fausse
-    /// pour tout le monde sauf un.
+    /// La mesure appartient au **gabarit**, pas au livrable : deux papiers du même POD,
+    /// du même format et de la même reliure paginent identiquement, et c'est ce partage
+    /// qui rend la comparaison de deux papiers gratuite. Un gabarit tiers, lui, ne voit
+    /// rien — le même manuscrit ne fait pas le même nombre de pages en poche et en
+    /// grand format.
     #[test]
-    fn une_mesure_ne_renseigne_que_son_destinataire() {
+    fn une_mesure_est_partagee_par_les_livrables_du_meme_gabarit() {
+        let creme = fab("kdp", "6x9", "broche", "creme");
+        let blanc = fab("kdp", "6x9", "broche", "blanc");
+        let ailleurs = fab("lulu", "108x175", "broche", "standard");
         let mut l = Livraison {
-            destinataires: vec![
-                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
-                Destinataire::pour(crate::catalogue::provider("kdp-6x9").unwrap()),
+            livrables: vec![
+                Livrable::pour(creme.clone()),
+                Livrable::pour(blanc.clone()),
+                Livrable::pour(ailleurs.clone()),
             ],
-            courant: "lulu".into(),
+            courant: creme.cle(),
             deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
         };
-        l.retenir_mesure("lulu", MESURE);
-        assert_eq!(l.destinataires[0].compose, Some(MESURE));
+        l.retenir_mesure(&creme.cle_gabarit(), MESURE);
+
+        assert_eq!(l.mesure(&creme.cle_gabarit()), Some(&MESURE));
         assert_eq!(
-            l.destinataires[1].compose, None,
-            "mesure de Lulu prêtée à KDP"
+            l.mesure(&blanc.cle_gabarit()),
+            Some(&MESURE),
+            "l'autre papier du même gabarit ne voit pas la mesure : elle serait \
+             recomposée pour rien"
         );
+        assert_eq!(
+            l.mesure(&ailleurs.cle_gabarit()),
+            None,
+            "mesure de KDP prêtée à Lulu"
+        );
+    }
+
+    /// Une composition dont le gabarit a disparu de la liste en chemin n'a personne à
+    /// renseigner : la mesure ne s'écrit pas, et l'histoire du livre ne bouge pas.
+    #[test]
+    fn une_mesure_sans_livrable_ne_se_retient_pas() {
+        let mut l = Livraison::default();
+        l.retenir_mesure("kdp-6x9-broche", MESURE);
+        assert_eq!(l.mesure("kdp-6x9-broche"), None);
+        assert!(!l.deja_compose);
     }
 
     /// Les trois causes qui déplacent la pagination — le livre, la police, le texte —
@@ -1493,27 +1925,32 @@ auteur = "Ivan Pjig"
     fn ce_qui_pagine_efface_toutes_les_mesures() {
         let neuf = || {
             let mut p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
-            let cle = p.meta.livraison.courant.clone();
-            p.meta.livraison.retenir_mesure(&cle, MESURE);
+            let g = p
+                .meta
+                .livraison
+                .courant()
+                .unwrap()
+                .fabrication
+                .cle_gabarit();
+            p.meta.livraison.retenir_mesure(&g, MESURE);
             p
         };
-        // `.clone()` depuis que `Mesure` porte les polices de repli et n'est plus
-        // `Copy` : seule la présence est lue ici, mais il faut bien la sortir.
-        let mesure = |p: &Projet| p.meta.livraison.courant().unwrap().compose.clone();
+        let reste = |p: &Projet| !p.meta.livraison.mesures.is_empty();
 
         let mut p = neuf();
+        assert!(reste(&p), "le montage du test ne retient rien");
         p.modifier_livre(livre());
-        assert_eq!(mesure(&p), None, "le livre n'a rien périmé");
+        assert!(!reste(&p), "le livre n'a rien périmé");
 
         let mut p = neuf();
         p.modifier_interieur(crate::interieur::Interieur {
             police: "Cardo".into(),
         });
-        assert_eq!(mesure(&p), None, "la police n'a rien périmé");
+        assert!(!reste(&p), "la police n'a rien périmé");
 
         let mut p = neuf();
         p.remplacer_texte("## 02\n\nB.\n".into());
-        assert_eq!(mesure(&p), None, "le texte n'a rien périmé");
+        assert!(!reste(&p), "le texte n'a rien périmé");
     }
 
     /// `deja_compose` n'est pas un état courant mais de l'histoire : il distingue un dos
@@ -1527,51 +1964,176 @@ auteur = "Ivan Pjig"
             !p.meta.livraison.deja_compose,
             "un livre neuf serait composé"
         );
-        let cle = p.meta.livraison.courant.clone();
-        p.meta.livraison.retenir_mesure(&cle, MESURE);
+        let g = p
+            .meta
+            .livraison
+            .courant()
+            .unwrap()
+            .fabrication
+            .cle_gabarit();
+        p.meta.livraison.retenir_mesure(&g, MESURE);
 
         p.remplacer_texte("## 02\n\nB.\n".into());
         assert!(p.meta.livraison.deja_compose);
     }
 
-    /// Un prestataire retiré de la table, un papier renommé, le même prestataire deux
-    /// fois : le projet s'ouvre quand même. Refuser ferait perdre le manuscrit et la
-    /// maquette pour une liste qui se refait en trois clics.
+    /// Un POD retiré du catalogue, le même livrable deux fois : le projet s'ouvre quand
+    /// même. Refuser ferait perdre le manuscrit et la maquette pour une liste qui se
+    /// refait en trois clics.
     #[test]
     fn une_livraison_incoherente_est_elaguee_plutot_que_refusee() {
         let mut l = Livraison {
-            destinataires: vec![
-                Destinataire {
-                    provider: "prestataire-disparu".into(),
-                    papier: "standard".into(),
-                    dos_mm: None,
-                    fond_perdu_mm: None,
-                    compose: None,
-                },
-                Destinataire {
-                    provider: "lulu".into(),
-                    papier: "papier-renomme".into(),
-                    dos_mm: None,
-                    fond_perdu_mm: None,
-                    compose: Some(MESURE),
-                },
-                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
+            livrables: vec![
+                Livrable::pour(fab("disparu", "135x215", "broche", "creme-90")),
+                Livrable::pour(fab("lulu", "108x175", "broche", "standard")),
+                Livrable::pour(fab("lulu", "108x175", "broche", "standard")),
             ],
-            courant: "prestataire-disparu".into(),
+            courant: "disparu-135x215-broche-creme-90".into(),
             deja_compose: true,
+            mesures: std::collections::BTreeMap::new(),
         };
         l.normalise();
 
-        assert_eq!(l.destinataires.len(), 1, "doublon ou inconnu conservé");
-        assert_eq!(l.destinataires[0].provider, "lulu");
-        assert_eq!(l.destinataires[0].papier, "standard");
-        assert_eq!(l.courant, "lulu", "le pointeur désigne un absent");
-        // Le papier a été repris d'office : la mesure qui allait avec ne vaut plus, et
-        // la garder ferait afficher un dos faux dès l'ouverture, sans aucun geste.
-        assert!(
-            l.destinataires[0].compose.is_none(),
-            "mesure gardée sous un papier repris d'office"
+        assert_eq!(l.livrables.len(), 1, "doublon ou inconnu conservé");
+        assert_eq!(l.livrables[0].cle(), "lulu-108x175-broche-standard");
+        assert_eq!(
+            l.courant, "lulu-108x175-broche-standard",
+            "le pointeur désigne un absent"
         );
+    }
+
+    /// Le papier est le seul axe qui se remplace sans changer le gabarit : un papier
+    /// renommé retombe sur le premier du POD, et la mesure **reste** — elle appartient
+    /// au gabarit, et le papier ne pagine pas. C'est ce qui change avec la v5 : avant,
+    /// reprendre un papier d'office coûtait une recomposition.
+    #[test]
+    fn un_papier_disparu_retombe_sur_le_defaut_sans_perdre_la_mesure() {
+        let bon = fab("kdp", "6x9", "broche", "creme");
+        let mut l = Livraison {
+            livrables: vec![Livrable::pour(fab(
+                "kdp",
+                "6x9",
+                "broche",
+                "nacre-introuvable",
+            ))],
+            courant: "kdp-6x9-broche-nacre-introuvable".into(),
+            deja_compose: true,
+            mesures: std::collections::BTreeMap::from([(
+                "kdp-6x9-broche".to_string(),
+                Mesure {
+                    empreinte: Some(empreinte_de(&bon)),
+                    ..MESURE
+                },
+            )]),
+        };
+        l.normalise();
+
+        assert_eq!(l.livrables.len(), 1, "le livrable a été élagué");
+        assert_eq!(
+            l.livrables[0].fabrication.papier, "creme",
+            "le papier n'est pas retombé sur le défaut du POD"
+        );
+        assert_eq!(l.courant, "kdp-6x9-broche-creme");
+        assert!(
+            l.mesure("kdp-6x9-broche").is_some(),
+            "mesure perdue alors que le papier ne pagine pas"
+        );
+    }
+
+    /// Le pointeur suit le livrable dont le papier retombe sur le défaut.
+    ///
+    /// Avant la v5, `courant` était la clé plate : elle ne portait pas le papier, et un
+    /// repli d'office la laissait intacte. La clé à quatre axes, elle, change — et sans
+    /// ce rattrapage le pointeur sauterait sur le premier livrable de la liste, faisant
+    /// rouvrir le livre visé sur quelqu'un d'autre, en silence.
+    #[test]
+    fn le_pointeur_suit_le_livrable_dont_le_papier_retombe_sur_le_defaut() {
+        let mut l = Livraison {
+            livrables: vec![
+                Livrable::pour(fab("lulu", "108x175", "broche", "standard")),
+                Livrable::pour(fab("kdp", "6x9", "broche", "nacre-introuvable")),
+            ],
+            courant: "kdp-6x9-broche-nacre-introuvable".into(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+        l.normalise();
+
+        assert_eq!(l.livrables.len(), 2, "un livrable a été élagué");
+        assert_eq!(
+            l.courant, "kdp-6x9-broche-creme",
+            "le pointeur a changé de livrable au lieu de suivre le sien"
+        );
+    }
+
+    /// Une mesure écrite avant l'empreinte — le cas d'un `.ozalid` migré — est périmée
+    /// par prudence : recomposer coûte des secondes, un dos affiché faux coûte une
+    /// confiance. `deja_compose` survit : c'est « dos périmé », pas « jamais composé ».
+    #[test]
+    fn une_mesure_sans_empreinte_est_perimee_a_l_ouverture() {
+        let f = fab("kdp", "6x9", "broche", "creme");
+        let mut l = Livraison {
+            livrables: vec![Livrable::pour(f.clone())],
+            courant: f.cle(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+        l.retenir_mesure(&f.cle_gabarit(), MESURE);
+        assert!(l.deja_compose);
+        l.normalise();
+
+        assert!(
+            l.mesures.is_empty(),
+            "une mesure sans empreinte a survécu à l'ouverture"
+        );
+        assert!(l.deja_compose, "l'histoire du livre est perdue");
+    }
+
+    /// Un `<config>/pods/*.toml` réécrit pendant que le livre était fermé est la seule
+    /// cause de péremption qui échappe aux mutateurs (spec § 8). L'empreinte l'attrape à
+    /// l'ouverture : la mesure d'un gabarit qui n'est plus le même s'en va.
+    #[test]
+    fn un_gabarit_reecrit_perime_la_mesure_a_l_ouverture() {
+        let f = fab("lulu", "108x175", "broche", "standard");
+        let mut l = Livraison {
+            livrables: vec![Livrable::pour(f.clone())],
+            courant: f.cle(),
+            deja_compose: true,
+            mesures: std::collections::BTreeMap::from([(
+                f.cle_gabarit(),
+                Mesure {
+                    empreinte: Some("108x175|fausse|marges|d-un|autre|fichier".into()),
+                    ..MESURE
+                },
+            )]),
+        };
+        l.normalise();
+
+        assert!(
+            l.mesures.is_empty(),
+            "la mesure d'un gabarit réécrit a survécu"
+        );
+    }
+
+    /// Une reliure que le POD annonce sans l'outiller ne compose rien : `resout` la
+    /// refuse, et le livrable qui la nomme s'élague à l'ouverture plutôt que de mener à
+    /// un refus après une couverture réglée (spec § 9).
+    #[test]
+    fn une_reliure_non_outillee_est_elaguee_a_l_ouverture() {
+        let mut l = Livraison {
+            livrables: vec![
+                Livrable::pour(fab("bod", "135x215", "rigide", "creme-90")),
+                Livrable::pour(fab("bod", "135x215", "broche", "creme-90")),
+            ],
+            courant: "bod-135x215-rigide-creme-90".into(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+        l.normalise();
+
+        assert_eq!(l.livrables.len(), 1, "la reliure non outillée a survécu");
+        assert_eq!(l.livrables[0].cle(), "bod-135x215-broche-creme-90");
+        assert_eq!(l.courant, "bod-135x215-broche-creme-90");
     }
 
     /// Le pointeur ne peut pas être vide : sans lui, même regarder une première de
@@ -1579,12 +2141,13 @@ auteur = "Ivan Pjig"
     #[test]
     fn une_livraison_videe_reprend_le_premier_gabarit() {
         let mut l = Livraison {
-            destinataires: vec![],
+            livrables: vec![],
             courant: String::new(),
             deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
         };
         l.normalise();
-        assert_eq!(l.destinataires.len(), 1);
+        assert_eq!(l.livrables.len(), 1);
         assert!(l.courant().is_some());
     }
 

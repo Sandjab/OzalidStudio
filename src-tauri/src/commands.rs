@@ -21,7 +21,7 @@ use crate::maquettes;
 use crate::package;
 use crate::planche;
 use crate::preferences;
-use crate::projet::{Destinataire, Livraison, Livre, Mesure, Projet};
+use crate::projet::{Livrable, Livraison, Livre, Mesure, Projet};
 use crate::typst::Typst;
 
 /// Les fichiers de catalogue du poste que le démarrage a refusés. Vide sur un poste qui
@@ -128,8 +128,10 @@ pub struct ProjetVue {
     /// le pied vient de déclarer fausse.
     pub interieur_pdf: Option<String>,
     /// Les destinataires du livre et celui qu'on vise. Le front les joint à la table des
-    /// gabarits par leur clé : les libellés, les formats et les papiers viennent de là.
-    pub livraison: Livraison,
+    /// gabarits par leur clé plate : les libellés, les formats et les papiers viennent
+    /// de là. Une **vue** depuis la v5 : `compose` y est recalculée par livrable, la
+    /// donnée range la mesure sous le gabarit.
+    pub livraison: LivraisonVue,
     /// La main du livre et ses envois. Toujours sérialisée, même vide : le front y
     /// lit la liste sans avoir à se demander si la section existe.
     pub envois: crate::envoi::Envois,
@@ -138,9 +140,9 @@ pub struct ProjetVue {
 #[derive(Serialize)]
 pub struct Composition {
     /// Le projet tel qu'il ressort de la composition : c'est lui qui porte désormais la
-    /// mesure, rangée chez le destinataire visé. Les quatre chiffres ci-dessous en sont
-    /// une copie de lecture, issue du même calcul — le compte rendu de l'écran les lit
-    /// sans avoir à retrouver le destinataire.
+    /// mesure, rangée sous le gabarit du livrable visé. Les quatre chiffres ci-dessous
+    /// en sont une copie de lecture, issue du même calcul — le compte rendu de l'écran
+    /// les lit sans avoir à retrouver le livrable.
     pub projet: ProjetVue,
     pub pages: u32,
     pub gouttiere: f64,
@@ -472,22 +474,58 @@ pub fn interieur_modifier(
 
 /* ---------- destinataires ---------- */
 
-/// Le destinataire visé, avec le gabarit et le papier de la table qui vont avec.
+/// Le livrable visé, résolu : sa vue plate, son papier, et le livrable lui-même.
 ///
-/// Le point de passage unique de tout ce qui a besoin d'un prestataire : composer,
+/// Le point de passage unique de tout ce qui a besoin d'un gabarit : composer,
 /// apercevoir, mesurer un dos. Il n'y a plus de second endroit où le choisir.
-fn vise(
-    o: &Ouvert,
-) -> Result<(&'static Provider, &'static catalogue::Papier, &Destinataire), String> {
-    let d = o
+fn vise(o: &Ouvert) -> Result<(Provider, catalogue::Papier, &Livrable), String> {
+    let l = o
         .projet
         .meta
         .livraison
         .courant()
-        .ok_or("aucun destinataire : en déclarer un à l'étape Livraison.")?;
-    let pr = catalogue::provider(&d.provider)
-        .ok_or_else(|| format!("prestataire inconnu : {}", d.provider))?;
-    Ok((pr, papier(pr, Some(&d.papier))?, d))
+        .ok_or("aucun livrable : en déclarer un à l'étape Livraison.")?;
+    let r = catalogue::resout(&l.fabrication)?;
+    Ok((r.provider(), r.papier.clone(), l))
+}
+
+/// La fabrication qu'une clé plate désigne. Couche de compatibilité : elle meurt à la
+/// tâche 6 avec le renommage des commandes.
+///
+/// Lue dans le **catalogue chargé** et non dans `HERITEES` : c'est `Format::cle_heritee`
+/// qui dit la clé plate, et c'est lui que la liste offerte à l'écran affiche. La table
+/// gelée ne connaît que les quatorze formats fournis d'origine — un POD déposé dans
+/// `<config>/pods/` serait proposé puis refusé au clic, et un `lulu.toml` remplacé aux
+/// clés différentes viderait la liste des destinataires.
+fn fabrication_de(plate: &str) -> Result<catalogue::Fabrication, String> {
+    for pod in catalogue::pods() {
+        let Some(f) = pod.formats.iter().find(|f| f.cle_heritee == plate) else {
+            continue;
+        };
+        let Some(r) = pod.reliure_composable() else {
+            continue;
+        };
+        return Ok(catalogue::Fabrication {
+            pod: pod.cle.clone(),
+            format: f.cle.clone(),
+            reliure: r.cle.clone(),
+            papier: pod.papiers[0].cle.clone(),
+        });
+    }
+    Err(format!("prestataire inconnu : {plate}"))
+}
+
+/// La clé plate d'un livrable, tant que le front la parle encore. Même source que
+/// `fabrication_de`, en sens inverse : le catalogue chargé, jamais la table gelée.
+fn cle_plate(f: &catalogue::Fabrication) -> Option<&'static str> {
+    let pod = catalogue::pod(&f.pod)?;
+    Some(
+        pod.formats
+            .iter()
+            .find(|x| x.cle == f.format)?
+            .cle_heritee
+            .as_str(),
+    )
 }
 
 /// Ajoute un prestataire à la liste des destinataires, avec son papier par défaut.
@@ -496,15 +534,24 @@ pub fn destinataire_ajouter(
     provider_cle: String,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let pr = catalogue::provider(&provider_cle)
-        .ok_or_else(|| format!("prestataire inconnu : {provider_cle}"))?;
+    let f = fabrication_de(&provider_cle)?;
+    let r = catalogue::resout(&f)?;
+    let libelle = r.provider().libelle;
+    let gabarit = f.cle_gabarit();
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    if l.destinataires.iter().any(|d| d.provider == pr.cle) {
-        return Err(format!("{} est déjà destinataire de ce livre.", pr.libelle));
+    // Le refus porte sur le **gabarit** et non sur les quatre axes, exprès : l'écran
+    // d'aujourd'hui identifie ses lignes par la clé plate — deux livrables du même
+    // gabarit y produiraient deux `id` de DOM identiques. La règle à quatre axes arrive
+    // avec l'écran qui sait la porter, à la tâche 6.
+    if l.livrables
+        .iter()
+        .any(|x| x.fabrication.cle_gabarit() == gabarit)
+    {
+        return Err(format!("{libelle} est déjà destinataire de ce livre."));
     }
-    l.destinataires.push(Destinataire::pour(pr));
+    l.livrables.push(Livrable::pour(f));
     vue_modifiee(o)
 }
 
@@ -518,16 +565,17 @@ pub fn destinataire_retirer(
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    if l.destinataires.len() < 2 {
+    if l.livrables.len() < 2 {
         return Err(
             "un livre garde au moins un destinataire : c'est lui qui donne le format \
              sous lequel on regarde la couverture."
                 .into(),
         );
     }
-    let avant = l.destinataires.len();
-    l.destinataires.retain(|d| d.provider != provider_cle);
-    if l.destinataires.len() == avant {
+    let avant = l.livrables.len();
+    l.livrables
+        .retain(|d| cle_plate(&d.fabrication) != Some(provider_cle.as_str()));
+    if l.livrables.len() == avant {
         return Err(format!(
             "{provider_cle} n'est pas destinataire de ce livre."
         ));
@@ -535,36 +583,58 @@ pub fn destinataire_retirer(
     // Retirer celui qu'on visait laisse le pointeur en l'air : il retombe sur le
     // premier, plutôt que de désigner un absent jusqu'au prochain geste.
     if l.courant().is_none() {
-        l.courant = l.destinataires[0].provider.clone();
+        l.courant = l.livrables[0].cle();
     }
     vue_modifiee(o)
+}
+
+/// Ce que l'écran envoie encore : la forme du destinataire d'avant les livrables.
+/// Meurt à la tâche 6. C'est lui que le test du snake_case lit.
+#[derive(serde::Deserialize)]
+pub struct DestinataireCompat {
+    pub provider: String,
+    pub papier: String,
+    #[serde(default)]
+    pub dos_mm: Option<f64>,
+    #[serde(default)]
+    pub fond_perdu_mm: Option<f64>,
 }
 
 /// Le papier d'un destinataire et, chez ceux qui ne publient rien, ses relevés.
 #[tauri::command]
 pub fn destinataire_regler(
-    destinataire: Destinataire,
+    destinataire: DestinataireCompat,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let pr = catalogue::provider(&destinataire.provider)
-        .ok_or_else(|| format!("prestataire inconnu : {}", destinataire.provider))?;
-    papier(pr, Some(&destinataire.papier))?;
+    let libelle = catalogue::resout(&fabrication_de(&destinataire.provider)?)?
+        .provider()
+        .libelle;
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let place = o
-        .projet
-        .meta
-        .livraison
-        .destinataires
+    let l = &mut o.projet.meta.livraison;
+    let vise = l.courant.clone();
+    let place = l
+        .livrables
         .iter_mut()
-        .find(|d| d.provider == destinataire.provider)
-        .ok_or_else(|| format!("{} n'est pas destinataire de ce livre.", pr.libelle))?;
-    *place = destinataire;
-    // Le papier change l'épaisseur d'une page, le relevé change le dos directement :
-    // dans les deux cas la mesure retenue ne vaut plus. Effacée ici plutôt que de faire
-    // confiance à ce que l'interface a envoyé — elle rebâtit le destinataire depuis ses
-    // contrôles, et n'a aucune raison de porter une mesure.
-    place.compose = None;
+        .find(|d| cle_plate(&d.fabrication) == Some(destinataire.provider.as_str()))
+        .ok_or_else(|| format!("{libelle} n'est pas destinataire de ce livre."))?;
+    // Le candidat est validé **avant** d'être posé : un papier inconnu doit laisser le
+    // livrable tel qu'il était, et non l'abandonner à moitié réglé.
+    let etait_courant = place.cle() == vise;
+    let f = catalogue::Fabrication {
+        papier: destinataire.papier,
+        ..place.fabrication.clone()
+    };
+    catalogue::resout(&f)?;
+    place.fabrication = f;
+    place.dos_mm = destinataire.dos_mm;
+    place.fond_perdu_mm = destinataire.fond_perdu_mm;
+    // La mesure **n'est plus effacée** : elle vit sous le gabarit, et ni le papier ni le
+    // relevé ne paginent — le dos affiché se recalcule à la vue depuis la formule du
+    // papier retenu. Comparer deux papiers ne coûte donc plus une composition (spec § 5).
+    if etait_courant {
+        l.courant = place.cle();
+    }
     vue_modifiee(o)
 }
 
@@ -580,12 +650,13 @@ pub fn destinataire_viser(
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    if !l.destinataires.iter().any(|d| d.provider == provider_cle) {
-        return Err(format!(
-            "{provider_cle} n'est pas destinataire de ce livre."
-        ));
-    }
-    l.courant = provider_cle;
+    let cle = l
+        .livrables
+        .iter()
+        .find(|d| cle_plate(&d.fabrication) == Some(provider_cle.as_str()))
+        .map(Livrable::cle)
+        .ok_or_else(|| format!("{provider_cle} n'est pas destinataire de ce livre."))?;
+    l.courant = cle;
     vue_modifiee(o)
 }
 
@@ -595,62 +666,43 @@ pub fn destinataire_viser(
 pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let (pr, papier, _) = vise(o)?;
-
-    let livre = &o.projet.meta.livre;
-    let int = &o.projet.meta.interieur;
-    // `interieur::source` interpole la police sans échappement : la validation est ici.
-    int.verifie()?;
-    let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
+    let (pr, papier, livrable) = vise(o)?;
+    // La clé de rangement de la mesure et l'empreinte du gabarit qui compose, prises au
+    // même endroit — le livrable visé — parce que l'emprunt s'arrête ici : `pr.cle` vaut
+    // la clé de gabarit, mais par construction de `Resolu::provider`, pas par contrat.
+    // L'empreinte, elle, dira à la réouverture si le fichier de POD a été réécrit
+    // entre-temps (spec § 8).
+    let gabarit = livrable.fabrication.cle_gabarit();
+    let empreinte = catalogue::resout(&livrable.fabrication)?.empreinte();
 
     let dossier = sorties_dossier(o, &pr.cle)?;
-    std::fs::create_dir_all(&dossier).map_err(|e| {
-        format!(
-            "répertoire de sortie inutilisable ({}) : {e}",
-            dossier.display()
-        )
-    })?;
-
     let typst = typst()?;
-    let src = dossier.join(format!("interieur-{}.typ", pr.cle));
-
-    // La convergence ne mesure que le compte de pages : aucun PDF n'est produit tant
-    // que le réglage n'est pas stable.
-    let r = interieur::converge(pr, |reglage| {
-        ecrire(
-            &src,
-            &interieur::source(livre, int, pr, reglage, &chapitres, None),
-        )?;
-        typst.pages(&src)
-    })?;
-
-    let reglage = Reglage {
-        gouttiere: r.gouttiere,
-        blanche: r.blanche,
-    };
-    ecrire(
-        &src,
-        &interieur::source(livre, int, pr, &reglage, &chapitres, None),
-    )?;
-    let pdf = interieur_pdf(&dossier, &pr.cle);
-    let polices_introuvables = typst.compile(&src, &pdf)?;
+    // La même composition que celle du package : convergence, puis PDF, écrits sous la
+    // clé du **gabarit**. Deux papiers du même gabarit y composent le même intérieur.
+    let r = package::composer_interieur(&o.projet, &pr, &pr.cle, &dossier, &typst)?;
+    let polices_introuvables = r.polices_introuvables.clone();
 
     // Le compte rendu dit « Chapitres » : une préface ou une page de partie n'en est
-    // pas un, et l'onglet Livre en affiche déjà le compte juste.
-    let chapitres = chapitres.iter().filter(|p| p.est_chapitre()).count() as u32;
+    // pas un, et l'onglet Livre en affiche déjà le compte juste. Recompté ici, sur le
+    // même découpage que celui de la composition — qui, lui, ne le rend pas.
+    let chapitres = manuscrit::decoupe(&o.projet.texte, o.projet.meta.livre.chapitres)?
+        .iter()
+        .filter(|p| p.est_chapitre())
+        .count() as u32;
     let dos = papier.dos.mm(r.pages);
 
-    // La mesure entre dans le projet, chez le destinataire pour qui elle a été faite :
-    // revenir à ce prestataire, ou rouvrir le livre, ne la fera plus recalculer. Le
-    // repli de police y entre avec elle : il décrit le PDF qui vient d'être écrit, et
-    // ce PDF ne redevient pas juste en refermant le livre.
+    // La mesure entre dans le projet, sous le gabarit pour qui elle a été faite :
+    // revenir à ce gabarit, ou rouvrir le livre, ne la fera plus recalculer. Le repli
+    // de police y entre avec elle : il décrit le PDF qui vient d'être écrit, et ce PDF
+    // ne redevient pas juste en refermant le livre. Le dos, lui, n'y entre pas : il
+    // suit le papier, et se recalcule à chaque vue.
     o.projet.meta.livraison.retenir_mesure(
-        &pr.cle,
+        &gabarit,
         Mesure {
             pages: r.pages,
             gouttiere: r.gouttiere,
             blanche: r.blanche,
-            dos,
+            empreinte: Some(empreinte),
             polices_introuvables: polices_introuvables.clone(),
         },
     );
@@ -662,7 +714,7 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
         blanche: r.blanche,
         chapitres,
         dos,
-        pdf: pdf.to_string_lossy().into_owned(),
+        pdf: r.pdf.to_string_lossy().into_owned(),
         polices_introuvables,
     })
 }
@@ -1275,43 +1327,36 @@ pub struct Resultat {
 pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     let garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_ref().ok_or_else(aucun_projet)?;
-    let destinataires = o.projet.meta.livraison.destinataires.clone();
-    if destinataires.is_empty() {
+    let livrables = o.projet.meta.livraison.livrables.clone();
+    if livrables.is_empty() {
         return Err("aucun destinataire : en déclarer un.".into());
     }
     let typst = typst()?;
 
-    // Résolution d'abord : un prestataire ou un papier inconnu se fige en `Resultat`
-    // d'erreur ici, sans passer par le lot. Le reste devient une `Cible`, dans l'ordre
-    // des destinataires — c'est cet ordre que la fin de la fonction restitue.
-    let mut etapes: Vec<Result<package::Cible, Resultat>> = Vec::with_capacity(destinataires.len());
-    for d in &destinataires {
-        let Some(pr) = catalogue::provider(&d.provider) else {
-            etapes.push(Err(Resultat {
-                provider: d.provider.clone(),
-                libelle: d.provider.clone(),
-                package: None,
-                vignette: None,
-                erreur: Some(format!("prestataire inconnu : {}", d.provider)),
-            }));
-            continue;
-        };
-        etapes.push(match papier(pr, Some(&d.papier)) {
-            Ok(pa) => Ok(package::Cible {
-                pr: pr.clone(),
-                papier: pa.clone(),
+    // Résolution d'abord : un axe ou un papier inconnu se fige en `Resultat` d'erreur
+    // ici, sans passer par le lot. Le reste devient une `Cible`, dans l'ordre des
+    // livrables — c'est cet ordre que la fin de la fonction restitue.
+    let mut etapes: Vec<Result<package::Cible, Resultat>> = Vec::with_capacity(livrables.len());
+    for d in &livrables {
+        etapes.push(match catalogue::resout(&d.fabrication) {
+            Ok(r) => Ok(package::Cible {
+                pr: r.provider(),
+                papier: r.papier.clone(),
                 releve: planche::Releve {
                     dos: d.dos_mm,
                     fond_perdu: d.fond_perdu_mm,
                 },
-                // Compat : la clé plate, jusqu'à ce que l'identité à quatre axes
-                // bascule (tâche 4) — un gabarit par destinataire, pour l'instant.
-                cle: pr.cle.clone(),
-                cle_gabarit: pr.cle.clone(),
+                cle: d.cle(),
+                cle_gabarit: d.fabrication.cle_gabarit(),
             }),
+            // Le POD est le seul axe qui puisse encore se nommer quand la résolution
+            // échoue sur un autre : afficher la clé à quatre segments en gros titre
+            // serait un recul devant « BoD ».
             Err(e) => Err(Resultat {
-                provider: pr.cle.clone(),
-                libelle: pr.libelle.clone(),
+                provider: d.cle(),
+                libelle: catalogue::pod(&d.fabrication.pod)
+                    .map(|p| p.nom.clone())
+                    .unwrap_or_else(|| d.cle()),
                 package: None,
                 vignette: None,
                 erreur: Some(e),
@@ -1368,7 +1413,7 @@ pub fn ebook_generer(atelier: State<Atelier>) -> Result<ebook::Ebooks, String> {
     let o = garde.as_ref().ok_or_else(aucun_projet)?;
     let (pr, _, d) = vise(o)?;
     let dossier = sorties_racine(o)?.join("ebook");
-    ebook::generer(&o.projet, pr, d.dos_mm, &dossier, &typst()?)
+    ebook::generer(&o.projet, &pr, d.dos_mm, &dossier, &typst()?)
 }
 
 /* ---------- envois ---------- */
@@ -1713,15 +1758,17 @@ fn source_de_fond(o: &Ouvert) -> Result<(PathBuf, PathBuf), String> {
     let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
     // La mesure du tirage, et non un réglage d'aperçu : les pages que le canevas montre
     // doivent être celles que le dédicataire recevra, numéros compris.
-    let mesure = d
-        .compose
-        .as_ref()
+    let mesure = o
+        .projet
+        .meta
+        .livraison
+        .mesure(&d.fabrication.cle_gabarit())
         .ok_or("intérieur non composé : le placement a besoin des pages du tirage.")?;
     let reglage = Reglage {
         gouttiere: mesure.gouttiere,
         blanche: mesure.blanche,
     };
-    let src = interieur::source(livre, int, pr, &reglage, &chapitres, None);
+    let src = interieur::source(livre, int, &pr, &reglage, &chapitres, None);
     let dossier = std::env::temp_dir()
         .join("ozalid-pages")
         .join(empreinte(&src));
@@ -1858,9 +1905,11 @@ pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, Str
     let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
     // La mesure du tirage, et non un réglage d'aperçu : l'aperçu montre la page que le
     // dédicataire recevra, il doit donc être composé comme elle.
-    let mesure = d
-        .compose
-        .as_ref()
+    let mesure = o
+        .projet
+        .meta
+        .livraison
+        .mesure(&d.fabrication.cle_gabarit())
         .ok_or("intérieur non composé : l'aperçu a besoin des pages du tirage.")?;
     let dossier = sorties_racine(o)?.join("envois");
     std::fs::create_dir_all(&dossier)
@@ -1871,7 +1920,7 @@ pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, Str
         &interieur::source(
             livre,
             int,
-            pr,
+            &pr,
             &Reglage {
                 gouttiere: mesure.gouttiere,
                 blanche: mesure.blanche,
@@ -1906,13 +1955,13 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
 
     let sorties = package::assembler_envois(
         &o.projet,
-        pr,
-        papier,
+        &pr,
+        &papier,
         planche::Releve {
             dos: d.dos_mm,
             fond_perdu: d.fond_perdu_mm,
         },
-        &pr.cle,
+        &d.cle(),
         &racine,
         &typst,
     )?;
@@ -1928,15 +1977,6 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
             package: p,
         })
         .collect())
-}
-
-fn papier(pr: &'static Provider, cle: Option<&str>) -> Result<&'static catalogue::Papier, String> {
-    match cle {
-        Some(c) => pr
-            .papier(c)
-            .ok_or_else(|| format!("papier inconnu chez {} : {c}", pr.cle)),
-        None => Ok(pr.papier_defaut()),
-    }
 }
 
 /// Écrit les images du projet à côté de la source, et rend leurs descriptions.
@@ -1965,20 +2005,22 @@ fn sorties_racine(o: &Ouvert) -> Result<PathBuf, String> {
     Ok(parent.join(nom))
 }
 
-/// Sorties d'un prestataire : un répertoire par prestataire, sous la racine.
-fn sorties_dossier(o: &Ouvert, provider: &str) -> Result<PathBuf, String> {
-    Ok(sorties_racine(o)?.join(provider))
+/// Sorties d'une clé : un répertoire par clé, sous la racine. `composer` y range le
+/// gabarit d'intérieur — deux papiers du même gabarit partagent donc le répertoire de
+/// travail —, `packager` y range le livrable entier.
+fn sorties_dossier(o: &Ouvert, cle: &str) -> Result<PathBuf, String> {
+    Ok(sorties_racine(o)?.join(cle))
 }
 
-/// Le PDF de l'intérieur d'un prestataire, là où `composer` l'écrit.
+/// Le PDF de l'intérieur d'un gabarit, là où `composer` l'écrit.
 ///
 /// Nommé ici plutôt qu'à deux endroits : `composer` l'écrit, `vue` le cherche pour en
 /// faire un lien, et deux `format!` identiques finissent par diverger — c'est la même
 /// raison qui a fait servir la liste des jetons par le Rust plutôt que la recopier. Le
 /// nom du fichier vient de `package::nom` ; seul l'emplacement — ce dossier précis —
 /// se décide ici.
-fn interieur_pdf(dossier: &Path, provider: &str) -> PathBuf {
-    dossier.join(package::nom(provider, "interieur", "pdf"))
+fn interieur_pdf(dossier: &Path, cle: &str) -> PathBuf {
+    dossier.join(package::nom(cle, "interieur", "pdf"))
 }
 
 /// Répertoire de configuration de l'application, s'il est atteignable.
@@ -2026,6 +2068,73 @@ fn poser(
     vue(garde.as_ref().unwrap())
 }
 
+/// Ce que l'écran lit de la livraison. Vue et non donnée : `compose` y est recalculée
+/// par livrable depuis la mesure de son gabarit et la formule de son papier — le
+/// déplacement de la mesure est invisible au front (décision du 26/08).
+/// Forme de compatibilité jusqu'à la tâche 6 : les clés plates, `destinataires`.
+#[derive(Serialize)]
+pub struct LivraisonVue {
+    destinataires: Vec<DestinataireVue>,
+    courant: String,
+    deja_compose: bool,
+}
+
+#[derive(Serialize)]
+pub struct DestinataireVue {
+    provider: String,
+    papier: String,
+    dos_mm: Option<f64>,
+    fond_perdu_mm: Option<f64>,
+    compose: Option<MesureVue>,
+}
+
+#[derive(Serialize)]
+pub struct MesureVue {
+    pages: u32,
+    gouttiere: f64,
+    blanche: bool,
+    /// Recalculé ici, jamais retenu : c'est ce qui laisse deux papiers partager une
+    /// mesure, et un `dos` de formule corrigée se corriger tout seul à la vue.
+    dos: Option<f64>,
+    polices_introuvables: Vec<String>,
+}
+
+/// La livraison telle que le front la lit encore : un destinataire par livrable dont la
+/// clé plate existe, et sa mesure reconstituée depuis celle de son gabarit.
+fn livraison_vue(l: &Livraison) -> LivraisonVue {
+    let vue = |liv: &Livrable| -> Option<DestinataireVue> {
+        let plate = cle_plate(&liv.fabrication)?;
+        let compose = l.mesure(&liv.fabrication.cle_gabarit()).map(|m| {
+            let dos = catalogue::resout(&liv.fabrication)
+                .ok()
+                .and_then(|r| r.papier.dos.mm(m.pages));
+            MesureVue {
+                pages: m.pages,
+                gouttiere: m.gouttiere,
+                blanche: m.blanche,
+                dos,
+                polices_introuvables: m.polices_introuvables.clone(),
+            }
+        });
+        Some(DestinataireVue {
+            provider: plate.to_string(),
+            papier: liv.fabrication.papier.clone(),
+            dos_mm: liv.dos_mm,
+            fond_perdu_mm: liv.fond_perdu_mm,
+            compose,
+        })
+    };
+    LivraisonVue {
+        destinataires: l.livrables.iter().filter_map(&vue).collect(),
+        courant: l
+            .courant()
+            .and_then(|liv| cle_plate(&liv.fabrication))
+            .unwrap_or_default()
+            .to_string(),
+        deja_compose: l.deja_compose,
+    }
+}
+
 fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
     // Le compte de chapitres affiché est celui du manuscrit embarqué, pas celui que le
     // projet déclare : c'est l'écart entre les deux qui signale un manuscrit périmé.
@@ -2041,10 +2150,11 @@ fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
         .meta
         .livraison
         .courant()
-        .filter(|d| d.compose.is_some())
-        .and_then(|d| {
-            let dossier = sorties_dossier(o, &d.provider).ok()?;
-            let pdf = interieur_pdf(&dossier, &d.provider);
+        .map(|l| l.fabrication.cle_gabarit())
+        .filter(|g| o.projet.meta.livraison.mesure(g).is_some())
+        .and_then(|g| {
+            let dossier = sorties_dossier(o, &g).ok()?;
+            let pdf = interieur_pdf(&dossier, &g);
             pdf.is_file().then(|| pdf.to_string_lossy().into_owned())
         });
     Ok(ProjetVue {
@@ -2060,7 +2170,7 @@ fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
         images: o.projet.images.keys().cloned().collect(),
         interieur: o.projet.meta.interieur.clone(),
         interieur_pdf,
-        livraison: o.projet.meta.livraison.clone(),
+        livraison: livraison_vue(&o.projet.meta.livraison),
         envois: o.projet.meta.envois.clone(),
     })
 }
@@ -2168,6 +2278,9 @@ mod tests {
     /// struct : le destinataire que l'interface renvoie à `destinataire_regler` voyage
     /// donc en snake_case, comme le `Livre` qu'elle renvoie déjà. Le lire en camelCase
     /// ferait échouer chaque relevé de gabarit saisi, sans que rien ne dise pourquoi.
+    ///
+    /// Sur `DestinataireCompat`, la forme de compatibilité : l'écran parle encore la
+    /// clé plate. Ce test sera réécrit une seconde fois contre `Livrable` à la tâche 6.
     #[test]
     fn le_destinataire_de_l_interface_se_lit() {
         let json = r#"{
@@ -2176,7 +2289,7 @@ mod tests {
             "dos_mm": 18.4,
             "fond_perdu_mm": 4
         }"#;
-        let d: Destinataire = serde_json::from_str(json).unwrap();
+        let d: DestinataireCompat = serde_json::from_str(json).unwrap();
         assert_eq!(d.provider, "coollibri-148x210");
         assert_eq!(d.papier, "mesure");
         assert_eq!(d.dos_mm, Some(18.4));
@@ -2188,7 +2301,7 @@ mod tests {
     /// composerait sur un dos de zéro millimètre.
     #[test]
     fn un_releve_absent_reste_absent() {
-        let d: Destinataire =
+        let d: DestinataireCompat =
             serde_json::from_str(r#"{"provider": "lulu", "papier": "standard"}"#).unwrap();
         assert_eq!(d.dos_mm, None);
         assert_eq!(d.fond_perdu_mm, None);
