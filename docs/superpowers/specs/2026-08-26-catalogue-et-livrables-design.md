@@ -98,7 +98,7 @@ nom = "Pelliculage mat"
 cle = "creme-90"
 nom = "Crème 90 g"
 teinte = "#f7f0e0"
-dos = { multiplie = 0.0675, plus = 0.6 }
+dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 source = "calculateur officiel, relevé sur 4 points — 280 p → 19,5 mm"
 ```
 

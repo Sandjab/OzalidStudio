@@ -92,8 +92,10 @@ mod tests {
     /// s'il change, tous les fichiers fournis changent avec lui.
     #[test]
     fn un_pod_se_lit_depuis_son_toml() {
+        // `r##"…"##` et non `r#"…"#` : la séquence `"#` de `teinte = "#f7f0e0"`
+        // fermerait le littéral.
         let pod = Pod::depuis_toml(
-            r#"
+            r##"
 cle = "essai"
 nom = "Imprimeur d'essai"
 fond_perdu = 5.0
@@ -122,7 +124,7 @@ cle = "creme-90"
 nom = "Crème 90 g"
 teinte = "#f7f0e0"
 dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
-"#,
+"##,
         )
         .unwrap();
 
