@@ -1,3 +1,4 @@
+pub mod catalogue;
 pub mod commands;
 pub mod couverture;
 pub mod detourage;
