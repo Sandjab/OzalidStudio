@@ -495,4 +495,12 @@ test('chaque fichier refusé garde son chemin entier au survol', async () => {
   };
   for (const ligne of els.get('refusCatalogue').children) visite(ligne);
   assert.deepStrictEqual(survols, chemins);
+  // Et le découpage lui-même, que le survol ne prouve pas : rendu d'un seul tenant, le
+  // chemin garderait son nom de fichier hors de vue dès que la troncature mord, et ces
+  // deux lignes-là — même répertoire, même raison — deviendraient indiscernables.
+  for (const [i, chemin] of chemins.entries()) {
+    const nom = els.get('refusCatalogue').children[i].children[0].children[0].textContent;
+    assert.ok(nom.endsWith(path.basename(chemin)), `nom absent ou rogné : ${nom}`);
+    assert.ok(!nom.includes(path.dirname(chemin)), `répertoire dans le nom : ${nom}`);
+  }
 });

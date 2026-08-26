@@ -434,10 +434,13 @@ button:active:not(:disabled) { background: var(--encre); border-color: var(--enc
    est absolu : laissé en `break-all` comme les autres chemins de l'écran, un seul
    couvrait trois lignes avant sa raison — qui est la partie à lire. Il se tronque donc
    comme celui du `.ozalid` dans l'entête. Le nom du fichier, lui, ne cède jamais : ces
-   refus sortent tous du même `pods/`, et c'est leur nom seul qui les distingue. */
+   refus sortent tous du même `pods/`, et c'est leur nom seul qui les distingue.
+   Les deux s'alignent sur leur ligne de base, comme l'entête aligne les siens : le nom
+   est en .85rem et le chemin en .78rem, et deux boîtes de hauteurs différentes centrées
+   l'une sur l'autre poseraient le chemin au-dessus de la ligne du nom. */
 .refus p { display: flex; flex-direction: column; }
 
-.refus .fichier { display: flex; gap: .3rem; }
+.refus .fichier { display: flex; align-items: baseline; gap: .3rem; }
 
 .refus .fichier > :first-child { flex: none; }
 

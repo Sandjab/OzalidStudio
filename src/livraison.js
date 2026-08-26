@@ -23,10 +23,12 @@ async function afficherRefusCatalogue() {
   box.hidden = refus.length === 0;
   box.replaceChildren();
   for (const r of refus) {
-    // Le nom d'abord, son répertoire ensuite et tronqué, le chemin entier au survol :
-    // le montage des projets récents, et pour la même raison — ces fichiers sortent
-    // tous du même `pods/`, et coupés par la fin ils se liraient tous pareil. Les deux
-    // séparateurs, comme là-bas : l'application est aussi empaquetée pour Windows.
+    // Le nom d'abord, jamais tronqué, son répertoire ensuite et le chemin entier au
+    // survol : ce découpage est celui des projets récents, et pour la même raison —
+    // ces fichiers sortent tous du même `pods/`, et coupés par la fin ils se liraient
+    // tous pareil. Le montage, lui, est celui de l'entête : une seule ligne où le
+    // répertoire prend la place qui reste, là où les récents empilent. Les deux
+    // séparateurs, comme les récents : l'application est aussi empaquetée pour Windows.
     const coupe = Math.max(r.fichier.lastIndexOf('/'), r.fichier.lastIndexOf('\\'));
     const fichier = h('span', undefined, 'fichier');
     fichier.title = r.fichier;
