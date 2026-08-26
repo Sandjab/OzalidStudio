@@ -1098,8 +1098,9 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Le choix de ce qu'on ajoute est aussi large que son libellé, pas que la fenêtre :
    étiré sur toute la ligne, il se lisait comme le sujet de l'étape au lieu du geste
-   d'ajout qu'il est. */
-#inAjoutDestinataire { width: auto; max-width: 24rem; }
+   d'ajout qu'il est. Les deux listes de la cascade suivent la même règle. */
+#inAjoutPod,
+#inAjoutFormat { width: auto; max-width: 24rem; }
 
 /* Les relevés passent sous la ligne plutôt que de la pousser hors de l'écran : chez
    un prestataire à gabarit, la ligne réclame plus de mille pixels, et un ascenseur

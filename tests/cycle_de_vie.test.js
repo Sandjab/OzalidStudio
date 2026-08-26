@@ -53,6 +53,13 @@ function atelier({ garde = 'ignorer', recents = [], sur = {} } = {}) {
     appels.push([cmd, args]);
     switch (cmd) {
       case 'providers_liste': return [LULU];
+      case 'pods_liste': return [{
+        cle: 'lulu', nom: 'Lulu',
+        formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+        reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+        finitions: [],
+        papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+      }];
       case 'catalogue_refus': return [];
       case 'polices_liste': return ['Bodoni Moda'];
       case 'polices_texte_liste': return ['EB Garamond'];

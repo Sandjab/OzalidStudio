@@ -18,6 +18,7 @@ function h(tag, texte, classe) {
 
 let projet = null;
 let providers = [];
+let pods = [];
 let polices = [];
 /**
  * Les mains embarquées avec l'application.
@@ -452,6 +453,10 @@ function lienFichier(chemin, libelle) {
 
 async function chargerProviders() {
   providers = await invoke('providers_liste');
+  // L'arbre du catalogue : ce que chaque POD offre. La table plate ci-dessus reste la
+  // seule à savoir dire un format en millimètres et un fond perdu effectif ; celle-ci
+  // est la seule à savoir dire ce qu'on a le droit de choisir.
+  pods = await invoke('pods_liste');
   await afficherRefusCatalogue();
   polices = await invoke('polices_liste');
   for (const p of await invoke('polices_texte_liste')) {
@@ -1285,13 +1290,22 @@ $('inDestinataire').addEventListener('change', () => tente(async () => {
   afficherProjet(await invoke('livrable_viser', { cle: $('inDestinataire').value }));
   oublierPages();
 }));
-// La liste d'ajout parle en gabarits : un livrable neuf naît sur le papier d'office de
-// son POD, et se règle ensuite sur sa ligne. C'est le Rust qui refuse le vrai doublon.
+// La cascade parle en POD puis en format ; la reliure et le papier d'office viennent du
+// catalogue, et se règlent ensuite sur la ligne. C'est le Rust qui refuse le vrai
+// doublon.
+$('inAjoutPod').addEventListener('change', afficherFormatsDuPod);
 $('btAjouterDestinataire').addEventListener('click', () => tente(async () => {
-  const p = providers.find((x) => x.cle === $('inAjoutDestinataire').value);
+  const p = pods.find((x) => x.cle === $('inAjoutPod').value);
+  // La première reliure **composable** : une reliure grisée porte une raison de ne pas
+  // l'être, et le Rust la refuserait en la citant. Proposer d'office ce qu'on sait
+  // refuser serait un piège tendu au premier clic.
+  const reliure = p.reliures.find((r) => r.non_outille === null);
   afficherProjet(await invoke('livrable_ajouter', {
     fabrication: {
-      pod: p.pod, format: p.format, reliure: p.reliure, papier: p.papiers[0].cle,
+      pod: p.cle,
+      format: $('inAjoutFormat').value,
+      reliure: reliure.cle,
+      papier: p.papiers[0].cle,
     },
   }));
 }));

@@ -25,6 +25,44 @@ const COOLLIBRI = {
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
+// L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
+// table plate des tests : c'est lui qui porte les choix, et le grisé motivé n'a rien à
+// lire ailleurs.
+//
+// Chez KDP, la reliure non outillée est posée **avant** la composable : c'est le seul
+// ordre qui laisse le test de l'ajout distinguer « la première composable » de « la
+// première tout court ». Avec l'ordre inverse, les deux règles rendent la même reliure
+// et le test ne protège plus rien.
+const PODS = [
+  {
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  },
+  {
+    cle: 'kdp', nom: 'Amazon KDP',
+    formats: [{ cle: '6x9', nom: '6 × 9 po' }, { cle: '5x8', nom: '5 × 8 po' }],
+    reliures: [
+      { cle: 'rigide', nom: 'Couverture rigide', non_outille: 'géométrie du casewrap non relevée' },
+      { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    ],
+    finitions: [{ cle: 'mat', nom: 'Pelliculage mat' }],
+    papiers: [
+      { cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0', dos_publie: true },
+      { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff', dos_publie: true },
+    ],
+  },
+  {
+    cle: 'coollibri', nom: 'CoolLibri',
+    formats: [{ cle: '148x210', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff', dos_publie: false }],
+  },
+];
+
 /**
  * La livraison d'un livre qui n'a qu'un livrable, comme un projet neuf en a un. La clé
  * à quatre axes est fabriquée **une fois** ici : le front la reçoit du Rust, il ne la
@@ -81,6 +119,7 @@ function faux(providers, sur = {}) {
   const servi = sur.projet_ouvrir ?? sur.projet_importer ?? PROJET;
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return PODS;
     if (cmd === 'catalogue_refus') return [];
     // Recharger un manuscrit périme tout ce qui a été mesuré : c'est la règle du Rust,
     // et sans elle le front n'aurait rien à recomposer.

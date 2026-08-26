@@ -20,6 +20,44 @@ const LULU = {
   papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff' }],
 };
 
+// L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
+// table plate des tests : c'est lui qui porte les choix, et le grisé motivé n'a rien à
+// lire ailleurs.
+//
+// Chez KDP, la reliure non outillée est posée **avant** la composable : c'est le seul
+// ordre qui laisse le test de l'ajout distinguer « la première composable » de « la
+// première tout court ». Avec l'ordre inverse, les deux règles rendent la même reliure
+// et le test ne protège plus rien.
+const PODS = [
+  {
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  },
+  {
+    cle: 'kdp', nom: 'Amazon KDP',
+    formats: [{ cle: '6x9', nom: '6 × 9 po' }, { cle: '5x8', nom: '5 × 8 po' }],
+    reliures: [
+      { cle: 'rigide', nom: 'Couverture rigide', non_outille: 'géométrie du casewrap non relevée' },
+      { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    ],
+    finitions: [{ cle: 'mat', nom: 'Pelliculage mat' }],
+    papiers: [
+      { cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0', dos_publie: true },
+      { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff', dos_publie: true },
+    ],
+  },
+  {
+    cle: 'coollibri', nom: 'CoolLibri',
+    formats: [{ cle: '148x210', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff', dos_publie: false }],
+  },
+];
+
 /**
  * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
  * à plat, la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
@@ -105,6 +143,7 @@ function atelier({
     appels.push([cmd, args]);
     switch (cmd) {
       case 'providers_liste': return providers;
+      case 'pods_liste': return PODS;
       case 'catalogue_refus': return [];
       case 'polices_liste': return ['Bodoni Moda'];
       case 'polices_texte_liste': return ['EB Garamond'];

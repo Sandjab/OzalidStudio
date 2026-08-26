@@ -26,6 +26,44 @@ const COOLLIBRI = {
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
+// L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
+// table plate des tests : c'est lui qui porte les choix, et le grisé motivé n'a rien à
+// lire ailleurs.
+//
+// Chez KDP, la reliure non outillée est posée **avant** la composable : c'est le seul
+// ordre qui laisse le test de l'ajout distinguer « la première composable » de « la
+// première tout court ». Avec l'ordre inverse, les deux règles rendent la même reliure
+// et le test ne protège plus rien.
+const PODS = [
+  {
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  },
+  {
+    cle: 'kdp', nom: 'Amazon KDP',
+    formats: [{ cle: '6x9', nom: '6 × 9 po' }, { cle: '5x8', nom: '5 × 8 po' }],
+    reliures: [
+      { cle: 'rigide', nom: 'Couverture rigide', non_outille: 'géométrie du casewrap non relevée' },
+      { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    ],
+    finitions: [{ cle: 'mat', nom: 'Pelliculage mat' }],
+    papiers: [
+      { cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0', dos_publie: true },
+      { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff', dos_publie: true },
+    ],
+  },
+  {
+    cle: 'coollibri', nom: 'CoolLibri',
+    formats: [{ cle: '148x210', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff', dos_publie: false }],
+  },
+];
+
 /**
  * La face par son libellé, et non par son rang : ces boutons se retrouvent par rang
  * dans l'application — c'est ce que dit le commentaire de `FACES` — mais un test qui
@@ -116,7 +154,7 @@ function paquet(sur = {}) {
 async function ouvre(
   providers,
   sur = {},
-  { couverture = null, destinataires, dejaCompose = false, dosParPapier = {} } = {}
+  { couverture = null, destinataires, dejaCompose = false, dosParPapier = {}, pods = [] } = {}
 ) {
   const appels = [];
   const liste = (destinataires ?? [chez(providers[0])]).map((d) => ({ ...d }));
@@ -160,6 +198,7 @@ async function ouvre(
       return cmd === 'composer' ? { ...r, projet: retenir(r) } : r;
     }
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return pods;
     if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
@@ -273,14 +312,15 @@ test('la liste ne porte que les destinataires déclarés', async () => {
  */
 test('la liste d\'ajout garde les gabarits déjà déclarés', async () => {
   const { els, appels } = await ouvre([LULU, KDP, COOLLIBRI], {}, {
-    destinataires: [chez(LULU), chez(KDP)],
+    destinataires: [chez(LULU), chez(KDP)], pods: PODS,
   });
   assert.deepStrictEqual(
-    els.get('inAjoutDestinataire').textes('option'),
-    ['Lulu — poche 108 × 175', 'Amazon KDP — 6 × 9 po', 'CoolLibri — A5']
+    els.get('inAjoutPod').textes('option'),
+    ['Lulu', 'Amazon KDP', 'CoolLibri']
   );
 
-  els.get('inAjoutDestinataire').value = 'coollibri-148x210-broche';
+  els.get('inAjoutPod').value = 'coollibri';
+  await els.get('inAjoutPod').declenche('change');
   await els.get('btAjouterDestinataire').declenche('click');
   assert.ok(els.get('dest-papier-coollibri-148x210-broche-mesure'), 'ajout sans effet à l\'écran');
   // La fabrication entière part au Rust, pas une clé à découper : les trois axes du
@@ -301,14 +341,54 @@ test('la liste d\'ajout garde les gabarits déjà déclarés', async () => {
  * la seule chose qui reste à l'écran pour dire pourquoi rien ne s'est ajouté.
  */
 test('le même livrable deux fois est refusé, et le refus se lit', async () => {
-  const { els } = await ouvre([LULU, KDP], {}, { destinataires: [chez(LULU)] });
+  const { els } = await ouvre([LULU, KDP], {}, { destinataires: [chez(LULU)], pods: PODS });
 
-  els.get('inAjoutDestinataire').value = 'lulu-108x175-broche';
+  els.get('inAjoutPod').value = 'lulu';
+  await els.get('inAjoutPod').declenche('change');
   await els.get('btAjouterDestinataire').declenche('click');
 
   assert.match(els.get('alerte').textContent, /déjà un livrable/);
   assert.strictEqual(els.get('destinataires').children.length, 1,
     'le doublon s\'est ajouté malgré le refus');
+});
+
+test('la cascade offre les formats du POD choisi, et eux seuls', async () => {
+  const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { pods: PODS });
+
+  assert.deepStrictEqual(
+    els.get('inAjoutPod').textes('option'),
+    ['Lulu', 'Amazon KDP', 'CoolLibri'],
+    'la liste des POD ne les donne pas tous, ou pas dans l\'ordre du catalogue'
+  );
+  // Le premier POD est choisi d'office : une cascade qui commence vide demande un clic
+  // pour ne rien dire.
+  assert.deepStrictEqual(els.get('inAjoutFormat').textes('option'), ['poche 108 × 175']);
+
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  assert.deepStrictEqual(
+    els.get('inAjoutFormat').textes('option'),
+    ['6 × 9 po', '5 × 8 po'],
+    'changer de POD n\'a pas rechargé ses formats'
+  );
+});
+
+test('l\'ajout envoie les quatre axes, la reliure composable et le premier papier', async () => {
+  const { els, appels } = await ouvre([LULU, KDP, COOLLIBRI], {}, { pods: PODS });
+
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  els.get('inAjoutFormat').value = '5x8';
+  await els.get('btAjouterDestinataire').declenche('click');
+
+  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_ajouter');
+  // Étalé : la fabrication vient du contexte du front, et `deepStrictEqual` compare
+  // aussi les prototypes — c'est ce que fait déjà l'autre test de l'ajout, plus haut.
+  assert.deepStrictEqual({ ...args.fabrication }, {
+    // La reliure d'office est la première **composable** : la rigide de KDP porte une
+    // raison de ne pas l'être, et le Rust la refuserait.
+    pod: 'kdp', format: '5x8', reliure: 'broche', papier: 'creme',
+  });
 });
 
 /**

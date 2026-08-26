@@ -299,10 +299,15 @@
            liste et du choix d'ajout : c'est là qu'on cherche l'imprimeur qui manque. -->
       <div id="refusCatalogue" class="refus" hidden></div>
       <div class="ligne">
-        <!-- Le seul contrôle de la fenêtre sans étiquette visible, et c'est voulu : posé
-             à côté de son bouton, il se lit comme le geste d'ajout. Ce que l'œil déduit
-             de la disposition, l'`aria-label` le dit à qui ne la voit pas. -->
-        <select id="inAjoutDestinataire" aria-label="Prestataire à ajouter"></select>
+        <!-- Deux listes en cascade, et le seul endroit de la fenêtre où des contrôles
+             n'ont pas d'étiquette visible : posés contre leur bouton, ils se lisent
+             comme le geste d'ajout. Ce que l'œil déduit de la disposition, les
+             `aria-label` le disent à qui ne la voit pas.
+             Le POD d'abord, ses formats ensuite : un format ne veut rien dire sans
+             l'imprimeur qui le fabrique, et les mêmes 13,5 × 21,5 n'ont pas les mêmes
+             marges chez deux POD. -->
+        <select id="inAjoutPod" aria-label="Imprimeur à ajouter"></select>
+        <select id="inAjoutFormat" aria-label="Format du livrable à ajouter"></select>
         <button id="btAjouterDestinataire" type="button">Ajouter</button>
       </div>
       <div id="destinataires" class="destinataires"></div>

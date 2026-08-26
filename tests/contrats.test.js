@@ -49,6 +49,13 @@ const PROJET = {
 /** Le strict nécessaire pour que l'application charge et route un menu. */
 const invoke = async (cmd) => {
   if (cmd === 'providers_liste') return [LULU];
+  if (cmd === 'pods_liste') return [{
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  }];
   if (cmd === 'catalogue_refus') return [];
   if (cmd === 'polices_liste') return ['Archivo'];
   if (cmd === 'polices_texte_liste') return ['Alegreya'];
@@ -272,6 +279,24 @@ test('chaque commande appelée par le front est déclarée au Rust', () => {
     [],
     'appelées par le front, absentes du generate_handler de lib.rs'
   );
+});
+
+/**
+ * Le pendant du test précédent pour les trois commandes du **démarrage** : elles ne
+ * partent d'aucun geste, et un front qui les perdrait se dégraderait en silence — la
+ * moisson par `invoke('…')` cesserait simplement de les voir.
+ *
+ * Les nommer ici, c'est dire que le démarrage tient à ces trois-là : la table plate,
+ * l'arbre du catalogue et ses refus.
+ */
+test('le démarrage ne demande que des commandes que le Rust expose', () => {
+  const lib = source('src-tauri', 'src', 'lib.rs');
+  for (const cmd of ['providers_liste', 'pods_liste', 'catalogue_refus']) {
+    assert.ok(
+      lib.includes(`commands::${cmd},`),
+      `${cmd} n'est pas enregistrée dans le generate_handler`
+    );
+  }
 });
 
 /* ---------- menu.rs → RECENT ---------- */

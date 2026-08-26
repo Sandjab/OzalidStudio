@@ -111,14 +111,41 @@ function afficherDestinataires() {
     box.append(ligne);
   }
 
-  // La table entière, sans filtrer ce qui est déjà déclaré : c'est ce qui permet de
-  // déclarer le même gabarit deux fois pour comparer deux papiers. Le vrai doublon —
-  // les quatre axes identiques — est refusé par le Rust, avec sa raison.
-  const sel = $('inAjoutDestinataire');
+  afficherCascade();
+}
+
+/**
+ * Les deux listes de l'ajout : le POD, puis **ses** formats.
+ *
+ * Aucun filtre sur ce qui est déjà déclaré : c'est ce qui permet de déclarer deux fois
+ * le même gabarit pour comparer deux papiers. Le vrai doublon — les quatre axes
+ * identiques — est refusé par le Rust, avec sa raison.
+ *
+ * La liste des POD se reconstruit à chaque affichage, celle des formats la suit : elles
+ * ne dépendent que du catalogue, qui ne bouge pas de la vie du processus, mais les
+ * reconstruire coûte deux boucles sur six entrées et évite d'avoir à se demander qui les
+ * a laissées dans quel état.
+ */
+function afficherCascade() {
+  const sel = $('inAjoutPod');
+  const choisi = sel.value;
   sel.replaceChildren();
-  for (const p of providers) sel.append(new Option(p.libelle, p.cle));
-  sel.disabled = providers.length === 0;
-  $('btAjouterDestinataire').disabled = providers.length === 0;
+  for (const p of pods) sel.append(new Option(p.nom, p.cle));
+  // Le POD retenu survit à un réaffichage : ajouter un livrable ne doit pas ramener la
+  // liste sur son premier, alors qu'on en ajoute souvent deux de suite chez le même.
+  if (pods.some((p) => p.cle === choisi)) sel.value = choisi;
+  sel.disabled = pods.length === 0;
+  $('btAjouterDestinataire').disabled = pods.length === 0;
+  afficherFormatsDuPod();
+}
+
+/** Les formats du POD choisi. Vidée et refaite : un format d'un autre POD ne veut rien dire. */
+function afficherFormatsDuPod() {
+  const p = pods.find((x) => x.cle === $('inAjoutPod').value);
+  const sel = $('inAjoutFormat');
+  sel.replaceChildren();
+  for (const f of p?.formats ?? []) sel.append(new Option(f.nom, f.cle));
+  sel.disabled = !p || p.formats.length < 2;
 }
 
 function noteFormat(p) {

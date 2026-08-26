@@ -42,6 +42,13 @@ const invokeMuet = async (cmd) => {
       largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
       papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
     }];
+    case 'pods_liste': return [{
+      cle: 'lulu', nom: 'Lulu',
+      formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+      reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+      finitions: [],
+      papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+    }];
     case 'catalogue_refus': return [];
     case 'polices_liste': return ['Bodoni Moda'];
     case 'polices_texte_liste': return ['EB Garamond'];

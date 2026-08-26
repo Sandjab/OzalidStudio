@@ -45,6 +45,13 @@ const PROJET = {
 function faux(providers, sur = {}) {
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return [{
+      cle: 'lulu', nom: 'Lulu',
+      formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+      reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+      finitions: [],
+      papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+    }];
     if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Bodoni Moda', 'Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
