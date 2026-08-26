@@ -1103,6 +1103,30 @@ fn un_fichier_fautif_est_refuse_en_le_nommant_et_les_autres_tiennent() {
     );
 }
 
+/// Un POD sans reliure composable ne produit aucune entrée : il doit le dire, pas
+/// s'évanouir.
+///
+/// `aplatit` ne retient qu'un POD portant une reliure de géométrie connue — c'est
+/// délibéré, on ne peut pas annoncer un format qu'on ne sait pas composer. Mais tant que
+/// le catalogue était écrit en dur, le cas n'existait pas ; un fichier déposé, si. Sans
+/// ce refus, l'utilisateur dépose un fichier valide, relance, et son imprimeur n'est
+/// nulle part — sans un mot.
+#[test]
+fn un_pod_sans_reliure_composable_est_refuse() {
+    let d = TempDir::new().unwrap();
+    pose(
+        &d,
+        "rigide.toml",
+        &IMPRIMEUR_ESSAI.replace(
+            "geometrie = \"dos-carre-colle\"\npages = { min = 24, max = 400 }\nparite = \"paire\"",
+            "non_outille = \"géométrie du casewrap non relevée\"",
+        ),
+    );
+    let (pods, refus) = charge(Some(d.path()));
+    assert_eq!(refus.len(), 1, "{pods:?}");
+    assert!(refus[0].raison.contains("reliure"), "{:?}", refus[0]);
+}
+
 /// Un répertoire de surcharges absent n'est pas une avarie : c'est l'état d'un poste où
 /// l'on n'a rien déposé.
 #[test]
@@ -1212,13 +1236,29 @@ et, dans `commands.rs`, l'état qui les porte :
 pub struct CatalogueRefus(pub Vec<crate::catalogue::Refus>);
 ```
 
+Et, dans `verifie` (`catalogue.rs`), l'exigence que ce test réclame :
+
+```rust
+        if !self.reliures.iter().any(|r| r.geometrie.is_some()) {
+            return Err(format!(
+                "{} : aucune reliure composable. Un POD dont aucune reliure ne porte de \
+                 géométrie ne produirait aucun format, et disparaîtrait sans un mot.",
+                self.cle
+            ));
+        }
+```
+
+Ce contrôle n'existait pas avant ce lot parce que le cas n'existait pas : la table écrite
+en dur ne pouvait pas porter un tel POD. Un fichier déposé, si. **Vérifier que les six
+fournis le passent** — ils portent tous une broché.
+
 - [ ] **Étape 4 : Lancer les tests pour les voir passer**
 
 ```
 cd src-tauri && cargo test --lib catalogue
 ```
 
-Attendu : 11 tests passent.
+Attendu : tous les tests de `catalogue` passent, les cinq de cette tâche compris.
 
 - [ ] **Étape 5 : Commit**
 
