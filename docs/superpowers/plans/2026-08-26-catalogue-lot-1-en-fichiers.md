@@ -713,7 +713,12 @@ Dans `src-tauri/src/providers.rs`, renommer la constante publique :
 pub const PROVIDERS_HERITEE: &[Provider] = &[
 ```
 
-et corriger l'unique usage hors tests, `commands.rs:156`, en `providers::PROVIDERS_HERITEE`.
+et corriger **tous** ses usages. Ils ne sont pas un seul, contrairement à ce que ce plan a
+d'abord écrit : `commands.rs:156`, `projet.rs:325` (le `impl Default for Livraison`) et
+`examples/composer.rs:25` (la liste des prestataires du message d'usage) hors tests, plus
+`maquettes.rs:923` et `projet.rs:1356` dans des tests, plus quatre internes à `providers.rs`.
+Un renommage partiel ne compile pas. La seule occurrence à **laisser** est `providers.rs:4`,
+qui parle du `PROVIDERS` d'`index.html` — une autre variable, dans un autre fichier.
 
 Puis, dans le `mod tests` de `catalogue.rs` :
 
@@ -887,8 +892,9 @@ passe, jamais l'inverse.
 cd src-tauri && cargo test --lib catalogue
 ```
 
-Attendu : 7 tests passent. Un échec nomme la clé et le champ fautifs — c'est une valeur mal
-recopiée dans un TOML, à corriger là et non dans le test.
+Attendu : tous les tests de `catalogue` passent — ils sont vingt-cinq à ce stade, la tâche 1
+en ayant apporté bien plus que ce plan ne le prévoyait. Un échec nomme la clé et le champ
+fautifs : c'est une valeur mal recopiée dans un TOML, à corriger là et non dans le test.
 
 - [ ] **Étape 5 : Commit**
 
@@ -904,7 +910,12 @@ git commit -m "La vue plate du catalogue rend ce que la table rendait"
 **Fichiers :**
 - Supprimer : `src-tauri/src/providers.rs`
 - Modifier : `src-tauri/src/catalogue.rs`, `lib.rs`, `commands.rs`, `interieur.rs`,
-  `package.rs`, `planche.rs`, `projet.rs`, `ebook.rs`, `examples/temoin.rs`
+  `package.rs`, `planche.rs`, `projet.rs`, `ebook.rs`, `maquettes.rs`,
+  `examples/temoin.rs`, `examples/composer.rs`
+
+`maquettes.rs` et les deux exemples ne figuraient pas dans la première rédaction de ce plan :
+ils sont apparus au renommage de la tâche 3. Le compilateur les nommera de toute façon —
+c'est écrit ici pour que leur présence au diff ne passe pas pour un débordement.
 
 - [ ] **Étape 1 : Écrire le test qui échoue**
 
