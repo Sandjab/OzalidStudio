@@ -226,7 +226,7 @@ function allerA(cle) {
  * ce qui a déjà fait mentir deux fois la liste des jetons recopiée dans le HTML.
  */
 function dosPerime(p) {
-  return p.livraison.deja_compose && !destinataireCourant()?.compose;
+  return p.livraison.deja_compose && !livrableCourant()?.compose;
 }
 
 /**
@@ -365,8 +365,8 @@ function majPied() {
     return;
   }
   sel.replaceChildren();
-  for (const d of projet.livraison.destinataires) {
-    sel.append(new Option(libelleProvider(d.provider), d.provider));
+  for (const d of projet.livraison.livrables) {
+    sel.append(new Option(libelleLivrable(d), d.cle));
   }
   sel.value = projet.livraison.courant;
 
@@ -393,7 +393,7 @@ function majPied() {
   // sa définition même — `dosPerime` est vrai quand le livre a été composé et que la
   // mesure du destinataire visé a disparu. Il n'y a donc pas de second garde à écrire
   // ici, et le pied ne peut pas donner à lire 264 pages sous un « dos périmé ».
-  const mesure = destinataireCourant()?.compose;
+  const mesure = livrableCourant()?.compose;
   if (!mesure) return;
 
   $('piedMesure').textContent =
@@ -476,24 +476,41 @@ async function chargerProviders() {
 }
 
 /**
- * Le gabarit du destinataire visé, tel que la table le décrit.
+ * Le gabarit du livrable visé, tel que la table le décrit.
+ *
+ * La jointure passe par `gabarit` et non par la clé du livrable : le papier fait partie
+ * de l'identité, jamais du gabarit — deux livrables qui ne diffèrent que par lui
+ * partagent la même ligne de table, et c'est tout l'objet du lot.
  *
  * Le projet ne porte que des clés ; le format, le fond perdu et les papiers viennent
  * de la table, jamais du document — c'est ce qui permet à un `.ozalid` de suivre un
  * prestataire qui change son guide.
  */
 function providerCourant() {
-  return providers.find((p) => p.cle === projet?.livraison.courant);
+  const d = livrableCourant();
+  return providers.find((p) => p.cle === d?.gabarit);
 }
 
-/** Le destinataire visé : son papier et ses relevés. */
-function destinataireCourant() {
-  return projet?.livraison.destinataires.find((d) => d.provider === projet.livraison.courant);
+/** Le livrable visé : son papier, sa finition et ses relevés. */
+function livrableCourant() {
+  return projet?.livraison.livrables.find((d) => d.cle === projet.livraison.courant);
 }
 
 /** Le libellé d'un gabarit, ou sa clé si la table ne le connaît plus. */
 function libelleProvider(cle) {
   return providers.find((p) => p.cle === cle)?.libelle ?? cle;
+}
+
+/**
+ * Le libellé d'un livrable : son gabarit, et le papier qui le distingue.
+ *
+ * Le papier n'est pas un ornement ici : deux livrables du même gabarit ne se
+ * distinguent que par lui, et le pied les donnerait à lire identiques sans lui.
+ */
+function libelleLivrable(d) {
+  const p = providers.find((x) => x.cle === d.gabarit);
+  const papier = p?.papiers.find((x) => x.cle === d.papier)?.libelle ?? d.papier;
+  return `${p?.libelle ?? d.gabarit} — ${papier}`;
 }
 
 /* ---------- projet ---------- */
@@ -528,7 +545,7 @@ function afficherProjet(p) {
   // Lu dans la mesure du projet, jamais dans le retour de `composer` : un PDF composé
   // dans une écriture de repli ne redevient pas juste en refermant le livre, et cette
   // phrase doit être là à la réouverture. Le pied n'en porte que le signe.
-  const repli = destinataireCourant()?.compose?.polices_introuvables ?? [];
+  const repli = livrableCourant()?.compose?.polices_introuvables ?? [];
   $('repliPolices').textContent = repli.length
     ? `Police introuvable, composé dans une écriture de repli : ${repli.join(', ')}.`
       + ' Le PDF ne suit pas la maquette.'
@@ -597,7 +614,11 @@ function veiller() {
     veilleSuspendue = false;
     return;
   }
-  if (!(consenti || projet?.livraison.deja_compose) || destinataireCourant()?.compose) return;
+  // Un `courant` qui ne désigne rien n'arme jamais la veille : recomposer sans livrable
+  // boucle sans fin et sans erreur (reconnaissance § 6). Le Rust garantit l'invariant ;
+  // cette garde le tient si un état transitoire le casse.
+  const c = livrableCourant();
+  if (!(consenti || projet?.livraison.deja_compose) || !c || c.compose) return;
   clearTimeout(attenteComposition);
   attenteComposition = setTimeout(() => recomposer(false), DELAI_COMPOSITION);
 }
@@ -619,7 +640,12 @@ async function recomposer(force) {
   // l'employer désarme la veille plutôt que de faire recalculer à l'identique ce que le
   // clic vient d'obtenir. `force` couvre le seul cas où la mesure présente ne vaut
   // rien — celui d'une reprise, expliqué plus bas.
-  if (!force && destinataireCourant()?.compose) return;
+  // Deux causes de ne rien faire, et il faut les distinguer : la mesure est là — il n'y
+  // a rien à recalculer — ou le pointeur ne désigne aucun livrable, et recomposer
+  // boucle alors sans fin (même garde que `veiller`). Un `?? true` les confondrait avec
+  // une mesure absente, qui est justement le seul cas où il faut composer.
+  const c = livrableCourant();
+  if (!force && (!c || c.compose)) return;
   compositionEnCours = true;
   try {
     await composer();
@@ -1256,15 +1282,19 @@ $('inPoliceInterieur').addEventListener('change', majInterieur);
 // non dans `composer` seul — revenir à un destinataire déjà mesuré ne recompose rien, et
 // le rail garderait les pages du précédent.
 $('inDestinataire').addEventListener('change', () => tente(async () => {
-  afficherProjet(await invoke('destinataire_viser', {
-    providerCle: $('inDestinataire').value,
-  }));
+  afficherProjet(await invoke('livrable_viser', { cle: $('inDestinataire').value }));
   oublierPages();
 }));
-$('btAjouterDestinataire').addEventListener('click', () => tente(async () =>
-  afficherProjet(await invoke('destinataire_ajouter', {
-    providerCle: $('inAjoutDestinataire').value,
-  }))));
+// La liste d'ajout parle en gabarits : un livrable neuf naît sur le papier d'office de
+// son POD, et se règle ensuite sur sa ligne. C'est le Rust qui refuse le vrai doublon.
+$('btAjouterDestinataire').addEventListener('click', () => tente(async () => {
+  const p = providers.find((x) => x.cle === $('inAjoutDestinataire').value);
+  afficherProjet(await invoke('livrable_ajouter', {
+    fabrication: {
+      pod: p.pod, format: p.format, reliure: p.reliure, papier: p.papiers[0].cle,
+    },
+  }));
+}));
 $('btEnvoyer').addEventListener('click', envoyer);
 // Un envoi neuf n'a pas encore de mot : c'est le nom qui l'ouvre, et le mot se saisit
 // dans la ligne. Un dédicataire vide n'ajoute rien plutôt que d'ajouter un anonyme.

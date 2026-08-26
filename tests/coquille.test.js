@@ -14,14 +14,22 @@ const { charge } = require('./dom_shim');
 const GABARIT_MAISON = 'une écriture manuscrite : {envoi}, signé {paraphe}';
 
 const LULU = {
-  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff' }],
 };
 
-/** Un destinataire neuf chez un prestataire, comme le Rust en fabrique un. */
+/**
+ * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
+ * à plat, la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
+ * jamais, et un test qui la rebâtirait à chaque ligne finirait par diverger d'elle.
+ */
 const dest = (p) => ({
-  provider: p.cle, papier: p.papiers[0].cle, dos_mm: null, fond_perdu_mm: null,
+  cle: `${p.pod}-${p.format}-${p.reliure}-${p.papiers[0].cle}`,
+  gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
+  papier: p.papiers[0].cle, finition: null, dos_mm: null, fond_perdu_mm: null,
+  compose: null,
 });
 
 function projet(sur = {}) {
@@ -40,7 +48,7 @@ function projet(sur = {}) {
     couverture_importee: false,
     images: [],
     interieur: { police: 'EB Garamond' },
-    livraison: { destinataires: [dest(LULU)], courant: LULU.cle },
+    livraison: { livrables: [dest(LULU)], courant: dest(LULU).cle },
     envois: { gabarit: '', liste: [] },
     ...sur,
   };
@@ -67,7 +75,8 @@ const PLACE_DEFAUT = { page: 3, x: 0.5, y: 0.8, taille: 0.6, angle: 0 };
  * projet ne montrerait jamais les gestes qui le déplacent.
  */
 function atelier({
-  recents = [], sur = {}, providers = [LULU], destinataires,
+  recents = [], sur = {}, providers = [LULU], destinataires, courant,
+  dejaCompose = false,
   acces = { url: '', modele: '', cle_posee: false }, composition,
 } = {}) {
   const appels = [];
@@ -75,14 +84,16 @@ function atelier({
   // le faux le tient donc à part, comme le Rust le tient hors du `.ozalid`.
   let gabaritDefaut = GABARIT_MAISON;
   const liste = (destinataires ?? [dest(providers[0])]).map((d) => ({ ...d }));
-  let livraison = { destinataires: liste, courant: liste[0].provider, deja_compose: false };
+  let livraison = {
+    livrables: liste, courant: courant ?? liste[0].cle, deja_compose: dejaCompose,
+  };
   // Les règles du Rust, modélisées ici parce que le front les lit désormais dans le
   // projet au lieu de les tenir lui-même : une mesure entre chez le destinataire pour
   // qui elle a été faite, et tout ce qui pagine les efface toutes.
   const oublier = () => {
     livraison = {
       ...livraison,
-      destinataires: livraison.destinataires.map(({ compose, ...d }) => d),
+      livrables: livraison.livrables.map(({ compose, ...d }) => d),
     };
   };
   // Les envois sont tenus pour de vrai, comme les destinataires : depuis que la main
@@ -158,27 +169,49 @@ function atelier({
       case 'projet_fermer': return null;
       case 'interface_prete': return null;
       case 'couverture_apercu': throw new Error('pas de maquette');
-      case 'destinataire_viser':
-        livraison = { ...livraison, courant: args.providerCle };
+      case 'livrable_viser':
+        livraison = { ...livraison, courant: args.cle };
         return vue();
-      case 'destinataire_regler':
-        // Le papier et le relevé déplacent le dos : le Rust efface la mesure de ce
-        // destinataire-là, et ne reprend jamais celle que l'interface lui enverrait.
+      case 'livrable_regler': {
+        // Le papier change l'identité du livrable, jamais son gabarit : la mesure vit
+        // sous le gabarit et **survit** au réglage — c'est ce qui rend la comparaison de
+        // deux papiers gratuite. Le faux la laisse donc où elle est.
+        const neuf = (d) => ({
+          ...d, ...args.livrable,
+          cle: `${args.livrable.pod}-${args.livrable.format}`
+            + `-${args.livrable.reliure}-${args.livrable.papier}`,
+        });
         livraison = {
           ...livraison,
-          destinataires: livraison.destinataires.map((d) => (
-            d.provider === args.destinataire.provider
-              ? { ...args.destinataire, compose: undefined }
-              : d
-          )),
+          livrables: livraison.livrables.map((d) => (d.cle === args.cle ? neuf(d) : d)),
+        };
+        if (livraison.courant === args.cle) {
+          livraison = { ...livraison, courant: neuf({ cle: args.cle }).cle };
+        }
+        return vue();
+      }
+      case 'livrable_ajouter': {
+        const f = args.fabrication;
+        const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
+        livraison = {
+          ...livraison,
+          livrables: [...livraison.livrables, { ...dest(p), papier: f.papier,
+            cle: `${f.pod}-${f.format}-${f.reliure}-${f.papier}` }],
+        };
+        return vue();
+      }
+      case 'livrable_retirer':
+        livraison = {
+          ...livraison,
+          livrables: livraison.livrables.filter((d) => d.cle !== args.cle),
         };
         return vue();
       case 'composer':
         livraison = {
           ...livraison,
           deja_compose: true,
-          destinataires: livraison.destinataires.map((d) => (
-            d.provider === livraison.courant
+          livrables: livraison.livrables.map((d) => (
+            d.gabarit === livraison.livrables.find((x) => x.cle === livraison.courant)?.gabarit
               ? {
                 ...d,
                 compose: {
@@ -639,7 +672,10 @@ const COMPOSITION = {
   polices_introuvables: [],
 };
 
-/** Ce que le pied donne à lire : le destinataire choisi, puis l'état de son dos. */
+/** Plus long que le débounce de la recomposition automatique (400 ms). */
+const attendreComposition = () => new Promise((r) => setTimeout(r, 700));
+
+/** Ce que le pied donne à lire : le livrable visé, puis l'état de son dos. */
 const pied = (els) => `${els.get('inDestinataire').value} ${els.get('piedDos').textContent}`.trim();
 // Le témoin du dos périmé : il a quitté l'onglet Intérieur pour le pied, qui portait
 // déjà le dos. Le texte et le rouge sont deux affirmations distinctes — l'un dit ce
@@ -652,8 +688,11 @@ test('le pied nomme le prestataire et dit le dos non composé', async () => {
   await els.get('btNouveau').declenche('click');
 
   assert.equal(els.get('visee').hidden, false);
-  assert.deepEqual(els.get('inDestinataire').textes('option'), ['Lulu — poche 108 × 175']);
-  assert.equal(pied(els), 'lulu-108x175-broche · dos non composé');
+  // Le libellé dit le papier : deux livrables du même gabarit ne se distinguent que
+  // par lui, et le pied les donnerait à lire identiques sans lui.
+  assert.deepEqual(els.get('inDestinataire').textes('option'),
+    ['Lulu — poche 108 × 175 — Papier standard']);
+  assert.equal(pied(els), 'lulu-108x175-broche-standard · dos non composé');
 });
 
 /**
@@ -667,7 +706,7 @@ test('une fois l\'intérieur composé, le pied porte le dos mesuré', async () =
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'lulu-108x175-broche · dos 16,5 mm');
+  assert.equal(pied(els), 'lulu-108x175-broche-standard · dos 16,5 mm');
 });
 
 /**
@@ -700,7 +739,8 @@ test('fermer le projet efface le pied', async () => {
 });
 
 const KDP = {
-  cle: 'kdp-6x9-broche', libelle: 'Amazon KDP — 6 × 9 po',
+  cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
+  libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0' },
     { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff' }],
@@ -708,7 +748,8 @@ const KDP = {
 
 /** Un prestataire à gabarit : le dos ne s'y calcule pas, il se relève. */
 const COOLLIBRI = {
-  cle: 'coollibri-148x210-broche', libelle: 'CoolLibri — A5',
+  cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
+  libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff' }],
 };
@@ -735,24 +776,35 @@ test('viser un autre destinataire renomme le pied et lui retire le dos', async (
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  assert.equal(pied(els), 'lulu-108x175-broche · dos 16,5 mm');
+  assert.equal(pied(els), 'lulu-108x175-broche-standard · dos 16,5 mm');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9-broche · dos périmé');
+  assert.equal(pied(els), 'kdp-6x9-broche-creme · dos périmé');
 });
 
-test('changer de papier retire le dos du pied', async () => {
+/**
+ * Changer de papier **ne périme plus rien** : la mesure vit sous le gabarit d'intérieur,
+ * que les deux papiers partagent, et c'est toute la promesse du lot — comparer deux
+ * papiers ne coûte plus une composition. Ce qui bouge, c'est l'identité du livrable :
+ * le pointeur suit, et le pied le dit.
+ *
+ * Le dos, lui, se recalcule côté Rust depuis la formule du papier retenu ; le front
+ * n'en sait rien et n'affiche que ce qu'on lui sert — c'est
+ * `deux_papiers_d_un_gabarit_partagent_la_mesure_sans_partager_le_dos`, dans
+ * `commands.rs`, qui répond du chiffre.
+ */
+test('changer de papier garde le dos et fait suivre le pointeur', async () => {
   const { els } = await charge({ invoke: atelierCompose([KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  assert.equal(pied(els), 'kdp-6x9-broche · dos 16,5 mm');
+  assert.equal(pied(els), 'kdp-6x9-broche-creme · dos 16,5 mm');
 
-  els.get('dest-papier-kdp-6x9-broche').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9-broche').declenche('change');
+  els.get('dest-papier-kdp-6x9-broche-creme').value = 'blanc';
+  await els.get('dest-papier-kdp-6x9-broche-creme').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9-broche · dos périmé');
+  assert.equal(pied(els), 'kdp-6x9-broche-blanc · dos 16,5 mm');
 });
 
 /**
@@ -769,7 +821,8 @@ test('chez un prestataire à gabarit, le pied ne réclame pas une composition', 
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'coollibri-148x210-broche · dos relevé sur le gabarit');
+  assert.equal(pied(els),
+    'coollibri-148x210-broche-mesure · dos relevé sur le gabarit');
 });
 
 /**
@@ -906,7 +959,7 @@ test('un dos périmé par un changement de gabarit allume le témoin du pied', a
   await faireComposer(els);
   assert.equal(piedAlerte(els), false, 'un dos frais ne périme rien');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
 
   assert.equal(piedAlerte(els), true);
@@ -921,13 +974,13 @@ test('recomposer éteint le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
   assert.equal(piedAlerte(els), true, 'le dos devait être périmé avant');
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'kdp-6x9-broche · dos 16,5 mm');
+  assert.equal(pied(els), 'kdp-6x9-broche-creme · dos 16,5 mm');
   assert.equal(piedAlerte(els), false);
 });
 
@@ -969,27 +1022,65 @@ test('un dos jamais composé n\'allume pas le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9-broche · dos non composé');
+  assert.equal(pied(els), 'kdp-6x9-broche-creme · dos non composé');
   assert.equal(piedAlerte(els), false);
 });
 
 /**
- * Le papier périme le dos sans rien changer d'autre à l'écran : c'est le geste où un
- * témoin qui ne repartirait pas serait le plus difficile à démentir.
+ * Le pendant en rouge du test précédent : changer de papier ne doit pas davantage
+ * allumer le témoin qu'effacer le chiffre. Un témoin qui repartirait ici enverrait
+ * recomposer un livre dont la pagination n'a pas bougé d'une page.
  */
-test('changer de papier allume aussi le témoin du pied', async () => {
+test('changer de papier n\'allume pas le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
   assert.equal(piedAlerte(els), false);
 
-  els.get('dest-papier-kdp-6x9-broche').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9-broche').declenche('change');
+  els.get('dest-papier-kdp-6x9-broche-creme').value = 'blanc';
+  await els.get('dest-papier-kdp-6x9-broche-creme').declenche('change');
 
-  assert.equal(piedAlerte(els), true);
+  assert.equal(piedAlerte(els), false);
+});
+
+/**
+ * Un `courant` qui ne désigne aucun livrable n'arme pas la veille.
+ *
+ * Le Rust garantit l'invariant — `normalise` repose le pointeur, et chaque commande le
+ * fait suivre. Mais si un état transitoire le cassait, une veille qui s'armerait sur une
+ * mesure introuvable recomposerait **sans fin et sans erreur** : la composition ne
+ * dépose rien pour un livrable absent, la mesure manque toujours, et le tour suivant
+ * repart. C'est la boucle de la reconnaissance § 6, et la seule qui ne se voit ni dans
+ * l'écran ni dans une alerte.
+ *
+ * Le livre a déjà été composé : sans cela, la veille ne s'armerait de toute façon pas,
+ * et le test passerait pour une raison qui n'est pas la sienne.
+ *
+ * Ce test protège la **paire** de gardes — celle de `veiller` et celle de `recomposer` —
+ * et non l'une des deux : chacune rattrape l'autre, et il faut les retirer toutes les
+ * deux pour le rougir. C'est une défense en profondeur assumée : la boucle ne s'arrête
+ * sur aucune erreur, et une seule garde suffirait tant que personne ne touche à l'autre.
+ */
+test('un courant qui ne désigne aucun livrable n\'arme pas la veille', async () => {
+  const a = atelier({
+    courant: 'fantome-108x175-broche-standard',
+    dejaCompose: true,
+    composition: COMPOSITION,
+  });
+  const { els } = await charge({ invoke: a.invoke });
+  await els.get('btNouveau').declenche('click');
+
+  // Ouvrir suspend la veille d'un tour — c'est `oublierLesSorties`. Il faut donc un
+  // geste, comme l'utilisateur en fait un : c'est là que la veille s'arme pour de bon.
+  els.get('inDedicace').value = 'À M.';
+  await els.get('inDedicace').declenche('change');
+  await attendreComposition();
+
+  assert.equal(a.appels.filter(([c]) => c === 'composer').length, 0,
+    'la veille s\'est armée sur un pointeur qui ne désigne rien : elle bouclera');
 });
 
 /**
@@ -1444,7 +1535,7 @@ test('changer de destinataire au pied refait le rail sans quitter l\'étape', as
   const avant = a.appels.filter(([c]) => c === 'envoi_vignettes').length;
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
   await new Promise((r) => setImmediate(r));
 
@@ -1474,7 +1565,7 @@ test('revenir à un destinataire déjà composé refait aussi le rail', async ()
   const { els } = await charge({ invoke: a.invoke });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9-broche';
+  els.get('inDestinataire').value = 'kdp-6x9-broche-creme';
   await els.get('inDestinataire').declenche('change');
   await faireComposer(els);
   await allerAuxEnvois(els);
@@ -1482,7 +1573,7 @@ test('revenir à un destinataire déjà composé refait aussi le rail', async ()
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
   // Lulu est composé : rien ne repagine, et c'est tout le sujet.
-  els.get('inDestinataire').value = 'lulu-108x175-broche';
+  els.get('inDestinataire').value = 'lulu-108x175-broche-standard';
   await els.get('inDestinataire').declenche('change');
   await new Promise((r) => setImmediate(r));
 

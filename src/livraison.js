@@ -53,30 +53,34 @@ async function afficherRefusCatalogue() {
 }
 
 /**
- * La liste des destinataires du livre, et de quoi en ajouter un.
+ * La liste des livrables du livre, et de quoi en ajouter un.
  *
- * Une ligne par destinataire : son papier, le format de son gabarit, et les relevés que
+ * Une ligne par livrable : son papier, le format de son gabarit, et les relevés que
  * les prestataires à gabarit exigent — dos et fond perdu, qu'eux seuls ne publient pas.
- * Plus de cases à cocher : être dans la liste *est* le fait d'être destinataire, et le
+ * Plus de cases à cocher : être dans la liste *est* le fait d'être livrable, et le
  * prestataire n'est plus désigné deux fois.
+ *
+ * Chaque identifiant de DOM prend la clé du **livrable**, à quatre axes : deux
+ * livrables du même gabarit coexistent, et les nommer par le gabarit leur donnerait le
+ * même `id`. Toutes les clés du catalogue sont des noms, la clé en est donc un aussi.
  */
 function afficherDestinataires() {
   const box = $('destinataires');
   box.replaceChildren();
-  const declares = projet.livraison.destinataires;
+  const declares = projet.livraison.livrables;
   for (const d of declares) {
-    const p = providers.find((pr) => pr.cle === d.provider);
+    const p = providers.find((pr) => pr.cle === d.gabarit);
     const ligne = h('div', undefined, 'destinataire');
     let releve;
-    ligne.append(h('span', libelleProvider(d.provider), 'nom'));
+    ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
 
     if (p) {
       const papier = h('select');
-      papier.id = `dest-papier-${d.provider}`;
+      papier.id = `dest-papier-${d.cle}`;
       for (const pa of p.papiers) papier.append(new Option(pa.libelle, pa.cle));
       papier.value = d.papier;
       papier.disabled = p.papiers.length < 2;
-      papier.addEventListener('change', () => reglerDestinataire(d.provider));
+      papier.addEventListener('change', () => reglerLivrable(d));
       ligne.append(papier);
 
       // Fabriqué ici, avec le prestataire qui le motive, mais posé après le bouton :
@@ -87,7 +91,7 @@ function afficherDestinataires() {
       if (!p.dos_publie || p.fond_perdu === null) {
         releve = h('span', undefined, 'releve');
         const champ = (quoi, libelle, valeur) =>
-          releve.append(champReleve(`dest-${quoi}-${d.provider}`, libelle, valeur, d.provider));
+          releve.append(champReleve(`dest-${quoi}-${d.cle}`, libelle, valeur, d));
         if (!p.dos_publie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
         if (p.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
       }
@@ -96,25 +100,25 @@ function afficherDestinataires() {
 
     const retirer = h('button', 'Retirer');
     retirer.type = 'button';
-    retirer.id = `dest-retirer-${d.provider}`;
+    retirer.id = `dest-retirer-${d.cle}`;
     // Le dernier ne se retire pas : le Rust refuse, mais un bouton qui ne peut
     // qu'échouer vaut mieux éteint que refusé.
     retirer.disabled = declares.length < 2;
     retirer.addEventListener('click', () => tente(async () =>
-      afficherProjet(await invoke('destinataire_retirer', { providerCle: d.provider }))));
+      afficherProjet(await invoke('livrable_retirer', { cle: d.cle }))));
     ligne.append(retirer);
     if (releve) ligne.append(releve);
     box.append(ligne);
   }
 
-  // Ne s'ajoute que ce qui n'est pas déjà là : la même clé deux fois n'aurait aucun
-  // sens, et le Rust le refuserait.
+  // La table entière, sans filtrer ce qui est déjà déclaré : c'est ce qui permet de
+  // déclarer le même gabarit deux fois pour comparer deux papiers. Le vrai doublon —
+  // les quatre axes identiques — est refusé par le Rust, avec sa raison.
   const sel = $('inAjoutDestinataire');
-  const restants = providers.filter((p) => !declares.some((d) => d.provider === p.cle));
   sel.replaceChildren();
-  for (const p of restants) sel.append(new Option(p.libelle, p.cle));
-  sel.disabled = restants.length === 0;
-  $('btAjouterDestinataire').disabled = restants.length === 0;
+  for (const p of providers) sel.append(new Option(p.libelle, p.cle));
+  sel.disabled = providers.length === 0;
+  $('btAjouterDestinataire').disabled = providers.length === 0;
 }
 
 function noteFormat(p) {
@@ -130,7 +134,7 @@ function noteFormat(p) {
  * Vide au départ, jamais prérempli : un chiffre par défaut se lirait comme une mesure,
  * et une planche composée sur un dos inventé ne se voit qu'au massicot.
  */
-function champReleve(id, libelle, valeur, providerCle) {
+function champReleve(id, libelle, valeur, livrable) {
   const l = h('label', undefined, 'petit');
   const i = h('input');
   i.type = 'number';
@@ -138,25 +142,34 @@ function champReleve(id, libelle, valeur, providerCle) {
   i.min = 0;
   i.step = 0.1;
   i.value = valeur === null || valeur === undefined ? '' : String(valeur);
-  i.addEventListener('change', () => reglerDestinataire(providerCle));
+  i.addEventListener('change', () => reglerLivrable(livrable));
   l.append(h('span', libelle), i);
   return l;
 }
 
-/** Relit la ligne d'un destinataire et la renvoie au projet. */
-async function reglerDestinataire(cle) {
+/**
+ * Relit la ligne d'un livrable et la renvoie au projet.
+ *
+ * Le livrable entier voyage, avec les trois axes de son gabarit : régler son papier
+ * change son identité, et `cle` dit lequel il était pour que `courant` puisse suivre.
+ */
+async function reglerLivrable(d) {
   // Un champ vide est une absence de relevé, pas un zéro : composer sur un dos nul
   // produirait une planche fausse au lieu d'un refus.
   const lu = (id) => {
     const v = $(id)?.value.trim();
     return v ? Number(v) : null;
   };
-  await tente(async () => afficherProjet(await invoke('destinataire_regler', {
-    destinataire: {
-      provider: cle,
-      papier: $(`dest-papier-${cle}`).value,
-      dos_mm: lu(`dest-dos-${cle}`),
-      fond_perdu_mm: lu(`dest-fp-${cle}`),
+  await tente(async () => afficherProjet(await invoke('livrable_regler', {
+    cle: d.cle,
+    livrable: {
+      pod: d.pod,
+      format: d.format,
+      reliure: d.reliure,
+      papier: $(`dest-papier-${d.cle}`).value,
+      finition: d.finition ?? null,
+      dos_mm: lu(`dest-dos-${d.cle}`),
+      fond_perdu_mm: lu(`dest-fp-${d.cle}`),
     },
   })));
 }
@@ -238,7 +251,7 @@ function afficherPackages(resultats) {
 }
 
 async function packager() {
-  const combien = projet.livraison.destinataires.length;
+  const combien = projet.livraison.livrables.length;
   const bt = $('btPackager');
   bt.disabled = true;
   $('packages').hidden = true;

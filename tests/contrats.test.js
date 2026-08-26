@@ -12,7 +12,8 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
@@ -35,8 +36,12 @@ const PROJET = {
   images: [],
   interieur: { police: 'Alegreya' },
   livraison: {
-    destinataires: [{ provider: 'lulu-108x175-broche', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-    courant: 'lulu-108x175-broche',
+    livrables: [{
+      cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+      pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+      finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+    }],
+    courant: 'lulu-108x175-broche-standard',
   },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
 };
@@ -223,6 +228,50 @@ test('chaque événement émis par le Rust est écouté par le front', async () 
     assert.ok(ecoutes.includes(nom),
       `« ${nom} » émis par le Rust, écouté par personne (posés : ${ecoutes.join(', ')})`);
   }
+});
+
+/* ---------- src/*.js → lib.rs ---------- */
+
+/**
+ * Chaque commande que le front appelle doit être déclarée au `generate_handler`.
+ *
+ * Rien ne confrontait ces deux listes : un nom renommé d'un seul côté compile des deux
+ * côtés, et ne se rate qu'à l'exécution, sur un « unknown command » que seule la bande
+ * d'alerte porterait — au moment précis où l'utilisateur fait le geste. C'est le garde
+ * qui manquait au renommage des `livrable_*` : quatre commandes déplacées à la main
+ * dans deux fichiers, sans rien pour dire qu'on en avait oublié une.
+ *
+ * Dans ce sens-là seulement : une commande déclarée que le front n'appelle pas n'est
+ * pas une faute — les exemples en appellent, et une commande peut précéder son écran.
+ */
+test('chaque commande appelée par le front est déclarée au Rust', () => {
+  const fichiers = fs
+    .readdirSync(path.join(__dirname, '..', 'src'))
+    .filter((f) => f.endsWith('.js'));
+  const appelees = [...new Set(
+    fichiers.flatMap((f) => [...source('src', f).matchAll(/\binvoke\('([a-z_]+)'/g)]
+      .map((m) => m[1]))
+  )];
+  // Soixante au lot 2 : si le relevé s'effondre, c'est la moisson qui est cassée, pas
+  // le contrat — le dire distinctement plutôt que de rendre vert sur zéro commande.
+  assert.ok(appelees.length >= 50, `moisson suspecte : ${appelees.length} commandes`);
+
+  // Le seul bloc `generate_handler![…]`, et non tout `lib.rs` : ailleurs, un
+  // doc-commentaire qui nommerait `commands::livrable_viser` suffirait à satisfaire ce
+  // test sans que la commande soit déclarée nulle part.
+  const lib = source('src-tauri', 'src', 'lib.rs');
+  const debut = lib.indexOf('generate_handler![');
+  assert.notEqual(debut, -1, 'generate_handler introuvable dans lib.rs');
+  const fin = lib.indexOf(']', debut);
+  assert.notEqual(fin, -1, 'generate_handler sans fin');
+  const declarees = new Set(
+    [...lib.slice(debut, fin).matchAll(/commands::([a-z_]+)/g)].map((m) => m[1])
+  );
+  assert.deepStrictEqual(
+    appelees.filter((c) => !declarees.has(c)),
+    [],
+    'appelées par le front, absentes du generate_handler de lib.rs'
+  );
 });
 
 /* ---------- menu.rs → RECENT ---------- */

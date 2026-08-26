@@ -54,6 +54,12 @@ struct Ouvert {
 #[derive(Serialize)]
 pub struct ProviderVue {
     cle: String,
+    /// Les trois axes du gabarit, tels que la fabrication d'office de cette entrée les
+    /// porte. L'écran en a besoin pour composer la `Fabrication` qu'il envoie à
+    /// `livrable_ajouter` : la clé se fabrique et se compare, elle ne se découpe jamais.
+    pod: String,
+    format: String,
+    reliure: String,
     libelle: String,
     largeur: f64,
     hauteur: f64,
@@ -77,6 +83,9 @@ impl From<&Provider> for ProviderVue {
     fn from(p: &Provider) -> Self {
         Self {
             cle: p.cle.clone(),
+            pod: p.fabrication.pod.clone(),
+            format: p.fabrication.format.clone(),
+            reliure: p.fabrication.reliure.clone(),
             libelle: p.libelle.clone(),
             largeur: p.format.0,
             hauteur: p.format.1,
@@ -127,10 +136,11 @@ pub struct ProjetVue {
     /// pas celui du livre qu'on regarde, et le montrer ferait relire une pagination que
     /// le pied vient de déclarer fausse.
     pub interieur_pdf: Option<String>,
-    /// Les destinataires du livre et celui qu'on vise. Le front les joint à la table des
-    /// gabarits par leur clé — désormais celle du gabarit : les libellés, les formats et
-    /// les papiers viennent de là. Une **vue** depuis la v5 : `compose` y est recalculée
-    /// par livrable, la donnée range la mesure sous le gabarit.
+    /// Les livrables du livre et celui qu'on vise. Chacun porte son identité à quatre
+    /// axes et la clé de son gabarit : c'est par celle-là que le front joint la table
+    /// des gabarits — les libellés, les formats et les papiers viennent de là. Une
+    /// **vue** depuis la v5 : `compose` y est recalculée par livrable, la donnée range
+    /// la mesure sous le gabarit.
     pub livraison: LivraisonVue,
     /// La main du livre et ses envois. Toujours sérialisée, même vide : le front y
     /// lit la liste sans avoir à se demander si la section existe.
@@ -472,7 +482,7 @@ pub fn interieur_modifier(
     vue_modifiee(o)
 }
 
-/* ---------- destinataires ---------- */
+/* ---------- livrables ---------- */
 
 /// Le livrable visé, résolu : sa vue plate, son papier, et le livrable lui-même.
 ///
@@ -489,67 +499,80 @@ fn vise(o: &Ouvert) -> Result<(Provider, catalogue::Papier, &Livrable), String> 
     Ok((r.provider(), r.papier.clone(), l))
 }
 
-/// Le prestataire de cette clé de **gabarit**, celle que `providers_liste` sert
-/// désormais. Couche de compatibilité : elle meurt à la tâche 6 avec le renommage des
-/// commandes.
-fn plat(cle: &str) -> Result<&'static Provider, String> {
-    catalogue::providers()
-        .iter()
-        .find(|p| p.cle == cle)
-        .ok_or_else(|| format!("prestataire inconnu : {cle}"))
+/// Le refus d'un livrable déjà déclaré, à quatre axes — la finition n'y est pas.
+///
+/// Fonction libre plutôt qu'une ligne dans la commande : une commande réclame un `State`
+/// qu'aucun test ne fabrique, et la règle qui décide ce qu'est « le même livrable »
+/// serait alors la seule du chantier que rien ne protège.
+fn refuse_doublon(livrables: &[Livrable], cle: &str) -> bool {
+    livrables.iter().any(|x| x.cle() == cle)
 }
 
-/// Ajoute un prestataire à la liste des destinataires, avec son papier par défaut.
+/// Ce qui interdit de régler cette ligne, s'il y a lieu.
+///
+/// Hors de la commande pour la même raison que `refuse_doublon` : une commande réclame
+/// un `State` qu'aucun test ne fabrique, et ces deux refus-là seraient alors les seuls
+/// du chantier que rien ne protège.
+///
+/// Le gabarit ne se règle pas : c'est lui qui range la mesure, et le changer sur place
+/// laisserait le livrable sous une pagination qui n'est plus la sienne — retirer puis
+/// ajouter le dit, et le fait. La finition, elle, doit exister chez le POD : elle nomme
+/// une option de commande, et une option inventée ne se commande nulle part.
+fn reglage_refuse(place: &Livrable, neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
+    if place.fabrication.cle_gabarit() != neuf.fabrication.cle_gabarit() {
+        return Some("le gabarit d'un livrable ne se règle pas : retirer, puis ajouter.".into());
+    }
+    match &neuf.finition {
+        Some(f) if !pod.finitions.iter().any(|x| &x.cle == f) => {
+            Some(format!("finition inconnue chez {} : {f}.", pod.nom))
+        }
+        _ => None,
+    }
+}
+
+/// Ajoute un livrable au livre.
+///
+/// Le refus du doublon porte sur les **quatre axes de fabrication** : deux livrables qui
+/// ne différeraient que par la finition produiraient les mêmes octets dans deux
+/// répertoires (spec § 4) — la finition est une donnée de commande, pas de fabrication.
 #[tauri::command]
-pub fn destinataire_ajouter(
-    provider_cle: String,
+pub fn livrable_ajouter(
+    fabrication: catalogue::Fabrication,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let f = plat(&provider_cle)?.fabrication.clone();
-    let r = catalogue::resout(&f)?;
-    let libelle = r.provider().libelle;
-    let gabarit = f.cle_gabarit();
+    let r = catalogue::resout(&fabrication)?;
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    // Le refus porte sur le **gabarit** et non sur les quatre axes, exprès : l'écran
-    // d'aujourd'hui identifie ses lignes par la clé de gabarit — deux livrables du même
-    // gabarit y produiraient deux `id` de DOM identiques. La règle à quatre axes arrive
-    // avec l'écran qui sait la porter, à la tâche 6.
-    if l.livrables
-        .iter()
-        .any(|x| x.fabrication.cle_gabarit() == gabarit)
-    {
-        return Err(format!("{libelle} est déjà destinataire de ce livre."));
+    if refuse_doublon(&l.livrables, &fabrication.cle()) {
+        return Err(format!(
+            "{} en {} est déjà un livrable de ce livre — la finition seule n'en fait \
+             pas un autre : le fichier produit serait le même.",
+            r.pod.nom, r.papier.nom
+        ));
     }
-    l.livrables.push(Livrable::pour(f));
+    l.livrables.push(Livrable::pour(fabrication));
     vue_modifiee(o)
 }
 
-/// Retire un destinataire — sauf le dernier : c'est lui qui donne son format à
+/// Retire un livrable — sauf le dernier : c'est lui qui donne son format à
 /// l'aperçu, et une liste vide rendrait la Couverture inutilisable.
 #[tauri::command]
-pub fn destinataire_retirer(
-    provider_cle: String,
-    atelier: State<Atelier>,
-) -> Result<ProjetVue, String> {
+pub fn livrable_retirer(cle: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
     if l.livrables.len() < 2 {
         return Err(
-            "un livre garde au moins un destinataire : c'est lui qui donne le format \
+            "un livre garde au moins un livrable : c'est lui qui donne le format \
              sous lequel on regarde la couverture."
                 .into(),
         );
     }
     let avant = l.livrables.len();
-    l.livrables
-        .retain(|d| d.fabrication.cle_gabarit() != provider_cle);
+    l.livrables.retain(|d| d.cle() != cle);
     if l.livrables.len() == avant {
-        return Err(format!(
-            "{provider_cle} n'est pas destinataire de ce livre."
-        ));
+        return Err(format!("{cle} n'est pas un livrable de ce livre."));
     }
     // Retirer celui qu'on visait laisse le pointeur en l'air : il retombe sur le
     // premier, plutôt que de désigner un absent jusqu'au prochain geste.
@@ -559,50 +582,43 @@ pub fn destinataire_retirer(
     vue_modifiee(o)
 }
 
-/// Ce que l'écran envoie encore : la forme du destinataire d'avant les livrables.
-/// Meurt à la tâche 6. C'est lui que le test du snake_case lit.
-#[derive(serde::Deserialize)]
-pub struct DestinataireCompat {
-    pub provider: String,
-    pub papier: String,
-    #[serde(default)]
-    pub dos_mm: Option<f64>,
-    #[serde(default)]
-    pub fond_perdu_mm: Option<f64>,
-}
-
-/// Le papier d'un destinataire et, chez ceux qui ne publient rien, ses relevés.
+/// Le papier, la finition et les relevés d'un livrable. `cle` désigne le livrable tel
+/// qu'il était : changer son papier change son identité, et `courant` suit.
 #[tauri::command]
-pub fn destinataire_regler(
-    destinataire: DestinataireCompat,
+pub fn livrable_regler(
+    cle: String,
+    livrable: Livrable,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let libelle = plat(&destinataire.provider)?.libelle.clone();
+    // Le candidat est résolu **avant** d'être posé : un axe ou un papier inconnu doit
+    // laisser le livrable tel qu'il était, et non l'abandonner à moitié réglé.
+    let r = catalogue::resout(&livrable.fabrication)?;
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    let vise = l.courant.clone();
-    let place = l
+    let neuve = livrable.cle();
+    // La ligne visée se trouve **avant** qu'on regarde le doublon : une `cle` que le
+    // livre ne porte pas n'est pas un doublon, et répondre « déjà un livrable » se
+    // lirait comme un refus de ce qu'on croyait régler. Le rang sert dans la foulée,
+    // sans que rien ne bouge entre-temps : ce n'est pas un pointeur retenu.
+    let rang = l
         .livrables
-        .iter_mut()
-        .find(|d| d.fabrication.cle_gabarit() == destinataire.provider)
-        .ok_or_else(|| format!("{libelle} n'est pas destinataire de ce livre."))?;
-    // Le candidat est validé **avant** d'être posé : un papier inconnu doit laisser le
-    // livrable tel qu'il était, et non l'abandonner à moitié réglé.
-    let etait_courant = place.cle() == vise;
-    let f = catalogue::Fabrication {
-        papier: destinataire.papier,
-        ..place.fabrication.clone()
-    };
-    catalogue::resout(&f)?;
-    place.fabrication = f;
-    place.dos_mm = destinataire.dos_mm;
-    place.fond_perdu_mm = destinataire.fond_perdu_mm;
-    // La mesure **n'est plus effacée** : elle vit sous le gabarit, et ni le papier ni le
-    // relevé ne paginent — le dos affiché se recalcule à la vue depuis la formule du
-    // papier retenu. Comparer deux papiers ne coûte donc plus une composition (spec § 5).
-    if etait_courant {
-        l.courant = place.cle();
+        .iter()
+        .position(|x| x.cle() == cle)
+        .ok_or_else(|| format!("{cle} n'est pas un livrable de ce livre."))?;
+    if neuve != cle && refuse_doublon(&l.livrables, &neuve) {
+        return Err(format!("{neuve} est déjà un livrable de ce livre."));
+    }
+    let place = &mut l.livrables[rang];
+    // Refusé avant toute écriture : seuls le papier, la finition et les relevés se
+    // règlent sur une ligne, et le gabarit ne bouge pas — donc la mesure non plus, le
+    // dos affiché se recalculant à la vue.
+    if let Some(e) = reglage_refuse(place, &livrable, r.pod) {
+        return Err(e);
+    }
+    *place = livrable;
+    if l.courant == cle {
+        l.courant = neuve;
     }
     vue_modifiee(o)
 }
@@ -610,21 +626,15 @@ pub fn destinataire_regler(
 /// Déplace le pointeur : pour qui l'on compose, et sous quel format on regarde.
 ///
 /// Le geste modifie le projet, parce que le pointeur est enregistré avec lui : rouvrir
-/// un livre le rend tel qu'on l'avait laissé, visé sur le même destinataire.
+/// un livre le rend tel qu'on l'avait laissé, visé sur le même livrable.
 #[tauri::command]
-pub fn destinataire_viser(
-    provider_cle: String,
-    atelier: State<Atelier>,
-) -> Result<ProjetVue, String> {
+pub fn livrable_viser(cle: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
-    let cle = l
-        .livrables
-        .iter()
-        .find(|d| d.fabrication.cle_gabarit() == provider_cle)
-        .map(Livrable::cle)
-        .ok_or_else(|| format!("{provider_cle} n'est pas destinataire de ce livre."))?;
+    if !l.livrables.iter().any(|d| d.cle() == cle) {
+        return Err(format!("{cle} n'est pas un livrable de ce livre."));
+    }
     l.courant = cle;
     vue_modifiee(o)
 }
@@ -1275,7 +1285,8 @@ fn donnee_image(octets: &[u8]) -> String {
 /// empêché. Un prestataire en échec n'interrompt pas les autres — mais il est dit.
 #[derive(Serialize)]
 pub struct Resultat {
-    pub provider: String,
+    /// L'identité du livrable, à quatre axes : c'est elle qui nomme son répertoire.
+    pub cle: String,
     pub libelle: String,
     pub package: Option<package::Package>,
     /// La planche du package, en PNG, prête à poser dans une balise `img`.
@@ -1322,7 +1333,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
             // échoue sur un autre : afficher la clé à quatre segments en gros titre
             // serait un recul devant « BoD ».
             Err(e) => Err(Resultat {
-                provider: d.cle(),
+                cle: d.cle(),
                 libelle: catalogue::pod(&d.fabrication.pod)
                     .map(|p| p.nom.clone())
                     .unwrap_or_else(|| d.cle()),
@@ -1350,7 +1361,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
             Err(r) => r,
             Ok(cible) => match paquets.next().expect("un résultat par cible envoyée à lot") {
                 Ok(p) => Resultat {
-                    provider: cible.cle,
+                    cle: cible.cle,
                     libelle: cible.pr.libelle,
                     // La vignette manquante ne perd pas le package : les PDF sont
                     // écrits, et c'est eux que l'imprimeur reçoit.
@@ -1359,7 +1370,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
                     erreur: None,
                 },
                 Err(e) => Resultat {
-                    provider: cible.cle,
+                    cle: cible.cle,
                     libelle: cible.pr.libelle,
                     package: None,
                     vignette: None,
@@ -2040,19 +2051,27 @@ fn poser(
 /// Ce que l'écran lit de la livraison. Vue et non donnée : `compose` y est recalculée
 /// par livrable depuis la mesure de son gabarit et la formule de son papier — le
 /// déplacement de la mesure est invisible au front (décision du 26/08).
-/// Forme de compatibilité jusqu'à la tâche 6 : le nom `destinataires`, `provider` pour
-/// la clé — de gabarit désormais, non plus la clé plate historique.
 #[derive(Serialize)]
 pub struct LivraisonVue {
-    destinataires: Vec<DestinataireVue>,
+    livrables: Vec<LivrableVue>,
+    /// La clé du livrable visé — quatre axes.
     courant: String,
     deja_compose: bool,
 }
 
 #[derive(Serialize)]
-pub struct DestinataireVue {
-    provider: String,
+pub struct LivrableVue {
+    /// L'identité à quatre axes : l'identifiant des lignes, des DOM et des commandes.
+    /// Fabriquée par le Rust et servie telle quelle — jamais recomposée côté JS : deux
+    /// fabricants d'une même clé finissent par diverger.
+    cle: String,
+    /// La clé du gabarit : la jointure vers la liste des providers, et rien d'autre.
+    gabarit: String,
+    pod: String,
+    format: String,
+    reliure: String,
     papier: String,
+    finition: Option<String>,
     dos_mm: Option<f64>,
     fond_perdu_mm: Option<f64>,
     compose: Option<MesureVue>,
@@ -2069,13 +2088,17 @@ pub struct MesureVue {
     polices_introuvables: Vec<String>,
 }
 
-/// La livraison telle que le front la lit encore : un destinataire par livrable, sa
-/// clé de gabarit, et sa mesure reconstituée depuis celle de ce gabarit.
+/// La livraison telle que le front la lit : un livrable par livrable, son identité à
+/// quatre axes, et la mesure de **son gabarit** — que deux papiers partagent, chacun en
+/// tirant son propre dos.
 fn livraison_vue(l: &Livraison) -> LivraisonVue {
-    let vue = |liv: &Livrable| -> DestinataireVue {
-        let gabarit = liv.fabrication.cle_gabarit();
+    let vue = |liv: &Livrable| -> LivrableVue {
+        let f = &liv.fabrication;
+        let gabarit = f.cle_gabarit();
         let compose = l.mesure(&gabarit).map(|m| {
-            let dos = catalogue::resout(&liv.fabrication)
+            // Le papier du **livrable**, jamais celui d'office du POD : c'est toute la
+            // différence entre deux lignes qui se comparent et deux lignes qui mentent.
+            let dos = catalogue::resout(f)
                 .ok()
                 .and_then(|r| r.papier.dos.mm(m.pages));
             MesureVue {
@@ -2086,20 +2109,22 @@ fn livraison_vue(l: &Livraison) -> LivraisonVue {
                 polices_introuvables: m.polices_introuvables.clone(),
             }
         });
-        DestinataireVue {
-            provider: gabarit,
-            papier: liv.fabrication.papier.clone(),
+        LivrableVue {
+            cle: liv.cle(),
+            gabarit,
+            pod: f.pod.clone(),
+            format: f.format.clone(),
+            reliure: f.reliure.clone(),
+            papier: f.papier.clone(),
+            finition: liv.finition.clone(),
             dos_mm: liv.dos_mm,
             fond_perdu_mm: liv.fond_perdu_mm,
             compose,
         }
     };
     LivraisonVue {
-        destinataires: l.livrables.iter().map(&vue).collect(),
-        courant: l
-            .courant()
-            .map(|liv| liv.fabrication.cle_gabarit())
-            .unwrap_or_default(),
+        livrables: l.livrables.iter().map(&vue).collect(),
+        courant: l.courant.clone(),
         deja_compose: l.deja_compose,
     }
 }
@@ -2243,27 +2268,35 @@ mod tests {
         assert_eq!(reponse_garde(R::Custom("autre chose".into())), "annuler");
     }
 
+    fn fabrication(pod: &str, format: &str, reliure: &str, papier: &str) -> catalogue::Fabrication {
+        catalogue::Fabrication {
+            pod: pod.into(),
+            format: format.into(),
+            reliure: reliure.into(),
+            papier: papier.into(),
+        }
+    }
+
     /// Tauri ne renomme que les *arguments* d'une commande, jamais les champs d'une
-    /// struct : le destinataire que l'interface renvoie à `destinataire_regler` voyage
-    /// donc en snake_case, comme le `Livre` qu'elle renvoie déjà. Le lire en camelCase
-    /// ferait échouer chaque relevé de gabarit saisi, sans que rien ne dise pourquoi.
+    /// struct : le livrable que l'interface renvoie à `livrable_regler` voyage donc en
+    /// snake_case, comme le `Livre` qu'elle renvoie déjà. Le lire en camelCase ferait
+    /// échouer chaque relevé de gabarit saisi, sans que rien ne dise pourquoi.
     ///
-    /// Sur `DestinataireCompat`, la forme de compatibilité : l'écran parle encore par
-    /// une clé seule (celle du gabarit, désormais), pas par les quatre axes. Ce test
-    /// sera réécrit une seconde fois contre `Livrable` à la tâche 6.
+    /// Et la fabrication y est **aplatie** — `#[serde(flatten)]` : l'écran envoie les
+    /// quatre axes à plat, pas un objet imbriqué. C'est le contrat du front.
     #[test]
-    fn le_destinataire_de_l_interface_se_lit() {
+    fn le_livrable_de_l_interface_se_lit() {
         let json = r#"{
-            "provider": "coollibri-148x210",
-            "papier": "mesure",
+            "pod": "kdp", "format": "6x9", "reliure": "broche", "papier": "creme",
             "dos_mm": 18.4,
             "fond_perdu_mm": 4
         }"#;
-        let d: DestinataireCompat = serde_json::from_str(json).unwrap();
-        assert_eq!(d.provider, "coollibri-148x210");
-        assert_eq!(d.papier, "mesure");
-        assert_eq!(d.dos_mm, Some(18.4));
-        assert_eq!(d.fond_perdu_mm, Some(4.0));
+        let l: Livrable = serde_json::from_str(json).unwrap();
+        assert_eq!(l.cle(), "kdp-6x9-broche-creme");
+        assert_eq!(l.fabrication.cle_gabarit(), "kdp-6x9-broche");
+        assert_eq!(l.dos_mm, Some(18.4));
+        assert_eq!(l.fond_perdu_mm, Some(4.0));
+        assert!(l.finition.is_none(), "la ligne n'en portait aucune");
     }
 
     /// Un relevé qu'on n'a pas encore fait est absent, pas nul : le champ vide de
@@ -2271,10 +2304,163 @@ mod tests {
     /// composerait sur un dos de zéro millimètre.
     #[test]
     fn un_releve_absent_reste_absent() {
-        let d: DestinataireCompat =
-            serde_json::from_str(r#"{"provider": "lulu", "papier": "standard"}"#).unwrap();
-        assert_eq!(d.dos_mm, None);
-        assert_eq!(d.fond_perdu_mm, None);
+        let l: Livrable = serde_json::from_str(
+            r#"{"pod": "lulu", "format": "108x175", "reliure": "broche", "papier": "standard"}"#,
+        )
+        .unwrap();
+        assert_eq!(l.dos_mm, None);
+        assert_eq!(l.fond_perdu_mm, None);
+    }
+
+    /// Le refus du doublon porte sur les quatre axes de fabrication, et sur eux seuls :
+    /// deux livrables qui ne différeraient que par la finition écriraient les mêmes
+    /// octets dans deux répertoires (spec § 4).
+    #[test]
+    fn deux_livrables_identiques_sur_les_quatre_axes_sont_refuses() {
+        let un = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
+        let mut deux = un.clone();
+        deux.finition = Some("mat".into());
+        assert!(
+            refuse_doublon(std::slice::from_ref(&un), &deux.cle()),
+            "la finition a distingué deux livrables : le même fichier dans deux dossiers"
+        );
+
+        // Un axe de fabrication, lui, distingue : c'est ce qui permet de déclarer le
+        // même gabarit deux fois pour comparer deux papiers.
+        let blanc = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
+        assert!(!refuse_doublon(std::slice::from_ref(&un), &blanc.cle()));
+    }
+
+    /// Un POD qui publie une finition — aucun de ceux qui sont fournis n'en déclare, et
+    /// le cas « finition connue » n'aurait donc rien pour s'ancrer sur le catalogue réel.
+    fn pod_a_finition() -> catalogue::Pod {
+        toml::from_str(
+            r#"
+cle = "essai"
+nom = "Essai"
+
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
+"#,
+        )
+        .unwrap()
+    }
+
+    /// Le gabarit ne se règle pas sur une ligne : il range la mesure, et le changer sur
+    /// place laisserait le livrable sous une pagination qui n'est plus la sienne. Le
+    /// refus dit le geste qui, lui, marche.
+    #[test]
+    fn changer_le_gabarit_d_un_livrable_est_refuse_en_disant_quoi_faire() {
+        let place = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
+        let ailleurs = Livrable::pour(fabrication("kdp", "5x8", "broche", "creme"));
+        let refus = reglage_refuse(&place, &ailleurs, &pod_a_finition())
+            .expect("un gabarit changé doit être refusé");
+        assert!(refus.contains("retirer"), "{refus}");
+
+        // Le papier, lui, se règle : c'est le geste même de la ligne.
+        let autre_papier = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
+        assert_eq!(
+            reglage_refuse(&place, &autre_papier, &pod_a_finition()),
+            None
+        );
+    }
+
+    /// La finition nomme une option de commande, pas un fichier : celle que le POD ne
+    /// publie pas ne se commande nulle part, et la laisser passer la ferait paraître au
+    /// récapitulatif comme si elle avait été retenue.
+    #[test]
+    fn une_finition_etrangere_au_pod_est_refusee_en_la_nommant() {
+        let pod = pod_a_finition();
+        let place = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
+
+        let mut connue = place.clone();
+        connue.finition = Some("mat".into());
+        assert_eq!(
+            reglage_refuse(&place, &connue, &pod),
+            None,
+            "une finition que le POD publie doit passer"
+        );
+
+        let mut inventee = place.clone();
+        inventee.finition = Some("velours".into());
+        let refus = reglage_refuse(&place, &inventee, &pod).expect("finition inconnue");
+        assert!(
+            refus.contains("velours") && refus.contains("Essai"),
+            "{refus}"
+        );
+
+        // Aucune finition n'est le cas courant : rien à vérifier, rien à refuser.
+        assert_eq!(reglage_refuse(&place, &place, &pod), None);
+    }
+
+    /// La vue que le front lit : deux papiers du même gabarit **partagent** la mesure —
+    /// c'est ce qui rend la comparaison de deux papiers gratuite — et n'en tirent pas le
+    /// même dos, chacun ayant sa formule.
+    #[test]
+    fn deux_papiers_d_un_gabarit_partagent_la_mesure_sans_partager_le_dos() {
+        let creme = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
+        let blanc = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
+        let empreinte = catalogue::resout(&creme.fabrication).unwrap().empreinte();
+        let mut l = Livraison {
+            courant: blanc.cle(),
+            livrables: vec![creme, blanc],
+            deja_compose: false,
+            mesures: BTreeMap::new(),
+        };
+        l.retenir_mesure(
+            "kdp-6x9-broche",
+            Mesure {
+                pages: 262,
+                gouttiere: 25.0,
+                blanche: true,
+                empreinte: Some(empreinte),
+                polices_introuvables: vec![],
+            },
+        );
+
+        let v = livraison_vue(&l);
+
+        assert_eq!(
+            v.courant, "kdp-6x9-broche-blanc",
+            "le pointeur est à quatre axes"
+        );
+        assert_eq!(
+            v.livrables
+                .iter()
+                .map(|d| d.cle.as_str())
+                .collect::<Vec<_>>(),
+            ["kdp-6x9-broche-creme", "kdp-6x9-broche-blanc"]
+        );
+        let d = &v.livrables[0];
+        assert_eq!(d.gabarit, "kdp-6x9-broche");
+        assert_eq!(
+            (
+                d.pod.as_str(),
+                d.format.as_str(),
+                d.reliure.as_str(),
+                d.papier.as_str()
+            ),
+            ("kdp", "6x9", "broche", "creme")
+        );
+
+        let mesure = |i: usize| {
+            v.livrables[i]
+                .compose
+                .as_ref()
+                .expect("la mesure du gabarit vaut pour ses deux papiers")
+        };
+        assert_eq!(mesure(0).pages, 262);
+        assert_eq!(mesure(1).pages, 262);
+        let (creme, blanc) = (mesure(0).dos, mesure(1).dos);
+        assert!(
+            creme.is_some() && blanc.is_some(),
+            "KDP publie ses formules"
+        );
+        assert_ne!(
+            creme, blanc,
+            "les deux papiers rendent le même dos : le dos ne suit pas le papier du livrable"
+        );
     }
 
     /// Choisir l'image d'une face remplace celle qui s'y composait, quel que soit le

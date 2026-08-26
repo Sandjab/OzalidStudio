@@ -675,7 +675,7 @@ function demanderApercu() {
 }
 
 /**
- * Dos à passer à l'aperçu : celui que le destinataire visé porte, et rien d'autre.
+ * Dos à passer à l'aperçu : celui que le livrable visé porte, et rien d'autre.
  *
  * Il n'y a plus rien à comparer ici, et c'est tout l'objet du dispositif : une mesure
  * enregistrée vaut toujours. Les quatre causes qui la déplaçaient — le gabarit, le
@@ -684,7 +684,7 @@ function demanderApercu() {
  * elles ; le livre, cinquième cause, lui échappait entièrement.
  */
 function dosCourant() {
-  return destinataireCourant()?.compose?.dos ?? null;
+  return livrableCourant()?.compose?.dos ?? null;
 }
 
 /**
@@ -828,10 +828,10 @@ const REGLAGES = {
   },
 };
 
-/** Le format du destinataire visé, en millimètres — l'échelle de tout ce qui suit. */
+/** Le format du livrable visé, en millimètres — l'échelle de tout ce qui suit. */
 function formatCourant() {
-  const d = destinataireCourant();
-  const p = providers.find((x) => x.cle === d?.provider);
+  const d = livrableCourant();
+  const p = providers.find((x) => x.cle === d?.gabarit);
   return p ? { largeur: p.largeur, hauteur: p.hauteur } : null;
 }
 

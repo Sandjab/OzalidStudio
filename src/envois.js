@@ -356,16 +356,18 @@ function marquerVignette(n) {
 }
 
 /**
- * La couleur du papier que le destinataire visé imprimera.
+ * La couleur du papier que le livrable visé imprimera.
  *
- * Le premier papier du prestataire à défaut du sien : c'est la règle du Rust, dont
- * `papier_defaut` rend le premier de la liste. Blanc quand rien ne se retrouve — mieux
- * vaut un canevas honnêtement blanc qu'un crème inventé.
+ * Le papier est celui du livrable visé, et rien d'autre : le Rust l'a validé contre le
+ * catalogue avant de le poser, il se retrouve donc toujours dans la table. Le repli sur
+ * le premier de la liste ne sert que le cas où la table et le projet auraient divergé —
+ * un gabarit chargé sans son papier —, et le blanc final le cas où l'on n'aurait même
+ * pas le prestataire. Mieux vaut un canevas honnêtement blanc qu'un crème inventé.
  */
 function teintePapier() {
   const l = projet?.livraison;
-  const d = l?.destinataires.find((x) => x.provider === l.courant);
-  const pr = providers.find((p) => p.cle === d?.provider);
+  const d = l?.livrables.find((x) => x.cle === l.courant);
+  const pr = providers.find((p) => p.cle === d?.gabarit);
   const pa = pr?.papiers.find((x) => x.cle === d?.papier) ?? pr?.papiers[0];
   return pa?.teinte ?? '#ffffff';
 }

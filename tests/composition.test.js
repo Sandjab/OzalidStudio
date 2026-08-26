@@ -7,28 +7,38 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
-  cle: 'kdp-6x9-broche', libelle: 'Amazon KDP — 6 × 9 po',
+  cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
+  libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
-  cle: 'coollibri-148x210-broche', libelle: 'CoolLibri — A5',
+  cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
+  libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
-/** La livraison d'un livre qui n'a qu'un destinataire, comme un projet neuf en a un. */
-const livraison = (p) => ({
-  destinataires: [{
-    provider: p.cle, papier: p.papiers[0].cle, dos_mm: null, fond_perdu_mm: null,
-  }],
-  courant: p.cle,
-});
+/**
+ * La livraison d'un livre qui n'a qu'un livrable, comme un projet neuf en a un. La clé
+ * à quatre axes est fabriquée **une fois** ici : le front la reçoit du Rust, il ne la
+ * recompose jamais.
+ */
+const livraison = (p) => {
+  const d = {
+    cle: `${p.pod}-${p.format}-${p.reliure}-${p.papiers[0].cle}`,
+    gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
+    papier: p.papiers[0].cle, finition: null, dos_mm: null, fond_perdu_mm: null,
+    compose: null,
+  };
+  return { livrables: [d], courant: d.cle };
+};
 
 const PROJET = {
   chemin: '/livres/LHC.ozalid',
@@ -79,7 +89,7 @@ function faux(providers, sur = {}) {
         ...servi,
         livraison: {
           ...servi.livraison,
-          destinataires: servi.livraison.destinataires.map(({ compose, ...d }) => d),
+          livrables: servi.livraison.livrables.map(({ compose, ...d }) => d),
         },
       };
     }
@@ -135,7 +145,7 @@ const composition = (p = LULU, m = {}, pdf = PDF) => {
       livraison: {
         ...l,
         deja_compose: true,
-        destinataires: [{ ...l.destinataires[0], compose: mesure }],
+        livrables: [{ ...l.livrables[0], compose: mesure }],
       },
     },
   };
@@ -158,13 +168,13 @@ async function ouvre(p, sur = {}) {
 
 test('le choix du papier n\'est offert que quand il y en a plusieurs', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche').disabled, true);
-  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche').children.length, 1);
+  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche-standard').disabled, true);
+  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche-standard').children.length, 1);
 
   const { els: chezKdp } = await ouvre(KDP);
-  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9-broche').disabled, false);
+  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9-broche-creme').disabled, false);
   assert.deepStrictEqual(
-    [...chezKdp.get('dest-papier-kdp-6x9-broche').children].map((o) => o.value),
+    [...chezKdp.get('dest-papier-kdp-6x9-broche-creme').children].map((o) => o.value),
     ['creme', 'blanc']
   );
 });
@@ -181,10 +191,13 @@ test('un prestataire à gabarit annonce que le fond perdu se relève', async () 
  * Le pied dit pour qui l'on regarde, et le dos n'y paraît qu'une fois composé : le pas
  * encore mesuré ne doit jamais s'y lire comme un chiffre.
  */
-test('le pied nomme le destinataire visé et l\'état de son dos', async () => {
+test('le pied nomme le livrable visé et l\'état de son dos', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('inDestinataire').value, 'lulu-108x175-broche');
-  assert.deepStrictEqual(els.get('inDestinataire').textes('option'), ['Lulu — poche 108 × 175']);
+  assert.strictEqual(els.get('inDestinataire').value, 'lulu-108x175-broche-standard');
+  // Le libellé dit le papier : deux livrables du même gabarit ne se distinguent que
+  // par lui, et le pied les donnerait à lire identiques sans lui.
+  assert.deepStrictEqual(els.get('inDestinataire').textes('option'),
+    ['Lulu — poche 108 × 175 — Papier standard']);
   assert.match(els.get('piedDos').textContent, /dos non composé/);
 });
 
@@ -383,7 +396,7 @@ test('un dos périmé fait taire la légende', async () => {
     ...c.projet,
     livraison: {
       ...c.projet.livraison,
-      destinataires: c.projet.livraison.destinataires.map(({ compose, ...d }) => d),
+      livrables: c.projet.livraison.livrables.map(({ compose, ...d }) => d),
     },
   };
   const { els } = await charge({

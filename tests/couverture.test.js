@@ -6,7 +6,8 @@ const { charge } = require('./dom_shim');
 const { groupes, lire, ecrire, placeImage } = require('../src/couverture.js');
 
 const LULU = {
-  cle: 'lulu-108x175-broche', libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 
@@ -103,8 +104,12 @@ function projet(couverture) {
     interieur: { police: 'Alegreya' },
     envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
     livraison: {
-      destinataires: [{ provider: 'lulu-108x175-broche', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-      courant: 'lulu-108x175-broche',
+      livrables: [{
+        cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+        pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+        finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+      }],
+      courant: 'lulu-108x175-broche-standard',
     },
   };
 }
@@ -179,10 +184,10 @@ async function ouvre(couverture, sur = {}, dialogues = []) {
         { cle: 'editeur', debut: 0.92, fin: 0.98 },
       ];
     }
-    // Viser un autre destinataire est un des gestes qui redemandent un aperçu : le
+    // Viser un autre livrable est un des gestes qui redemandent un aperçu : le
     // format de la page vient de lui. Le projet de ce fichier n'en déclare qu'un, et
     // c'est assez — ce qui est vérifié ici, c'est que l'aperçu reparte.
-    if (cmd === 'destinataire_viser') return projet(couverture);
+    if (cmd === 'livrable_viser') return projet(couverture);
     // Le démarrage et la garde envoient ces trois commandes sans qu'aucun test ne les
     // demande : sans réponse ici, elles lèveraient avant que rien ne soit vérifié.
     if (cmd === 'recents_liste') return [];

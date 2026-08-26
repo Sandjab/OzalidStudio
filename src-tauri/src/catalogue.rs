@@ -2233,6 +2233,24 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         }
     }
 
+    /// La vue plate d'un livrable porte **son** papier, pas celui d'office du POD.
+    ///
+    /// `Provider::papier_defaut()` (= `papiers[0]`) et `fabrication.papier` coïncident
+    /// sur une entrée d'`aplatit` et divergent ici : c'est `fabrication` qui traverse
+    /// jusqu'au package, et `papiers[0]` écrirait le crème dans le répertoire d'un
+    /// livrable en blanc. La clé, elle, reste celle du gabarit — le papier n'y est pas.
+    #[test]
+    fn la_vue_plate_d_un_livrable_porte_son_papier() {
+        // KDP en publie deux, et le blanc n'est pas le premier : sans cet écart le test
+        // passerait sur n'importe quelle implémentation.
+        assert_eq!(pod_de("kdp").papiers[0].cle, "creme");
+        let p = resout(&fabrication("kdp", "6x9", "broche", "blanc"))
+            .unwrap()
+            .provider();
+        assert_eq!(p.fabrication.papier, "blanc");
+        assert_eq!(p.cle, "kdp-6x9-broche");
+    }
+
     /// La table de migration est ancrée sur les fichiers : chaque ligne désigne un triplet
     /// qui se résout, et la clé héritée qu'elle remplace est bien celle que le format porte
     /// encore. La seconde moitié tombe à la tâche 7 avec `cle_heritee`.
