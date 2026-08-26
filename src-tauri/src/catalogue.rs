@@ -358,7 +358,8 @@ impl Pod {
         if !self.reliures.iter().any(|r| r.geometrie.is_some()) {
             return Err(format!(
                 "{} : aucune reliure composable. Un POD dont aucune reliure ne porte de \
-                 géométrie ne produirait aucun format, et disparaîtrait sans un mot.",
+                 géométrie ne produirait aucun format, et disparaîtrait sans un mot — \
+                 donner geometrie = \"dos-carre-colle\" à sa reliure brochée.",
                 self.cle
             ));
         }
@@ -689,6 +690,11 @@ fn repertoire(config: &Path) -> PathBuf {
 /// Une fusion champ par champ rendrait indéchiffrable ce que l'application lit vraiment :
 /// devant une liste de formats, on ne saurait plus lesquels viennent du fichier déposé.
 ///
+/// Deux fichiers du poste pour un même POD ne sont pas une faute — c'est le même
+/// imprimeur — mais le dernier par nom de fichier l'emporte, et il vaut mieux le savoir
+/// que le découvrir. Un fichier dont une clé héritée est déjà portée par un autre POD est
+/// en revanche refusé : c'est elle qui nomme le prestataire dans le projet enregistré.
+///
 /// Rend aussi ce qui a été refusé, pour que l'interface puisse le dire. Un journal que
 /// personne n'ouvre laisserait l'utilisateur devant un catalogue amputé.
 pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
@@ -697,10 +703,20 @@ pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
     let Some(dir) = config.map(repertoire) else {
         return (pods, refus);
     };
-    // Un répertoire absent n'est pas une avarie : c'est l'état d'un poste où l'on n'a
-    // rien déposé, c'est-à-dire presque tous.
-    let Ok(entrees) = std::fs::read_dir(&dir) else {
-        return (pods, refus);
+    let entrees = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        // Un répertoire absent n'est pas une avarie : c'est l'état d'un poste où l'on
+        // n'a rien déposé, c'est-à-dire presque tous.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (pods, refus),
+        // Tout autre échec en est une, et le taire la ferait passer pour le cas
+        // précédent : le poste croirait n'avoir rien déposé.
+        Err(e) => {
+            refus.push(Refus {
+                fichier: dir.display().to_string(),
+                raison: format!("répertoire de surcharges illisible : {e}"),
+            });
+            return (pods, refus);
+        }
     };
     let mut chemins: Vec<_> = entrees
         .flatten()
@@ -708,22 +724,55 @@ pub fn charge(config: Option<&Path>) -> (Vec<Pod>, Vec<Refus>) {
         .filter(|c| c.extension().and_then(|x| x.to_str()) == Some("toml"))
         .collect();
     // Ordre du nom de fichier : deux postes identiques chargent identiquement, alors que
-    // `read_dir` rend ses entrées dans un ordre que rien ne spécifie.
+    // `read_dir` rend ses entrées dans un ordre que rien ne spécifie. Deux fichiers pour
+    // un même POD sont donc départagés par leur nom, le dernier l'emportant.
     chemins.sort();
     for chemin in chemins {
         let nom = chemin.display().to_string();
         let lu = std::fs::read_to_string(&chemin)
             .map_err(|e| e.to_string())
             .and_then(|s| Pod::depuis_toml(&s));
-        match lu {
-            Ok(pod) => match pods.iter().position(|p| p.cle == pod.cle) {
-                Some(i) => pods[i] = pod,
-                None => pods.push(pod),
-            },
-            Err(raison) => refus.push(Refus {
+        let pod = match lu {
+            Ok(pod) => pod,
+            Err(raison) => {
+                refus.push(Refus {
+                    fichier: nom,
+                    raison,
+                });
+                continue;
+            }
+        };
+        let remplace = pods.iter().position(|p| p.cle == pod.cle);
+        // La clé héritée est celle que la vue plate porte, que le projet enregistre et
+        // que `provider` cherche : deux POD qui la partagent, et le `find` en prend une
+        // sans que rien ne dise laquelle — l'écran annoncerait un format pendant que le
+        // dos et la pagination viendraient de l'autre. `sans_doublon` ne peut pas le
+        // voir, c'est un fait entre POD. Le POD remplacé est écarté de la comparaison
+        // avant elle, sans quoi un fichier reprenant les clés du fourni qu'il remplace se
+        // refuserait lui-même.
+        let collision = pods
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| Some(*i) != remplace)
+            .flat_map(|(_, p)| p.formats.iter().map(move |f| (&f.cle_heritee, &p.cle)))
+            .find(|(h, _)| pod.formats.iter().any(|f| &f.cle_heritee == *h))
+            .map(|(h, c)| (h.clone(), c.clone()));
+        if let Some((heritee, tenant)) = collision {
+            refus.push(Refus {
                 fichier: nom,
-                raison,
-            }),
+                raison: format!(
+                    "{} : clé héritée « {heritee} » déjà portée par le POD « {tenant} ». \
+                     Elle nomme le prestataire dans le projet enregistré : deux POD qui \
+                     la partagent, et le livre composé n'est pas celui qu'annonce \
+                     l'écran. En choisir une autre.",
+                    pod.cle
+                ),
+            });
+            continue;
+        }
+        match remplace {
+            Some(i) => pods[i] = pod,
+            None => pods.push(pod),
         }
     }
     (pods, refus)
@@ -1435,6 +1484,9 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         let (pods, refus) = charge(Some(d.path()));
         assert_eq!(refus.len(), 1, "{pods:?}");
         assert!(refus[0].raison.contains("reliure"), "{:?}", refus[0]);
+        // Un message qui dit ce qui se passerait sans dire quoi faire laisse
+        // l'utilisateur devant son fichier, sans savoir quelle ligne écrire.
+        assert!(refus[0].raison.contains("geometrie"), "{:?}", refus[0]);
     }
 
     /// Un répertoire de surcharges absent n'est pas une avarie : c'est l'état d'un poste où
@@ -1443,6 +1495,108 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
     fn un_repertoire_absent_charge_les_seuls_fournis() {
         let d = TempDir::new().unwrap();
         let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty());
+        assert_eq!(pods.len(), 6);
+    }
+
+    /// Deux POD qui se disputent une clé héritée : le pire cas que ce chantier rend
+    /// atteignable. La clé héritée est celle que la vue plate porte, que le `.ozalid`
+    /// enregistre et que `provider` cherche — deux entrées de même clé, et le `find` en
+    /// prend une sans que rien ne dise laquelle. L'écran annoncerait 10 × 15 pendant que
+    /// le dos, la pagination et les papiers seraient ceux de BoD. Découvert au tirage.
+    #[test]
+    fn une_cle_heritee_deja_prise_par_un_autre_pod_est_refusee() {
+        let d = TempDir::new().unwrap();
+        pose(
+            &d,
+            "essai.toml",
+            &IMPRIMEUR_ESSAI.replace(r#"cle_heritee = "essai""#, r#"cle_heritee = "bod""#),
+        );
+        let (pods, refus) = charge(Some(d.path()));
+        assert_eq!(refus.len(), 1, "{pods:?}");
+        assert!(refus[0].fichier.contains("essai.toml"), "{:?}", refus[0]);
+        assert!(refus[0].raison.contains("bod"), "{:?}", refus[0]);
+        assert!(
+            !pods.iter().any(|p| p.cle == "essai"),
+            "le fichier fautif a été retenu quand même"
+        );
+        // Deux entrées de même clé dans la vue plate, c'est exactement ce qu'on empêche.
+        let plats = aplatit(&pods);
+        assert_eq!(plats.iter().filter(|p| p.cle == "bod").count(), 1);
+    }
+
+    /// Un fichier qui remplace un fourni reprend ses clés héritées : il ne doit pas se
+    /// refuser sur les siennes. C'est l'ordre du contrôle qui le décide — ôter d'abord le
+    /// remplacé, comparer ensuite.
+    #[test]
+    fn un_remplacement_ne_se_refuse_pas_sur_ses_propres_cles_heritees() {
+        let d = TempDir::new().unwrap();
+        pose(
+            &d,
+            "bod.toml",
+            &IMPRIMEUR_ESSAI
+                .replace(r#"cle = "essai""#, r#"cle = "bod""#)
+                .replace(r#"cle_heritee = "essai""#, r#"cle_heritee = "bod""#),
+        );
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty(), "{refus:?}");
+        assert_eq!(pods.len(), 6);
+        let bod = pods.iter().find(|p| p.cle == "bod").unwrap();
+        assert_eq!(bod.formats[0].nom, "10 × 15 cm");
+    }
+
+    /// Un répertoire `pods` qui existe mais ne se lit pas — un fichier ordinaire à sa
+    /// place, des droits refusés — n'est pas un poste vierge. Le silence y ferait passer
+    /// une avarie pour une absence de surcharges.
+    #[test]
+    fn un_repertoire_de_surcharges_illisible_est_dit_plutot_qu_ignore() {
+        let d = TempDir::new().unwrap();
+        std::fs::write(d.path().join("pods"), b"ceci n'est pas un repertoire").unwrap();
+        let (pods, refus) = charge(Some(d.path()));
+        assert_eq!(refus.len(), 1, "{refus:?}");
+        assert!(refus[0].fichier.contains("pods"), "{:?}", refus[0]);
+        assert_eq!(pods.len(), 6, "les fournis tiennent malgré tout");
+    }
+
+    /// Deux fichiers du poste pour un même POD : le dernier par nom de fichier gagne. Ce
+    /// n'est pas dangereux — c'est le même imprimeur — mais ce doit être déterminé :
+    /// `read_dir` rend ses entrées dans un ordre que rien ne spécifie.
+    #[test]
+    fn deux_fichiers_de_meme_cle_pod_se_departagent_par_le_nom_du_fichier() {
+        let d = TempDir::new().unwrap();
+        pose(
+            &d,
+            "a-essai.toml",
+            &IMPRIMEUR_ESSAI.replace(r#"nom = "Imprimeur d'essai""#, r#"nom = "Premier""#),
+        );
+        pose(
+            &d,
+            "z-essai.toml",
+            &IMPRIMEUR_ESSAI.replace(r#"nom = "Imprimeur d'essai""#, r#"nom = "Dernier""#),
+        );
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty(), "{refus:?}");
+        assert_eq!(pods.len(), 7, "un seul POD pour deux fichiers");
+        let essai = pods.iter().find(|p| p.cle == "essai").unwrap();
+        assert_eq!(essai.nom, "Dernier");
+    }
+
+    /// Un fichier qui n'est pas un `.toml` n'est pas du catalogue : ni chargé, ni refusé.
+    /// Le silence est délibéré — un poste range ce qu'il veut à côté de ses fichiers.
+    #[test]
+    fn un_fichier_qui_n_est_pas_un_toml_est_ignore_sans_bruit() {
+        let d = TempDir::new().unwrap();
+        pose(&d, "notes.txt", "ceci n'est pas un POD");
+        let (pods, refus) = charge(Some(d.path()));
+        assert!(refus.is_empty(), "{refus:?}");
+        assert_eq!(pods.len(), 6);
+    }
+
+    /// Répertoire de configuration inatteignable : les fournis restent servis, comme les
+    /// maquettes fournies le sont quand le poste n'a pas de configuration.
+    #[test]
+    fn sans_repertoire_de_configuration_les_fournis_restent() {
+        let (pods, refus) = charge(None);
         assert!(refus.is_empty());
         assert_eq!(pods.len(), 6);
     }
