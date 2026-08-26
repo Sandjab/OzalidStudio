@@ -96,8 +96,8 @@ inutile — voir la mémoire `tests-qui-ne-protegent-rien`.
 
 | Fichier | Rôle dans ce lot |
 |---|---|
-| `src-tauri/src/catalogue.rs` | `Papier.pages`, sa validation, `Papier::bornes` |
-| `src-tauri/src/package.rs` | `verifie_pagination` extraite et testée, appel de `bornes` |
+| `src-tauri/src/catalogue.rs` | `Papier.pages`, sa validation, `Papier::bornes_dans` |
+| `src-tauri/src/package.rs` | `verifie_pagination` extraite et testée, appel de `bornes_dans` |
 | `src-tauri/pods/bod.toml` | dix formats, quatre papiers, trois finitions, raison réécrite |
 | `src-tauri/src/commands.rs` | `ProviderVue.papiers` retiré ; test de fixture `dos_publie` |
 | `src-tauri/src/projet.rs` | `normalise` rend ce qu'il élague |
@@ -129,7 +129,7 @@ appeler sans Typst. On l'extrait, comme `verifie_pages` l'est déjà dans le mê
     /// commande — et le dos, lui, serait juste, ce qui rend l'erreur invisible à l'écran.
     #[test]
     fn le_plafond_du_papier_resserre_celui_de_la_reliure() {
-        let pr = provider_de_test(24, 900);
+        let pr = provider_pagine(24, 900);
         let brillant = papier_plafonne("photo-brillant-130", Some((24, 868)));
         let creme = papier_plafonne("creme-90", None);
 
@@ -168,7 +168,7 @@ Et les deux fabriques, dans le même module de tests :
 
     /// Le `Provider` d'essai, sous d'autres bornes de pagination : celui de base en pose
     /// de très larges (1 à 900), et c'est le resserrement qui s'observe ici.
-    fn provider_de_test(min: u32, max: u32) -> Provider {
+    fn provider_pagine(min: u32, max: u32) -> Provider {
         Provider {
             pages_min: min,
             pages_max: max,
@@ -232,7 +232,7 @@ Dans `catalogue.rs`, après la structure `Papier` :
 impl Papier {
     /// Les bornes de pagination d'un livrable fait de ce papier, à l'intérieur de celles
     /// que la reliure impose. Sans plafond propre, le papier ne resserre rien.
-    pub fn bornes(&self, min: u32, max: u32) -> (u32, u32) {
+    pub fn bornes_dans(&self, min: u32, max: u32) -> (u32, u32) {
         match self.pages {
             Some(p) => (min.max(p.min), max.min(p.max)),
             None => (min, max),
@@ -256,7 +256,7 @@ Remplacer `package.rs:166-171` par un appel, et poser la fonction juste avant `a
 /// BoD accepte en broche » enverrait chercher l'erreur du mauvais côté pour un livre de
 /// 880 pages en photo brillant.
 fn verifie_pagination(cle: &str, pages: u32, pr: &Provider, papier: &Papier) -> Result<(), String> {
-    let (min, max) = papier.bornes(pr.pages_min, pr.pages_max);
+    let (min, max) = papier.bornes_dans(pr.pages_min, pr.pages_max);
     if pages >= min && pages <= max {
         return Ok(());
     }
@@ -599,7 +599,7 @@ source = "calculateur, 0,0101 cm/feuille — 24 p → 1,212 mm, 868 p → 43,834
         let pages = broche.pages.expect("une reliure composable porte sa pagination");
 
         assert_eq!(pages.max, 900);
-        assert_eq!(brillant.bornes(pages.min, pages.max), (24, 868));
+        assert_eq!(brillant.bornes_dans(pages.min, pages.max), (24, 868));
 
         let creme = bod
             .papiers
@@ -607,7 +607,7 @@ source = "calculateur, 0,0101 cm/feuille — 24 p → 1,212 mm, 868 p → 43,834
             .find(|p| p.cle == "creme-90")
             .expect("BoD offre le crème");
         assert_eq!(
-            creme.bornes(pages.min, pages.max),
+            creme.bornes_dans(pages.min, pages.max),
             (24, 900),
             "un papier sans plafond ne resserre rien"
         );
