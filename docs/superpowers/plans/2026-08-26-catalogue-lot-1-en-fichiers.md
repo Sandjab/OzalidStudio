@@ -1251,6 +1251,16 @@ pub fn initialiser(config: Option<&Path>) -> Result<Vec<Refus>, String> {
 }
 ```
 
+**`initialiser` n'aura aucun test, et il ne faut surtout pas lui en écrire un ici.** Les
+cinq tests ci-dessus passent tous par `charge`, jamais par `initialiser` : c'est ce qui les
+rend possibles. `PLATS` est un `OnceLock` de processus, et les quatre cent cinquante tests
+de `--lib` partagent un seul processus où des dizaines appellent `provider(…)` — il y est
+donc déjà initialisé quand un test d'`initialiser` s'exécuterait, et celui-ci échouerait de
+façon non déterministe selon l'ordre d'exécution. Le `PLATS.set`, le refus du second appel
+et la ligne de `.setup()` ne sont couverts que par le démarrage réel de l'application. S'il
+faut un jour les tester, ce sera dans un binaire d'intégration à part (`src-tauri/tests/`),
+qui a son propre processus.
+
 Dans `lib.rs`, en toute première ligne du `.setup(|app| { … })`, avant `menu::poser` :
 
 ```rust
