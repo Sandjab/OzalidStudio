@@ -9,11 +9,11 @@
 
 use std::path::Path;
 
+use ozalid_lib::catalogue;
 use ozalid_lib::envoi::Place;
 use ozalid_lib::interieur::{self, Quoi, Reglage, Trace};
 use ozalid_lib::manuscrit;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -25,7 +25,7 @@ fn main() -> Result<(), String> {
             std::process::exit(2);
         }
     };
-    let pr = providers::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let livre = &projet.meta.livre;
     let int = &projet.meta.interieur;

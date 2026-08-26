@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::interieur::{self, Reglage};
 use ozalid_lib::manuscrit;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -22,9 +22,9 @@ fn main() -> Result<(), String> {
             eprintln!("usage : composer <projet.ozalid> <prestataire> <répertoire de sortie>");
             eprintln!(
                 "prestataires : {}",
-                providers::PROVIDERS_HERITEE
+                catalogue::providers()
                     .iter()
-                    .map(|p| p.cle)
+                    .map(|p| p.cle.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             );
@@ -32,7 +32,7 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let pr = providers::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let livre = &projet.meta.livre;
     let int = &projet.meta.interieur;

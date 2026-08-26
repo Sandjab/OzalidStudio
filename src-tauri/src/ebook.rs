@@ -11,8 +11,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::catalogue::Provider;
 use crate::projet::Projet;
-use crate::providers::Provider;
 use crate::typst::Typst;
 use crate::{couverture, envoi, epub, interieur, manuscrit, package, police};
 
@@ -239,8 +239,8 @@ fn libres(livre: &crate::projet::Livre) -> (String, String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalogue::provider;
     use crate::projet::{Livre, Projet};
-    use crate::providers::provider;
 
     /// Un projet qui passe tous les refus : une maquette, la police de labeur par
     /// défaut, un manuscrit d'un chapitre. Les tests ci-dessous le cassent chacun d'un

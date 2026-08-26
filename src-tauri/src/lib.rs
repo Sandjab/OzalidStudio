@@ -20,7 +20,6 @@ pub mod png;
 pub mod police;
 pub mod preferences;
 pub mod projet;
-pub mod providers;
 pub mod typst;
 
 pub fn run() {

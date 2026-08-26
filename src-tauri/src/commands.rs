@@ -10,6 +10,7 @@ use serde::Serialize;
 use tauri::Manager;
 use tauri::State;
 
+use crate::catalogue::{self, Provider};
 use crate::couverture::{self, Couverture, Ressource};
 use crate::ebook;
 use crate::epreuve;
@@ -21,7 +22,6 @@ use crate::package;
 use crate::planche;
 use crate::preferences;
 use crate::projet::{Destinataire, Livraison, Livre, Mesure, Projet};
-use crate::providers::{self, Provider};
 use crate::typst::Typst;
 
 /// Le projet ouvert. Un seul à la fois : c'est un éditeur de document, pas une
@@ -72,8 +72,8 @@ pub struct PapierVue {
 impl From<&Provider> for ProviderVue {
     fn from(p: &Provider) -> Self {
         Self {
-            cle: p.cle.into(),
-            libelle: p.libelle.into(),
+            cle: p.cle.clone(),
+            libelle: p.libelle.clone(),
             largeur: p.format.0,
             hauteur: p.format.1,
             fond_perdu: p.fond_perdu,
@@ -83,9 +83,9 @@ impl From<&Provider> for ProviderVue {
                 .papiers
                 .iter()
                 .map(|pa| PapierVue {
-                    cle: pa.cle.into(),
-                    libelle: pa.libelle.into(),
-                    teinte: pa.teinte.into(),
+                    cle: pa.cle.clone(),
+                    libelle: pa.nom.clone(),
+                    teinte: pa.teinte.clone(),
                 })
                 .collect(),
         }
@@ -153,7 +153,7 @@ pub struct Composition {
 
 #[tauri::command]
 pub fn providers_liste() -> Vec<ProviderVue> {
-    providers::PROVIDERS_HERITEE
+    catalogue::providers()
         .iter()
         .map(ProviderVue::from)
         .collect()
@@ -467,14 +467,14 @@ pub fn interieur_modifier(
 /// apercevoir, mesurer un dos. Il n'y a plus de second endroit où le choisir.
 fn vise(
     o: &Ouvert,
-) -> Result<(&'static Provider, &'static providers::Papier, &Destinataire), String> {
+) -> Result<(&'static Provider, &'static catalogue::Papier, &Destinataire), String> {
     let d = o
         .projet
         .meta
         .livraison
         .courant()
         .ok_or("aucun destinataire : en déclarer un à l'étape Livraison.")?;
-    let pr = providers::provider(&d.provider)
+    let pr = catalogue::provider(&d.provider)
         .ok_or_else(|| format!("prestataire inconnu : {}", d.provider))?;
     Ok((pr, papier(pr, Some(&d.papier))?, d))
 }
@@ -485,7 +485,7 @@ pub fn destinataire_ajouter(
     provider_cle: String,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let pr = providers::provider(&provider_cle)
+    let pr = catalogue::provider(&provider_cle)
         .ok_or_else(|| format!("prestataire inconnu : {provider_cle}"))?;
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
@@ -535,7 +535,7 @@ pub fn destinataire_regler(
     destinataire: Destinataire,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let pr = providers::provider(&destinataire.provider)
+    let pr = catalogue::provider(&destinataire.provider)
         .ok_or_else(|| format!("prestataire inconnu : {}", destinataire.provider))?;
     papier(pr, Some(&destinataire.papier))?;
     let mut garde = atelier.ouvert.lock().unwrap();
@@ -592,7 +592,7 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
     int.verifie()?;
     let chapitres = manuscrit::decoupe(&o.projet.texte, livre.chapitres)?;
 
-    let dossier = sorties_dossier(o, pr.cle)?;
+    let dossier = sorties_dossier(o, &pr.cle)?;
     std::fs::create_dir_all(&dossier).map_err(|e| {
         format!(
             "répertoire de sortie inutilisable ({}) : {e}",
@@ -621,7 +621,7 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
         &src,
         &interieur::source(livre, int, pr, &reglage, &chapitres, None),
     )?;
-    let pdf = interieur_pdf(&dossier, pr.cle);
+    let pdf = interieur_pdf(&dossier, &pr.cle);
     let polices_introuvables = typst.compile(&src, &pdf)?;
 
     // Le compte rendu dit « Chapitres » : une préface ou une page de partie n'en est
@@ -634,7 +634,7 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
     // repli de police y entre avec elle : il décrit le PDF qui vient d'être écrit, et
     // ce PDF ne redevient pas juste en refermant le livre.
     o.projet.meta.livraison.retenir_mesure(
-        pr.cle,
+        &pr.cle,
         Mesure {
             pages: r.pages,
             gouttiere: r.gouttiere,
@@ -1272,7 +1272,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
 
     let mut sorties = Vec::with_capacity(destinataires.len());
     for d in &destinataires {
-        let Some(pr) = providers::provider(&d.provider) else {
+        let Some(pr) = catalogue::provider(&d.provider) else {
             sorties.push(Resultat {
                 provider: d.provider.clone(),
                 libelle: d.provider.clone(),
@@ -1283,7 +1283,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
             continue;
         };
         let r = papier(pr, Some(&d.papier)).and_then(|pa| {
-            let dossier = sorties_dossier(o, pr.cle)?;
+            let dossier = sorties_dossier(o, &pr.cle)?;
             package::assembler(
                 &o.projet,
                 pr,
@@ -1298,8 +1298,8 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
         });
         sorties.push(match r {
             Ok(p) => Resultat {
-                provider: pr.cle.into(),
-                libelle: pr.libelle.into(),
+                provider: pr.cle.clone(),
+                libelle: pr.libelle.clone(),
                 // La vignette manquante ne perd pas le package : les PDF sont écrits,
                 // et c'est eux que l'imprimeur reçoit.
                 vignette: donnee_png(Path::new(&p.vignette)).ok(),
@@ -1307,8 +1307,8 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
                 erreur: None,
             },
             Err(e) => Resultat {
-                provider: pr.cle.into(),
-                libelle: pr.libelle.into(),
+                provider: pr.cle.clone(),
+                libelle: pr.libelle.clone(),
                 package: None,
                 vignette: None,
                 erreur: Some(e),
@@ -1890,7 +1890,7 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
         .collect())
 }
 
-fn papier(pr: &'static Provider, cle: Option<&str>) -> Result<&'static providers::Papier, String> {
+fn papier(pr: &'static Provider, cle: Option<&str>) -> Result<&'static catalogue::Papier, String> {
     match cle {
         Some(c) => pr
             .papier(c)

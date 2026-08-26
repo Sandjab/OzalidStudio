@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::package;
 use ozalid_lib::planche::Releve;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -26,7 +26,7 @@ fn main() -> Result<(), String> {
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
 
     for cle in &args[2..] {
-        let pr = providers::provider(cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+        let pr = catalogue::provider(cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
         // Un relevé de secours pour les prestataires à gabarit, afin que l'exemple
         // puisse les traverser aussi ; l'interface, elle, le demande à l'utilisateur.
         let releve = Releve {
@@ -38,7 +38,7 @@ fn main() -> Result<(), String> {
             pr,
             pr.papier_defaut(),
             releve,
-            &racine.join(pr.cle),
+            &racine.join(&pr.cle),
             &typst,
         )?;
         println!(

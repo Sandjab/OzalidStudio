@@ -13,12 +13,12 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::catalogue::{Papier, Provider};
 use crate::couverture::Ressource;
 use crate::interieur::{self, Reglage};
 use crate::manuscrit;
 use crate::planche::{self, Gabarit, Releve};
 use crate::projet::Projet;
-use crate::providers::{Papier, Provider};
 use crate::typst::Typst;
 
 /// Ce qu'un package contient une fois écrit sur le disque.
@@ -135,9 +135,9 @@ pub fn assembler(
     typst.apercu(&src_pl, &png_pl, 1, 72)?;
 
     Ok(Package {
-        provider: pr.cle.into(),
-        libelle: pr.libelle.into(),
-        papier: papier.libelle.into(),
+        provider: pr.cle.clone(),
+        libelle: pr.libelle.clone(),
+        papier: papier.nom.clone(),
         pages: r.pages,
         gouttiere: r.gouttiere,
         blanche: r.blanche,
@@ -400,7 +400,7 @@ fn ecrire(chemin: &Path, contenu: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::provider;
+    use crate::catalogue::provider;
 
     /// Les répertoires d'envoi portent le nom du dédicataire, assaini et rendu unique.
     /// Deux dédicataires qui se confondraient enverraient au second le mot du premier.

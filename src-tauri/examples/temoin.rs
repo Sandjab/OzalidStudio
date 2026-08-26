@@ -16,11 +16,11 @@
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::maquettes;
 use ozalid_lib::package;
 use ozalid_lib::planche::Releve;
 use ozalid_lib::projet::{Livre, Projet};
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 const PROVIDER: &str = "bod";
@@ -28,7 +28,7 @@ const PROVIDER: &str = "bod";
 /// Pagination attendue du témoin.
 ///
 /// Relevée sur macOS avec Typst 0.15.1 et EB Garamond, au corps et à l'interligne que
-/// `providers` fixe pour BoD. Elle dépend de chacun de ces éléments : la déplacer est un
+/// `catalogue` fixe pour BoD. Elle dépend de chacun de ces éléments : la déplacer est un
 /// acte délibéré, à revalider sur un livre réel — jamais un ajustement pour faire passer
 /// l'intégration continue.
 const PAGES_ATTENDUES: u32 = 98;
@@ -63,7 +63,7 @@ fn main() -> Result<(), String> {
             .couverture,
     );
 
-    let pr = providers::provider(PROVIDER).ok_or("prestataire inconnu : bod")?;
+    let pr = catalogue::provider(PROVIDER).ok_or("prestataire inconnu : bod")?;
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
     let p = package::assembler(

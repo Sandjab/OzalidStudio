@@ -285,10 +285,10 @@ pub struct Mesure {
 impl Destinataire {
     /// Un destinataire neuf chez ce prestataire : son papier par défaut, aucun relevé,
     /// aucune mesure — il n'a jamais été composé.
-    pub fn pour(pr: &crate::providers::Provider) -> Self {
+    pub fn pour(pr: &crate::catalogue::Provider) -> Self {
         Self {
-            provider: pr.cle.into(),
-            papier: pr.papier_defaut().cle.into(),
+            provider: pr.cle.clone(),
+            papier: pr.papier_defaut().cle.clone(),
             dos_mm: None,
             fond_perdu_mm: None,
             compose: None,
@@ -322,10 +322,10 @@ pub struct Livraison {
 /// réclame un format sans réclamer aucune composition.
 impl Default for Livraison {
     fn default() -> Self {
-        let pr = &crate::providers::PROVIDERS_HERITEE[0];
+        let pr = &crate::catalogue::providers()[0];
         Self {
             destinataires: vec![Destinataire::pour(pr)],
-            courant: pr.cle.into(),
+            courant: pr.cle.clone(),
             deja_compose: false,
         }
     }
@@ -379,14 +379,14 @@ impl Livraison {
     fn normalise(&mut self) {
         let mut vus = std::collections::BTreeSet::new();
         self.destinataires.retain_mut(|d| {
-            let Some(pr) = crate::providers::provider(&d.provider) else {
+            let Some(pr) = crate::catalogue::provider(&d.provider) else {
                 return false;
             };
             if pr.papier(&d.papier).is_none() {
                 // Le papier change l'épaisseur d'une page sans toucher à la pagination :
                 // la mesure retenue ne vaut plus, et la garder ici la rendrait fausse
                 // dès l'ouverture, sans qu'aucun geste ne l'ait provoquée.
-                d.papier = pr.papier_defaut().cle.into();
+                d.papier = pr.papier_defaut().cle.clone();
                 d.compose = None;
             }
             vus.insert(d.provider.clone())
@@ -1353,7 +1353,7 @@ auteur = "Ivan Pjig"
 "#;
         let mut m: Metadonnees = toml::from_str(toml).expect("projet sans [livraison] refusé");
         m.livraison.normalise();
-        let attendu = crate::providers::PROVIDERS_HERITEE[0].cle;
+        let attendu = crate::catalogue::providers()[0].cle.as_str();
         assert_eq!(m.livraison.courant, attendu);
         assert_eq!(m.livraison.destinataires.len(), 1);
         assert_eq!(m.livraison.destinataires[0].provider, attendu);
@@ -1366,7 +1366,7 @@ auteur = "Ivan Pjig"
         let mut p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
         p.meta.livraison = Livraison {
             destinataires: vec![
-                Destinataire::pour(crate::providers::provider("lulu").unwrap()),
+                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
                 Destinataire {
                     provider: "coollibri-148x210".into(),
                     papier: "mesure".into(),
@@ -1472,8 +1472,8 @@ auteur = "Ivan Pjig"
     fn une_mesure_ne_renseigne_que_son_destinataire() {
         let mut l = Livraison {
             destinataires: vec![
-                Destinataire::pour(crate::providers::provider("lulu").unwrap()),
-                Destinataire::pour(crate::providers::provider("kdp-6x9").unwrap()),
+                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
+                Destinataire::pour(crate::catalogue::provider("kdp-6x9").unwrap()),
             ],
             courant: "lulu".into(),
             deja_compose: false,
@@ -1555,7 +1555,7 @@ auteur = "Ivan Pjig"
                     fond_perdu_mm: None,
                     compose: Some(MESURE),
                 },
-                Destinataire::pour(crate::providers::provider("lulu").unwrap()),
+                Destinataire::pour(crate::catalogue::provider("lulu").unwrap()),
             ],
             courant: "prestataire-disparu".into(),
             deja_compose: true,

@@ -7,9 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::ebook;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -32,7 +32,7 @@ fn main() -> Result<(), String> {
         .courant()
         .ok_or("aucun destinataire dans ce projet.")?;
     let cle = cle.unwrap_or_else(|| d.provider.clone());
-    let pr = providers::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
 
     // Les polices embarquées, comme `composer` et `epreuve` : sans elles, la police du
     // projet est introuvable et le PDF part en repli, l'EPUB dans l'écriture du lecteur.

@@ -6,6 +6,16 @@
 //! fourni de même clé. Ce module porte les types, leur lecture, les six fichiers fournis
 //! et la vue plate ; le chargement depuis le poste manque encore.
 //!
+//! Un prestataire se décrit à un seul endroit, son fichier, où la couverture — fond
+//! perdu, formule de dos — et l'intérieur — format, marges, gouttières — se tiennent
+//! ensemble. Séparés, ils dérivaient : la même pagination désignait deux formats.
+//!
+//! **Aucune valeur n'est reconstituée.** Chacune vient d'un relevé — guide, gabarit ou
+//! calculateur du prestataire, parfois un livre réel — que le `source` du bloc où elle
+//! sert cite. Hors tranche connue, on refuse plutôt que d'extrapoler. Ce sont les
+//! `dos_…_ancre_sur_…` du module qui tiennent ces relevés : ils ne comparent le
+//! catalogue à rien d'interne, ils l'ancrent au dehors.
+//!
 //! Cinq axes : le POD, ses formats, ses reliures, ses finitions, ses papiers. Le cas
 //! courant — tout compatible avec tout — ne s'écrit pas ; seules les exceptions se
 //! déclarent. Un arbre POD > format > reliure > papier aurait obligé à recopier les
@@ -19,6 +29,7 @@
 //! serde ne sait pas dire — un nombre impossible, une clé en double, une liste vide.
 
 use std::collections::BTreeSet;
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 
@@ -539,8 +550,8 @@ pub struct Provider {
     pub marge_haut: f64,
     pub marge_bas: f64,
     pub exterieur: f64,
-    /// Triplets, comme la table historique les écrivait : la vue plate est comparée à
-    /// elle, champ par champ, à la tâche 3.
+    /// Triplets, comme la table historique les écrivait : ses appelants les lisent ainsi,
+    /// et la vue plate n'est là que pour ne rien leur faire changer.
     pub gouttieres: Vec<(u32, u32, f64)>,
     pub corps_pt: f64,
     pub interligne: f64,
@@ -606,7 +617,7 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                 cle: f.cle_heritee.clone(),
                 libelle: format!("{} — {}", pod.nom, f.nom),
                 // La vue plate garde les tuples de la table historique : c'est ce qui
-                // permet au test de non-régression de comparer sans traduction.
+                // dispense `interieur` de traduire quoi que ce soit pour les lire.
                 format: (f.mm.largeur, f.mm.hauteur),
                 marge_haut: f.marges.haut,
                 marge_bas: f.marges.bas,
@@ -628,6 +639,24 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
 /// La vue plate des fournis.
 pub fn plats() -> Result<Vec<Provider>, String> {
     Ok(aplatit(&fournis()?))
+}
+
+/// Le catalogue chargé, une fois pour la vie du processus.
+///
+/// `OnceLock` et non un état Tauri : deux signatures de `commands` rendent un
+/// `&'static Provider`, et une table immuable chargée une fois les satisfait sans que
+/// rien d'autre ne change. Hors application — les tests, le témoin —, il s'initialise
+/// tout seul sur les seuls fournis.
+static PLATS: OnceLock<Vec<Provider>> = OnceLock::new();
+
+/// Tous les couples POD × format connus.
+pub fn providers() -> &'static [Provider] {
+    PLATS.get_or_init(|| plats().expect("catalogue fourni illisible"))
+}
+
+/// Le provider de cette clé, ou `None`.
+pub fn provider(cle: &str) -> Option<&'static Provider> {
+    providers().iter().find(|p| p.cle == cle)
 }
 
 #[cfg(test)]
@@ -1187,64 +1216,6 @@ non_outille = "géométrie du casewrap non relevée"
         assert_eq!(formats, 14, "quatorze formats attendus");
     }
 
-    /// La vue plate rend, valeur par valeur, ce que la table écrite en dur rendait.
-    ///
-    /// Test **transitoire** : il meurt avec la table, à la tâche 4. C'est la seule preuve que
-    /// la conversion des quatorze entrées n'a pas perdu un dixième de millimètre — et une
-    /// valeur fausse ne se verrait autrement qu'au massicot.
-    #[test]
-    fn la_vue_plate_rend_ce_que_la_table_historique_rendait() {
-        let vue = plats().unwrap();
-        let heritee = crate::providers::PROVIDERS_HERITEE;
-        let cles = |v: &[&str]| v.join(", ");
-        assert_eq!(
-            vue.len(),
-            heritee.len(),
-            "vue plate : {}\ntable : {}",
-            cles(&vue.iter().map(|p| p.cle.as_str()).collect::<Vec<_>>()),
-            cles(&heritee.iter().map(|p| p.cle).collect::<Vec<_>>())
-        );
-        for (v, h) in vue.iter().zip(heritee) {
-            assert_eq!(v.cle, h.cle, "clé");
-            assert_eq!(v.libelle, h.libelle, "{} : libellé", h.cle);
-            assert_eq!(v.format, h.format, "{} : format", h.cle);
-            assert_eq!(v.marge_haut, h.marge_haut, "{} : marge haut", h.cle);
-            assert_eq!(v.marge_bas, h.marge_bas, "{} : marge bas", h.cle);
-            assert_eq!(v.exterieur, h.exterieur, "{} : extérieur", h.cle);
-            assert_eq!(
-                v.gouttieres.as_slice(),
-                h.gouttieres,
-                "{} : gouttières",
-                h.cle
-            );
-            assert_eq!(v.corps_pt, h.corps_pt, "{} : corps", h.cle);
-            assert_eq!(v.interligne, h.interligne, "{} : interligne", h.cle);
-            assert_eq!(v.folio_pt, h.folio_pt, "{} : folio", h.cle);
-            assert_eq!(v.fond_perdu, h.fond_perdu, "{} : fond perdu", h.cle);
-            assert_eq!(v.pages_min, h.pages_min, "{} : pages min", h.cle);
-            assert_eq!(v.pages_max, h.pages_max, "{} : pages max", h.cle);
-            assert_eq!(v.papiers.len(), h.papiers.len(), "{} : papiers", h.cle);
-            for (pv, ph) in v.papiers.iter().zip(h.papiers) {
-                assert_eq!(pv.cle, ph.cle, "{} : clé papier", h.cle);
-                // Le catalogue dit `nom` là où la table disait `libelle` : c'est le même
-                // fait, et le nom du champ suit celui du POD et du format.
-                assert_eq!(pv.nom, ph.libelle, "{} : nom du papier", h.cle);
-                assert_eq!(pv.teinte, ph.teinte, "{} : teinte", h.cle);
-                // Aux deux bornes autant qu'au milieu : à un seul point de pagination,
-                // deux coefficients modifiés de concert pour y coïncider passent, et le
-                // dos est faux de huit millimètres partout ailleurs.
-                for pages in [h.pages_min, 280, h.pages_max] {
-                    assert_eq!(
-                        pv.dos.mm(pages),
-                        ph.dos.mm(pages),
-                        "{} : dos à {pages} p",
-                        h.cle
-                    );
-                }
-            }
-        }
-    }
-
     /// Chaque POD outillé porte au moins un papier et une reliure composable : sans quoi il
     /// serait en table sans que rien ne puisse en sortir.
     #[test]
@@ -1256,6 +1227,191 @@ non_outille = "géométrie du casewrap non relevée"
                 "{} sans reliure composable",
                 p.cle
             );
+        }
+    }
+
+    /// Le catalogue se sert derrière une référence `'static`, comme la table le faisait :
+    /// c'est ce qui garde valides les deux signatures de `commands` qui l'exigent.
+    #[test]
+    fn un_provider_se_retrouve_par_sa_cle() {
+        let pr = provider("bod").expect("bod absent du catalogue");
+        assert_eq!(pr.format, (135.0, 215.0));
+        assert_eq!(pr.papier_defaut().cle, "creme-90");
+        assert!(provider("imprimeur-imaginaire").is_none());
+    }
+
+    // Les douze tests qui suivent viennent de la table écrite en dur, dont ils ont suivi
+    // la suppression : ils n'ont jamais comparé la vue plate à la table, ils ancrent ses
+    // valeurs sur des relevés extérieurs — guides, calculateurs, un livre réel tenu en
+    // main. La table partie, ils sont ce qui dit encore que les fichiers fournis portent
+    // les bons chiffres. Aucune valeur n'a été recalculée à la migration.
+
+    fn p(cle: &str) -> &'static Provider {
+        provider(cle).unwrap_or_else(|| panic!("prestataire inconnu : {cle}"))
+    }
+
+    /// Le dos est ce que l'app promet à l'imprimeur : chaque formule est ancrée sur
+    /// un relevé réel, pas sur sa propre arithmétique. Si l'un de ces chiffres bouge,
+    /// c'est le guide du prestataire qui a changé — pas un détail d'implémentation.
+    #[test]
+    fn dos_lulu_ancre_sur_le_livre_reel_de_244_pages() {
+        let dos = p("lulu").papier_defaut().dos.mm(244).unwrap();
+        assert!(
+            (dos - 15.48).abs() < 0.01,
+            "244 pages → {dos} mm, attendu 15,48"
+        );
+    }
+
+    #[test]
+    fn dos_bod_ancre_sur_le_calculateur_officiel() {
+        let d = p("bod").papier_defaut().dos;
+        assert!((d.mm(280).unwrap() - 19.5).abs() < 0.05);
+        assert!((d.mm(560).unwrap() - 38.4).abs() < 0.05);
+    }
+
+    #[test]
+    fn dos_kdp_depend_du_papier_et_seulement_du_papier() {
+        let kdp = p("kdp-6x9");
+        let creme = kdp.papier("creme").unwrap().dos.mm(280).unwrap();
+        let blanc = kdp.papier("blanc").unwrap().dos.mm(280).unwrap();
+        assert!((creme - 17.78).abs() < 0.01, "crème → {creme} mm");
+        assert!((blanc - 16.02).abs() < 0.01, "blanc → {blanc} mm");
+        // Le papier ne change que le dos : les trois formats KDP partagent la même
+        // composition d'intérieur, donc la même pagination.
+        for f in ["kdp-5x8", "kdp-55x85", "kdp-6x9"] {
+            assert_eq!(p(f).gouttieres, kdp.gouttieres);
+        }
+    }
+
+    /// Chez TheBookEdition, le dos ne dépend que de la pagination : leur générateur rend
+    /// le même gabarit sur les deux papiers et sur les quatre formats mesurés. Faire
+    /// dépendre le dos du papier ici produirait une planche que leur gabarit refuse.
+    #[test]
+    fn dos_tbe_ancre_sur_les_gabarits_releves() {
+        let poche = p("tbe-110x170");
+        for (pages, attendu) in [(40, 2.4), (280, 16.8), (750, 45.0)] {
+            let dos = poche.papier_defaut().dos.mm(pages).unwrap();
+            assert!((dos - attendu).abs() < 0.05, "{pages} p → {dos} mm");
+        }
+        for papier in &poche.papiers {
+            assert_eq!(papier.dos.mm(280), poche.papier_defaut().dos.mm(280));
+        }
+        for cle in ["tbe-120x180", "tbe-1485x210"] {
+            assert_eq!(
+                p(cle).papier_defaut().dos.mm(280),
+                poche.papier_defaut().dos.mm(280)
+            );
+        }
+    }
+
+    /// Bookvault, à l'inverse, module le dos par le papier : le crème premium fait un
+    /// livre visiblement plus épais que le bond blanc à pagination égale.
+    #[test]
+    fn dos_bookvault_ancre_sur_le_calculateur_papier_par_papier() {
+        let bv = p("bookvault-127x203");
+        for (cle, pages, attendu) in [
+            ("creme-70", 280, 15.7),
+            ("creme-70", 800, 44.8),
+            ("bond-80", 100, 5.5),
+            ("creme-premium-80", 400, 28.8),
+        ] {
+            let dos = bv.papier(cle).unwrap().dos.mm(pages).unwrap();
+            assert!((dos - attendu).abs() < 0.05, "{cle} à {pages} p → {dos} mm");
+        }
+    }
+
+    /// Le fond perdu est ce qui sépare une planche imprimable d'une planche rejetée.
+    /// Chaque valeur vient du gabarit du prestataire, aucune n'est un défaut commun.
+    #[test]
+    fn le_fond_perdu_est_celui_du_gabarit_de_chaque_prestataire() {
+        assert_eq!(p("tbe-110x170").fond_perdu, Some(5.0));
+        assert_eq!(p("bookvault-127x203").fond_perdu, Some(3.0));
+        assert_eq!(p("coollibri-110x170").fond_perdu, None);
+    }
+
+    /// La gouttière se lit dans la tranche, elle ne s'interpole pas : une page de plus
+    /// peut la faire basculer, et c'est précisément ce qui oblige à recomposer.
+    #[test]
+    fn la_gouttiere_bascule_a_la_frontiere_de_tranche() {
+        let kdp = p("kdp-6x9");
+        assert_eq!(kdp.gouttiere(700).unwrap(), 19.05);
+        assert_eq!(kdp.gouttiere(701).unwrap(), 22.23);
+    }
+
+    /// Hors tranche connue, on refuse. Inventer une gouttière produirait un intérieur
+    /// que le prestataire rejetterait sans que rien ne l'ait signalé.
+    #[test]
+    fn hors_tranche_le_gabarit_refuse_au_lieu_d_inventer() {
+        let err = p("lulu").gouttiere(100).unwrap_err();
+        assert!(err.contains("100 pages"), "message peu explicite : {err}");
+        assert!(err.contains("lulu"));
+    }
+
+    /// Les prestataires à gabarit ne publient pas de formule : l'app ne doit pas
+    /// pouvoir en fabriquer une, quelle que soit la pagination.
+    #[test]
+    fn un_prestataire_a_gabarit_ne_calcule_jamais_de_dos() {
+        let cl = p("coollibri-148x210");
+        assert_eq!(cl.papier_defaut().dos.mm(280), None);
+        assert_eq!(cl.papier_defaut().dos.mm(9999), None);
+        assert_eq!(cl.fond_perdu, None, "le fond perdu se relève aussi");
+    }
+
+    /// Ce que `verifie` contrôle sur la forme de n'importe quel fichier, celui-ci le
+    /// contrôle sur les valeurs des six fournis : l'un dit ce qu'un TOML a le droit
+    /// d'écrire, l'autre ce que les nôtres écrivent. Ils ne se remplacent pas.
+    #[test]
+    fn chaque_prestataire_a_un_papier_par_defaut_et_des_bornes_coherentes() {
+        for pr in providers() {
+            assert!(!pr.papiers.is_empty(), "{} sans papier", pr.cle);
+            assert!(pr.pages_min < pr.pages_max, "{} : bornes inversées", pr.cle);
+            assert!(!pr.gouttieres.is_empty(), "{} sans tranche", pr.cle);
+            for (lo, hi, g) in &pr.gouttieres {
+                assert!(lo <= hi, "{} : tranche inversée", pr.cle);
+                assert!(*g > 0.0, "{} : gouttière nulle", pr.cle);
+            }
+        }
+    }
+
+    /// La largeur utile doit rester positive : une gouttière plus large que le format
+    /// donnerait une colonne de texte négative, et Typst composerait n'importe quoi.
+    ///
+    /// `verifie` refuse la colonne nulle de n'importe quel fichier ; celui-ci exige des
+    /// six fournis les trente millimètres au-dessous desquels un livre ne se lit plus.
+    #[test]
+    fn la_colonne_de_texte_reste_positive_sur_toute_la_pagination() {
+        for pr in providers() {
+            for (lo, _, g) in &pr.gouttieres {
+                let utile = pr.format.0 - g - pr.exterieur;
+                assert!(
+                    utile > 30.0,
+                    "{} à {lo} pages : colonne de {utile} mm",
+                    pr.cle
+                );
+            }
+        }
+    }
+
+    /// Chaque papier dit sa couleur, en notation CSS : c'est le front qui la peint, et
+    /// une conversion en chemin serait une occasion de se tromper. La valeur est une
+    /// convention d'Ozalid, pas une mesure — aucun prestataire ne publie la teinte de
+    /// son crème.
+    ///
+    /// `verifie` se contente d'une teinte non vide, parce qu'un fichier a le droit
+    /// d'écrire n'importe quelle notation CSS ; les six fournis, eux, s'en tiennent tous
+    /// à `#rrggbb`, et c'est ce que celui-ci tient.
+    #[test]
+    fn chaque_papier_annonce_sa_teinte() {
+        for p in providers() {
+            for pa in &p.papiers {
+                assert!(
+                    pa.teinte.len() == 7 && pa.teinte.starts_with('#'),
+                    "{} / {} : teinte « {} » illisible en CSS",
+                    p.cle,
+                    pa.cle,
+                    pa.teinte
+                );
+            }
         }
     }
 }

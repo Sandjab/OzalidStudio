@@ -10,11 +10,11 @@
 //! fond perdu suffit à dire où couper. Ce qui aide l'œil vit dans l'épreuve, pas dans
 //! le fichier remis à l'imprimeur.
 
+use crate::catalogue::{Papier, Provider};
 use crate::couverture::{
     self, Boite, Couverture, ElementDos, FondQuatre, Panorama, PlaceDos, Ressource,
 };
 use crate::projet::Livre;
-use crate::providers::{Papier, Provider};
 use serde::Serialize;
 
 /// Ce qu'un prestataire ne publie pas et qu'il a fallu relever sur son gabarit.
@@ -607,8 +607,8 @@ pub fn source_dos(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalogue::provider;
     use crate::maquettes;
-    use crate::providers::provider;
 
     fn livre() -> Livre {
         Livre {

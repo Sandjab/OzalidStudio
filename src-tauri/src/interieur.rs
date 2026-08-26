@@ -10,9 +10,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::catalogue::Provider;
 use crate::manuscrit::{echappe, echappe_chaine, inline, Bloc, Piece, Sorte, SCENE};
 use crate::projet::Livre;
-use crate::providers::Provider;
 use crate::typst::MARQUEUR;
 
 /// Les polices que l'intérieur admet.
@@ -587,8 +587,8 @@ fn blocs_typst(blocs: &[Bloc]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalogue::provider;
     use crate::envoi::Place;
-    use crate::providers::provider;
     use crate::typst::Typst;
     use std::cell::RefCell;
     use std::path::Path;
