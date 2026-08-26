@@ -28,9 +28,9 @@ const PROVIDER: &str = "bod";
 /// Pagination attendue du témoin.
 ///
 /// Relevée sur macOS avec Typst 0.15.1 et EB Garamond, au corps et à l'interligne que
-/// `catalogue` fixe pour BoD. Elle dépend de chacun de ces éléments : la déplacer est un
-/// acte délibéré, à revalider sur un livre réel — jamais un ajustement pour faire passer
-/// l'intégration continue.
+/// `interieur` fixe pour tout gabarit. Elle dépend de chacun de ces éléments : la
+/// déplacer est un acte délibéré, à revalider sur un livre réel — jamais un ajustement
+/// pour faire passer l'intégration continue.
 const PAGES_ATTENDUES: u32 = 98;
 
 fn main() -> Result<(), String> {

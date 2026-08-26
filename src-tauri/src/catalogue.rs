@@ -566,24 +566,11 @@ pub struct Provider {
     /// Triplets, comme la table historique les écrivait : ses appelants les lisent ainsi,
     /// et la vue plate n'est là que pour ne rien leur faire changer.
     pub gouttieres: Vec<(u32, u32, f64)>,
-    pub corps_pt: f64,
-    pub interligne: f64,
-    pub folio_pt: f64,
     pub fond_perdu: Option<f64>,
     pub pages_min: u32,
     pub pages_max: u32,
     pub papiers: Vec<Papier>,
 }
-
-/// Corps, interligne et folio de l'intérieur.
-///
-/// Ils étaient dans les quatorze entrées de la table, **identiques dans toutes**. Ce ne
-/// sont pas des faits de prestataire mais des réglages typographiques : ils quittent le
-/// catalogue à la tâche 7, où ils deviennent les constantes de `interieur`. Ils sont
-/// reproduits ici le temps que la vue plate porte encore ces champs.
-const CORPS_PT: f64 = 9.5;
-const INTERLIGNE: f64 = 1.42;
-const FOLIO_PT: f64 = 8.0;
 
 impl Provider {
     /// Gouttière imposée par la tranche de pagination, en mm.
@@ -636,9 +623,6 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                 marge_bas: f.marges.bas,
                 exterieur: f.marges.exterieur,
                 gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
-                corps_pt: CORPS_PT,
-                interligne: INTERLIGNE,
-                folio_pt: FOLIO_PT,
                 fond_perdu: f.fond_perdu.or(pod.fond_perdu),
                 pages_min: pagination.min,
                 pages_max: pagination.max,
