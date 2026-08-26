@@ -518,15 +518,31 @@ function libelleProvider(cle) {
 }
 
 /**
- * Le libellé d'un livrable : son gabarit, et le papier qui le distingue.
+ * Le libellé d'un livrable : son gabarit, son papier, et sa reliure quand elle distingue.
  *
- * Le papier n'est pas un ornement ici : deux livrables du même gabarit ne se
- * distinguent que par lui, et le pied les donnerait à lire identiques sans lui.
+ * Le pied et les comptes rendus de package ne portent aucun contrôle : ce qui sépare deux
+ * livrables doit s'y lire dans le libellé, ou ne s'y lit pas. Le papier y est donc
+ * toujours — deux livrables d'un même gabarit ne diffèrent que par lui.
+ *
+ * La reliure, elle, n'y paraît **que chez un POD qui en offre plusieurs de composables**.
+ * Ailleurs elle ne distingue rien, et elle coûte cher à lire : « Broché — dos carré
+ * collé » porte déjà son propre tiret cadratin, et l'ajouter d'office donnerait « Lulu —
+ * poche 108 × 175 — Broché — dos carré collé — Papier standard », quatre tirets pour une
+ * information qu'aucun choix n'accompagne. Un libellé dit ce qui distingue, pas tout ce
+ * qu'on sait de la chose.
+ *
+ * Reliure et papier viennent de l'arbre, seul à porter l'offre du POD ; le nom du gabarit
+ * reste à la table plate, seule à composer « POD — format ».
  */
 function libelleLivrable(d) {
   const p = providers.find((x) => x.cle === d.gabarit);
-  const papier = p?.papiers.find((x) => x.cle === d.papier)?.libelle ?? d.papier;
-  return `${p?.libelle ?? d.gabarit} — ${papier}`;
+  const pod = pods.find((x) => x.cle === d.pod);
+  const papier = pod?.papiers.find((x) => x.cle === d.papier)?.libelle ?? d.papier;
+  const plusieurs = (pod?.reliures ?? []).filter((r) => r.non_outille === null).length > 1;
+  const reliure = plusieurs
+    ? ` — ${pod.reliures.find((x) => x.cle === d.reliure)?.nom ?? d.reliure}`
+    : '';
+  return `${p?.libelle ?? d.gabarit}${reliure} — ${papier}`;
 }
 
 /* ---------- projet ---------- */

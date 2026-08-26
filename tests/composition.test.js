@@ -233,8 +233,8 @@ test('un prestataire à gabarit annonce que le fond perdu se relève', async () 
 test('le pied nomme le livrable visé et l\'état de son dos', async () => {
   const { els } = await ouvre(LULU);
   assert.strictEqual(els.get('inDestinataire').value, 'lulu-108x175-broche-standard');
-  // Le libellé dit le papier : deux livrables du même gabarit ne se distinguent que
-  // par lui, et le pied les donnerait à lire identiques sans lui.
+  // Le libellé dit le papier, et la reliure seulement là où le POD en offre plusieurs.
+  // Lulu n'en a qu'une : la nommer n'y distinguerait rien et alourdirait la lecture.
   assert.deepStrictEqual(els.get('inDestinataire').textes('option'),
     ['Lulu — poche 108 × 175 — Papier standard']);
   assert.match(els.get('piedDos').textContent, /dos non composé/);

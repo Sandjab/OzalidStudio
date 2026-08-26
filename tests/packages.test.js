@@ -563,6 +563,28 @@ test('régler la reliure renvoie les quatre axes au Rust', async () => {
   assert.strictEqual(args.livrable.format, '148x210');
 });
 
+test('deux livrables du même papier se distinguent par leur reliure au pied', async () => {
+  // Le pointeur du pied et les comptes rendus de package ne portent aucun contrôle : ce
+  // qui distingue deux livrables doit s'y lire dans le libellé, ou ne s'y lit pas. Depuis
+  // que la reliure se règle, elle peut être ce qui les distingue à elle seule.
+  const broche = chez(TBE_BROCHE);
+  const spirale = {
+    ...chez(TBE_SPIRALE),
+    cle: 'tbe-148x210-spirale-munken-80',
+    gabarit: 'tbe-148x210-spirale',
+  };
+  const { els } = await ouvre(
+    [TBE_BROCHE, TBE_SPIRALE],
+    {},
+    { pods: [DEUX_RELIURES], destinataires: [broche, spirale] }
+  );
+
+  const [un, deux] = els.get('inDestinataire').textes('option');
+  assert.notStrictEqual(un, deux, 'deux livrables ne doivent jamais se lire identiques');
+  assert.match(un, /Broché/);
+  assert.match(deux, /spirale/i);
+});
+
 test('la finition ne paraît que chez un POD qui en déclare', async () => {
   const chezKdp = await ouvre([KDP], {}, { pods: PODS, destinataires: [chez(KDP)] });
   const finitions = chezKdp.els.get('dest-finition-kdp-6x9-broche-creme');

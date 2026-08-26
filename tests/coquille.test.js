@@ -727,8 +727,8 @@ test('le pied nomme le prestataire et dit le dos non composé', async () => {
   await els.get('btNouveau').declenche('click');
 
   assert.equal(els.get('visee').hidden, false);
-  // Le libellé dit le papier : deux livrables du même gabarit ne se distinguent que
-  // par lui, et le pied les donnerait à lire identiques sans lui.
+  // Le libellé dit le papier, et la reliure seulement là où le POD en offre plusieurs.
+  // Lulu n'en a qu'une : la nommer n'y distinguerait rien et alourdirait la lecture.
   assert.deepEqual(els.get('inDestinataire').textes('option'),
     ['Lulu — poche 108 × 175 — Papier standard']);
   assert.equal(pied(els), 'lulu-108x175-broche-standard · dos non composé');
