@@ -59,7 +59,7 @@ a perdu une valeur.
 |---|---|
 | `src-tauri/src/catalogue.rs` | **Créé.** Les types à cinq axes, leur lecture TOML, leur validation, le chargement (fournis + poste), et la vue plate `Provider` |
 | `src-tauri/pods/*.toml` | **Créés.** Six fichiers, un par POD, incorporés par `include_str!` |
-| `src-tauri/src/providers.rs` | **Supprimé** à la tâche 4, son contenu ayant migré |
+| `src-tauri/src/providers.rs` | **Supprimé** à la tâche 4 — ses valeurs **et ses tests d'ancrage** ayant migré |
 | `src-tauri/src/lib.rs` | **Modifié.** `pub mod catalogue;` remplace `pub mod providers;` ; `initialiser` appelé dans `.setup()` |
 | `src-tauri/src/commands.rs` | **Modifié.** `providers_liste`, la commande de refus, et les deux signatures `&'static Provider` |
 | `src-tauri/src/interieur.rs` | **Modifié** à la tâche 7. Corps, interligne et folio deviennent des constantes |
@@ -972,6 +972,34 @@ Puis remplacer, dans tout le crate, `crate::providers::` par `crate::catalogue::
 par `catalogue::providers()` dans `commands.rs:156`. Supprimer `src-tauri/src/providers.rs`
 et sa ligne dans `lib.rs`. Supprimer le test transitoire
 `la_vue_plate_rend_ce_que_la_table_historique_rendait`, qui n'a plus de table à comparer.
+
+**Mais migrer les douze autres tests de son `mod tests`, et non les supprimer avec lui.**
+Cette rédaction du plan les avait oubliés, et c'est la faute la plus lourde qu'il ait
+portée : ils ne comparent rien à la table, ils **ancrent des valeurs sur des relevés
+extérieurs** — le dos de Lulu à 244 pages sur un livre réel tenu en main, le calculateur
+BoD à 280 et 560 pages, les gabarits de TheBookEdition à 40, 280 et 750, le calculateur
+Bookvault papier par papier, la bascule de gouttière KDP entre 700 et 701 pages, le fond
+perdu de chaque gabarit, le refus hors tranche.
+
+Ils n'utilisent que `provider`, `papier_defaut`, `papier`, `gouttiere` et `fond_perdu` —
+tous présents à l'identique sur la vue plate. **Contrairement au test de comparaison, ils
+ont un après** : une fois la table morte, ce sont eux qui disent que les TOML portent les
+bonnes valeurs, le témoin ne composant qu'un livre, chez un seul prestataire, à un seul
+format.
+
+Trois d'entre eux recoupent en apparence la validation de la tâche 1. Les garder quand
+même : `verifie` contrôle la **forme** de n'importe quel fichier — teinte non vide, bornes
+dans l'ordre —, eux contrôlent les **valeurs des six fournis** — colonne de texte au-dessus
+de 30 mm, teinte de sept caractères. L'une ne remplace pas l'autre.
+
+Une seule retouche est nécessaire : `assert_eq!(p(f).gouttieres, GOUTTIERES_KDP)` perd sa
+constante avec le fichier. Comparer les trois formats KDP entre eux dit la même chose, et
+mieux — la garantie cesse de dépendre d'un détail d'écriture de la table.
+
+**Aucune valeur ancrée ni aucun commentaire de documentation ne se réécrit** : leur mérite
+est de n'avoir pas été recalculés. Un test qui tomberait après migration ne se corrige pas —
+il signalerait que les TOML et les relevés divergent, et c'est une décision, pas un
+ajustement.
 
 Les deux signatures de `commands.rs` — `couple` (`:467`) et `papier` (`:1890`) — gardent
 `&'static Provider` et `&'static Papier` sans changement : le `OnceLock` les honore.
