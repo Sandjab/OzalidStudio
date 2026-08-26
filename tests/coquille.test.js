@@ -14,7 +14,7 @@ const { charge } = require('./dom_shim');
 const GABARIT_MAISON = 'une écriture manuscrite : {envoi}, signé {paraphe}';
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff' }],
 };
@@ -653,7 +653,7 @@ test('le pied nomme le prestataire et dit le dos non composé', async () => {
 
   assert.equal(els.get('visee').hidden, false);
   assert.deepEqual(els.get('inDestinataire').textes('option'), ['Lulu — poche 108 × 175']);
-  assert.equal(pied(els), 'lulu · dos non composé');
+  assert.equal(pied(els), 'lulu-108x175-broche · dos non composé');
 });
 
 /**
@@ -667,7 +667,7 @@ test('une fois l\'intérieur composé, le pied porte le dos mesuré', async () =
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'lulu · dos 16,5 mm');
+  assert.equal(pied(els), 'lulu-108x175-broche · dos 16,5 mm');
 });
 
 /**
@@ -700,7 +700,7 @@ test('fermer le projet efface le pied', async () => {
 });
 
 const KDP = {
-  cle: 'kdp-6x9', libelle: 'Amazon KDP — 6 × 9 po',
+  cle: 'kdp-6x9-broche', libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0' },
     { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff' }],
@@ -708,7 +708,7 @@ const KDP = {
 
 /** Un prestataire à gabarit : le dos ne s'y calcule pas, il se relève. */
 const COOLLIBRI = {
-  cle: 'coollibri-148x210', libelle: 'CoolLibri — A5',
+  cle: 'coollibri-148x210-broche', libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff' }],
 };
@@ -735,24 +735,24 @@ test('viser un autre destinataire renomme le pied et lui retire le dos', async (
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  assert.equal(pied(els), 'lulu · dos 16,5 mm');
+  assert.equal(pied(els), 'lulu-108x175-broche · dos 16,5 mm');
 
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9 · dos périmé');
+  assert.equal(pied(els), 'kdp-6x9-broche · dos périmé');
 });
 
 test('changer de papier retire le dos du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  assert.equal(pied(els), 'kdp-6x9 · dos 16,5 mm');
+  assert.equal(pied(els), 'kdp-6x9-broche · dos 16,5 mm');
 
-  els.get('dest-papier-kdp-6x9').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9').declenche('change');
+  els.get('dest-papier-kdp-6x9-broche').value = 'blanc';
+  await els.get('dest-papier-kdp-6x9-broche').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9 · dos périmé');
+  assert.equal(pied(els), 'kdp-6x9-broche · dos périmé');
 });
 
 /**
@@ -769,7 +769,7 @@ test('chez un prestataire à gabarit, le pied ne réclame pas une composition', 
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'coollibri-148x210 · dos relevé sur le gabarit');
+  assert.equal(pied(els), 'coollibri-148x210-broche · dos relevé sur le gabarit');
 });
 
 /**
@@ -906,7 +906,7 @@ test('un dos périmé par un changement de gabarit allume le témoin du pied', a
   await faireComposer(els);
   assert.equal(piedAlerte(els), false, 'un dos frais ne périme rien');
 
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
 
   assert.equal(piedAlerte(els), true);
@@ -921,13 +921,13 @@ test('recomposer éteint le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
   assert.equal(piedAlerte(els), true, 'le dos devait être périmé avant');
 
   await faireComposer(els);
 
-  assert.equal(pied(els), 'kdp-6x9 · dos 16,5 mm');
+  assert.equal(pied(els), 'kdp-6x9-broche · dos 16,5 mm');
   assert.equal(piedAlerte(els), false);
 });
 
@@ -969,10 +969,10 @@ test('un dos jamais composé n\'allume pas le témoin du pied', async () => {
   const { els } = await charge({ invoke: atelierCompose([LULU, KDP]) });
   await els.get('btNouveau').declenche('click');
 
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
 
-  assert.equal(pied(els), 'kdp-6x9 · dos non composé');
+  assert.equal(pied(els), 'kdp-6x9-broche · dos non composé');
   assert.equal(piedAlerte(els), false);
 });
 
@@ -986,8 +986,8 @@ test('changer de papier allume aussi le témoin du pied', async () => {
   await faireComposer(els);
   assert.equal(piedAlerte(els), false);
 
-  els.get('dest-papier-kdp-6x9').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9').declenche('change');
+  els.get('dest-papier-kdp-6x9-broche').value = 'blanc';
+  await els.get('dest-papier-kdp-6x9-broche').declenche('change');
 
   assert.equal(piedAlerte(els), true);
 });
@@ -1444,7 +1444,7 @@ test('changer de destinataire au pied refait le rail sans quitter l\'étape', as
   const avant = a.appels.filter(([c]) => c === 'envoi_vignettes').length;
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
   await new Promise((r) => setImmediate(r));
 
@@ -1474,7 +1474,7 @@ test('revenir à un destinataire déjà composé refait aussi le rail', async ()
   const { els } = await charge({ invoke: a.invoke });
   await els.get('btNouveau').declenche('click');
   await faireComposer(els);
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
   await faireComposer(els);
   await allerAuxEnvois(els);
@@ -1482,7 +1482,7 @@ test('revenir à un destinataire déjà composé refait aussi le rail', async ()
   assert.ok(avant > 0, 'le rail ne s\'est jamais rendu');
 
   // Lulu est composé : rien ne repagine, et c'est tout le sujet.
-  els.get('inDestinataire').value = 'lulu';
+  els.get('inDestinataire').value = 'lulu-108x175-broche';
   await els.get('inDestinataire').declenche('change');
   await new Promise((r) => setImmediate(r));
 

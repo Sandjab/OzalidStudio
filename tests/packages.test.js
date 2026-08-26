@@ -8,17 +8,17 @@ const assert = require('node:assert');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
-  cle: 'kdp-6x9', libelle: 'Amazon KDP — 6 × 9 po',
+  cle: 'kdp-6x9-broche', libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
-  cle: 'coollibri-148x210', libelle: 'CoolLibri — A5',
+  cle: 'coollibri-148x210-broche', libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
@@ -221,10 +221,10 @@ test('seul un prestataire à gabarit demande un relevé', async () => {
   const { els } = await ouvre([LULU, COOLLIBRI], {}, {
     destinataires: [chez(LULU), chez(COOLLIBRI)],
   });
-  assert.ok(!els.get('dest-dos-lulu'), 'dos saisissable chez Lulu');
-  assert.ok(!els.get('dest-fp-lulu'), 'fond perdu saisissable chez Lulu');
-  assert.ok(els.get('dest-dos-coollibri-148x210'), 'dos non demandé chez CoolLibri');
-  assert.ok(els.get('dest-fp-coollibri-148x210'), 'fond perdu non demandé chez CoolLibri');
+  assert.ok(!els.get('dest-dos-lulu-108x175-broche'), 'dos saisissable chez Lulu');
+  assert.ok(!els.get('dest-fp-lulu-108x175-broche'), 'fond perdu saisissable chez Lulu');
+  assert.ok(els.get('dest-dos-coollibri-148x210-broche'), 'dos non demandé chez CoolLibri');
+  assert.ok(els.get('dest-fp-coollibri-148x210-broche'), 'fond perdu non demandé chez CoolLibri');
 });
 
 /**
@@ -237,7 +237,7 @@ test('la liste ne porte que les destinataires déclarés', async () => {
     'Lulu — poche 108 × 175',
     '108,0 × 175,0 mm — fond perdu 3,175 mm',
   ]);
-  assert.ok(!els.get('dest-papier-kdp-6x9'), 'un prestataire non destinataire est offert');
+  assert.ok(!els.get('dest-papier-kdp-6x9-broche'), 'un prestataire non destinataire est offert');
 });
 
 test('on ne peut ajouter que ce qui n\'est pas déjà destinataire', async () => {
@@ -249,9 +249,9 @@ test('on ne peut ajouter que ce qui n\'est pas déjà destinataire', async () =>
     ['CoolLibri — A5']
   );
 
-  els.get('inAjoutDestinataire').value = 'coollibri-148x210';
+  els.get('inAjoutDestinataire').value = 'coollibri-148x210-broche';
   await els.get('btAjouterDestinataire').declenche('click');
-  assert.ok(els.get('dest-papier-coollibri-148x210'), 'ajout sans effet à l\'écran');
+  assert.ok(els.get('dest-papier-coollibri-148x210-broche'), 'ajout sans effet à l\'écran');
   assert.strictEqual(
     els.get('btAjouterDestinataire').disabled,
     true,
@@ -268,12 +268,12 @@ test('le dernier destinataire ne peut pas être retiré', async () => {
   const { els, appels } = await ouvre([LULU, KDP], {}, {
     destinataires: [chez(LULU), chez(KDP)],
   });
-  assert.strictEqual(els.get('dest-retirer-lulu').disabled, false);
+  assert.strictEqual(els.get('dest-retirer-lulu-108x175-broche').disabled, false);
 
-  await els.get('dest-retirer-kdp-6x9').declenche('click');
-  assert.strictEqual(dernier(appels, 'destinataire_retirer')[1].providerCle, 'kdp-6x9');
+  await els.get('dest-retirer-kdp-6x9-broche').declenche('click');
+  assert.strictEqual(dernier(appels, 'destinataire_retirer')[1].providerCle, 'kdp-6x9-broche');
   assert.strictEqual(
-    els.get('dest-retirer-lulu').disabled,
+    els.get('dest-retirer-lulu-108x175-broche').disabled,
     true,
     'le dernier destinataire reste retirable'
   );
@@ -284,13 +284,13 @@ test('le dernier destinataire ne peut pas être retiré', async () => {
 test('un relevé saisi part au projet, avec le papier de la ligne', async () => {
   const { els, appels } = await ouvre([COOLLIBRI], {}, { destinataires: [chez(COOLLIBRI)] });
 
-  els.get('dest-dos-coollibri-148x210').value = '18.4';
-  els.get('dest-fp-coollibri-148x210').value = '4';
-  await els.get('dest-dos-coollibri-148x210').declenche('change');
+  els.get('dest-dos-coollibri-148x210-broche').value = '18.4';
+  els.get('dest-fp-coollibri-148x210-broche').value = '4';
+  await els.get('dest-dos-coollibri-148x210-broche').declenche('change');
 
   // Étalé : l'objet vient du contexte `vm`, et `deepStrictEqual` compare les prototypes.
   assert.deepStrictEqual({ ...dernier(appels, 'destinataire_regler')[1].destinataire }, {
-    provider: 'coollibri-148x210',
+    provider: 'coollibri-148x210-broche',
     papier: 'mesure',
     dos_mm: 18.4,
     fond_perdu_mm: 4,
@@ -306,10 +306,10 @@ test('un relevé effacé redevient une absence, jamais un zéro', async () => {
   const { els, appels } = await ouvre([COOLLIBRI], {}, {
     destinataires: [{ ...chez(COOLLIBRI), dos_mm: 18.4, fond_perdu_mm: 4 }],
   });
-  assert.strictEqual(els.get('dest-dos-coollibri-148x210').value, '18.4');
+  assert.strictEqual(els.get('dest-dos-coollibri-148x210-broche').value, '18.4');
 
-  els.get('dest-dos-coollibri-148x210').value = '';
-  await els.get('dest-dos-coollibri-148x210').declenche('change');
+  els.get('dest-dos-coollibri-148x210-broche').value = '';
+  await els.get('dest-dos-coollibri-148x210-broche').declenche('change');
 
   assert.strictEqual(dernier(appels, 'destinataire_regler')[1].destinataire.dos_mm, null);
 });
@@ -565,7 +565,7 @@ test('viser un autre destinataire périme le dos de l\'aperçu', async () => {
   await attendreApercu();
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 
-  els.get('inDestinataire').value = 'kdp-6x9';
+  els.get('inDestinataire').value = 'kdp-6x9-broche';
   await els.get('inDestinataire').declenche('change');
   await attendreApercu();
   assert.strictEqual(
@@ -587,8 +587,8 @@ test('un dos calculé sur un autre papier ne vaut plus rien', async () => {
   await attendreApercu();
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 
-  els.get('dest-papier-kdp-6x9').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9').declenche('change');
+  els.get('dest-papier-kdp-6x9-broche').value = 'blanc';
+  await els.get('dest-papier-kdp-6x9-broche').declenche('change');
   await attendreApercu();
   assert.strictEqual(
     dernier(appels, 'couverture_apercu')[1].dosMm,
@@ -645,11 +645,11 @@ test('revenir à un destinataire déjà composé retrouve son dos sans recompose
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 
   // KDP n'a jamais été composé : la veille s'en charge, et lui donne son dos à lui.
-  await vise('kdp-6x9');
+  await vise('kdp-6x9-broche');
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 21.4);
 
   const avant = combien(appels, 'composer');
-  await vise('lulu');
+  await vise('lulu-108x175-broche');
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513,
     'le dos de Lulu n\'a pas été retrouvé');
   assert.strictEqual(combien(appels, 'composer'), avant,

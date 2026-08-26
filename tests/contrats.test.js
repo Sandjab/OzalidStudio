@@ -12,7 +12,7 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
@@ -35,8 +35,8 @@ const PROJET = {
   images: [],
   interieur: { police: 'Alegreya' },
   livraison: {
-    destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-    courant: 'lulu',
+    destinataires: [{ provider: 'lulu-108x175-broche', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
+    courant: 'lulu-108x175-broche',
   },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
 };

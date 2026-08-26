@@ -4,7 +4,7 @@
 //! dos calculé, planche assemblée. Sans interface, donc utilisable pour vérifier que
 //! Typst compile ce que le moteur émet — ce qu'aucun test unitaire ne peut faire.
 //!
-//! Usage : cargo run --example packager -- <projet.ozalid> <sortie> <prestataire…>
+//! Usage : cargo run --example packager -- <projet.ozalid> <sortie> <pod> <format> <reliure>…
 
 use std::path::{Path, PathBuf};
 
@@ -16,17 +16,35 @@ use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() < 3 {
-        eprintln!("usage : packager <projet.ozalid> <répertoire de sortie> <prestataire…>");
+    if args.len() < 5 || !(args.len() - 2).is_multiple_of(3) {
+        eprintln!(
+            "usage : packager <projet.ozalid> <répertoire de sortie> \
+             <pod> <format> <reliure>…"
+        );
         std::process::exit(2);
     }
     let projet = Projet::ouvrir(Path::new(&args[0]))?;
     let racine = PathBuf::from(&args[1]);
+    let gabarits = &args[2..];
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
 
-    for cle in &args[2..] {
-        let pr = catalogue::provider(cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    for triplet in gabarits.chunks_exact(3) {
+        let [pod, format, reliure] = triplet else {
+            unreachable!("chunks_exact(3)")
+        };
+        let papier = catalogue::pod(pod)
+            .and_then(|p| p.papiers.first())
+            .ok_or_else(|| format!("POD inconnu : {pod}"))?
+            .cle
+            .clone();
+        let resolu = catalogue::resout(&catalogue::Fabrication {
+            pod: pod.clone(),
+            format: format.clone(),
+            reliure: reliure.clone(),
+            papier,
+        })?;
+        let pr = resolu.provider();
         // Un relevé de secours pour les prestataires à gabarit, afin que l'exemple
         // puisse les traverser aussi ; l'interface, elle, le demande à l'utilisateur.
         let releve = Releve {
@@ -34,11 +52,11 @@ fn main() -> Result<(), String> {
             fond_perdu: Some(3.0),
         };
         let sortie = racine.join(&pr.cle);
-        let int = package::composer_interieur(&projet, pr, &pr.cle, &sortie, &typst)?;
+        let int = package::composer_interieur(&projet, &pr, &pr.cle, &sortie, &typst)?;
         let p = package::assembler(
             &projet,
-            pr,
-            pr.papier_defaut(),
+            &pr,
+            resolu.papier,
             releve,
             &pr.cle,
             &int,

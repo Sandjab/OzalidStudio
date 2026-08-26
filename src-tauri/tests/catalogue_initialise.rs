@@ -55,13 +55,23 @@ fn le_demarrage_charge_les_fichiers_du_poste_et_refuse_un_second_chargement() {
     assert!(refus.is_empty(), "{refus:?}");
 
     // Toute la promesse du chantier tient dans cette ligne : un imprimeur que le binaire
-    // ne connaît pas est servi comme les autres.
-    let essai = catalogue::provider("essai").expect("le POD du poste n'est pas dans la vue plate");
+    // ne connaît pas est servi comme les autres, sous la clé de son gabarit.
+    let essai = catalogue::providers()
+        .iter()
+        .find(|p| p.cle == "essai-100x150-broche")
+        .expect("le POD du poste n'est pas dans la vue plate");
     assert_eq!(essai.format, (100.0, 150.0));
     assert_eq!(
         catalogue::providers().len(),
         15,
         "quatorze fournis, plus le déposé"
+    );
+
+    // `providers()` n'est qu'une projection : la preuve que le poste a vraiment atteint
+    // `PODS`, et non seulement sa vue plate, se fait sur `pods()` lui-même.
+    assert!(
+        catalogue::pods().iter().any(|p| p.cle == "essai"),
+        "le POD du poste n'est pas dans PODS"
     );
 
     // `resout` interroge `PODS`, que `providers()` — donc l'assertion ci-dessus — n'initialise

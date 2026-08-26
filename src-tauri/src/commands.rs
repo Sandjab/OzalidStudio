@@ -128,9 +128,9 @@ pub struct ProjetVue {
     /// le pied vient de déclarer fausse.
     pub interieur_pdf: Option<String>,
     /// Les destinataires du livre et celui qu'on vise. Le front les joint à la table des
-    /// gabarits par leur clé plate : les libellés, les formats et les papiers viennent
-    /// de là. Une **vue** depuis la v5 : `compose` y est recalculée par livrable, la
-    /// donnée range la mesure sous le gabarit.
+    /// gabarits par leur clé — désormais celle du gabarit : les libellés, les formats et
+    /// les papiers viennent de là. Une **vue** depuis la v5 : `compose` y est recalculée
+    /// par livrable, la donnée range la mesure sous le gabarit.
     pub livraison: LivraisonVue,
     /// La main du livre et ses envois. Toujours sérialisée, même vide : le front y
     /// lit la liste sans avoir à se demander si la section existe.
@@ -489,43 +489,14 @@ fn vise(o: &Ouvert) -> Result<(Provider, catalogue::Papier, &Livrable), String> 
     Ok((r.provider(), r.papier.clone(), l))
 }
 
-/// La fabrication qu'une clé plate désigne. Couche de compatibilité : elle meurt à la
-/// tâche 6 avec le renommage des commandes.
-///
-/// Lue dans le **catalogue chargé** et non dans `HERITEES` : c'est `Format::cle_heritee`
-/// qui dit la clé plate, et c'est lui que la liste offerte à l'écran affiche. La table
-/// gelée ne connaît que les quatorze formats fournis d'origine — un POD déposé dans
-/// `<config>/pods/` serait proposé puis refusé au clic, et un `lulu.toml` remplacé aux
-/// clés différentes viderait la liste des destinataires.
-fn fabrication_de(plate: &str) -> Result<catalogue::Fabrication, String> {
-    for pod in catalogue::pods() {
-        let Some(f) = pod.formats.iter().find(|f| f.cle_heritee == plate) else {
-            continue;
-        };
-        let Some(r) = pod.reliure_composable() else {
-            continue;
-        };
-        return Ok(catalogue::Fabrication {
-            pod: pod.cle.clone(),
-            format: f.cle.clone(),
-            reliure: r.cle.clone(),
-            papier: pod.papiers[0].cle.clone(),
-        });
-    }
-    Err(format!("prestataire inconnu : {plate}"))
-}
-
-/// La clé plate d'un livrable, tant que le front la parle encore. Même source que
-/// `fabrication_de`, en sens inverse : le catalogue chargé, jamais la table gelée.
-fn cle_plate(f: &catalogue::Fabrication) -> Option<&'static str> {
-    let pod = catalogue::pod(&f.pod)?;
-    Some(
-        pod.formats
-            .iter()
-            .find(|x| x.cle == f.format)?
-            .cle_heritee
-            .as_str(),
-    )
+/// Le prestataire de cette clé de **gabarit**, celle que `providers_liste` sert
+/// désormais. Couche de compatibilité : elle meurt à la tâche 6 avec le renommage des
+/// commandes.
+fn plat(cle: &str) -> Result<&'static Provider, String> {
+    catalogue::providers()
+        .iter()
+        .find(|p| p.cle == cle)
+        .ok_or_else(|| format!("prestataire inconnu : {cle}"))
 }
 
 /// Ajoute un prestataire à la liste des destinataires, avec son papier par défaut.
@@ -534,7 +505,7 @@ pub fn destinataire_ajouter(
     provider_cle: String,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let f = fabrication_de(&provider_cle)?;
+    let f = plat(&provider_cle)?.fabrication.clone();
     let r = catalogue::resout(&f)?;
     let libelle = r.provider().libelle;
     let gabarit = f.cle_gabarit();
@@ -542,7 +513,7 @@ pub fn destinataire_ajouter(
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
     // Le refus porte sur le **gabarit** et non sur les quatre axes, exprès : l'écran
-    // d'aujourd'hui identifie ses lignes par la clé plate — deux livrables du même
+    // d'aujourd'hui identifie ses lignes par la clé de gabarit — deux livrables du même
     // gabarit y produiraient deux `id` de DOM identiques. La règle à quatre axes arrive
     // avec l'écran qui sait la porter, à la tâche 6.
     if l.livrables
@@ -574,7 +545,7 @@ pub fn destinataire_retirer(
     }
     let avant = l.livrables.len();
     l.livrables
-        .retain(|d| cle_plate(&d.fabrication) != Some(provider_cle.as_str()));
+        .retain(|d| d.fabrication.cle_gabarit() != provider_cle);
     if l.livrables.len() == avant {
         return Err(format!(
             "{provider_cle} n'est pas destinataire de ce livre."
@@ -606,9 +577,7 @@ pub fn destinataire_regler(
     destinataire: DestinataireCompat,
     atelier: State<Atelier>,
 ) -> Result<ProjetVue, String> {
-    let libelle = catalogue::resout(&fabrication_de(&destinataire.provider)?)?
-        .provider()
-        .libelle;
+    let libelle = plat(&destinataire.provider)?.libelle.clone();
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let l = &mut o.projet.meta.livraison;
@@ -616,7 +585,7 @@ pub fn destinataire_regler(
     let place = l
         .livrables
         .iter_mut()
-        .find(|d| cle_plate(&d.fabrication) == Some(destinataire.provider.as_str()))
+        .find(|d| d.fabrication.cle_gabarit() == destinataire.provider)
         .ok_or_else(|| format!("{libelle} n'est pas destinataire de ce livre."))?;
     // Le candidat est validé **avant** d'être posé : un papier inconnu doit laisser le
     // livrable tel qu'il était, et non l'abandonner à moitié réglé.
@@ -653,7 +622,7 @@ pub fn destinataire_viser(
     let cle = l
         .livrables
         .iter()
-        .find(|d| cle_plate(&d.fabrication) == Some(provider_cle.as_str()))
+        .find(|d| d.fabrication.cle_gabarit() == provider_cle)
         .map(Livrable::cle)
         .ok_or_else(|| format!("{provider_cle} n'est pas destinataire de ce livre."))?;
     l.courant = cle;
@@ -2071,7 +2040,8 @@ fn poser(
 /// Ce que l'écran lit de la livraison. Vue et non donnée : `compose` y est recalculée
 /// par livrable depuis la mesure de son gabarit et la formule de son papier — le
 /// déplacement de la mesure est invisible au front (décision du 26/08).
-/// Forme de compatibilité jusqu'à la tâche 6 : les clés plates, `destinataires`.
+/// Forme de compatibilité jusqu'à la tâche 6 : le nom `destinataires`, `provider` pour
+/// la clé — de gabarit désormais, non plus la clé plate historique.
 #[derive(Serialize)]
 pub struct LivraisonVue {
     destinataires: Vec<DestinataireVue>,
@@ -2099,12 +2069,12 @@ pub struct MesureVue {
     polices_introuvables: Vec<String>,
 }
 
-/// La livraison telle que le front la lit encore : un destinataire par livrable dont la
-/// clé plate existe, et sa mesure reconstituée depuis celle de son gabarit.
+/// La livraison telle que le front la lit encore : un destinataire par livrable, sa
+/// clé de gabarit, et sa mesure reconstituée depuis celle de ce gabarit.
 fn livraison_vue(l: &Livraison) -> LivraisonVue {
-    let vue = |liv: &Livrable| -> Option<DestinataireVue> {
-        let plate = cle_plate(&liv.fabrication)?;
-        let compose = l.mesure(&liv.fabrication.cle_gabarit()).map(|m| {
+    let vue = |liv: &Livrable| -> DestinataireVue {
+        let gabarit = liv.fabrication.cle_gabarit();
+        let compose = l.mesure(&gabarit).map(|m| {
             let dos = catalogue::resout(&liv.fabrication)
                 .ok()
                 .and_then(|r| r.papier.dos.mm(m.pages));
@@ -2116,21 +2086,20 @@ fn livraison_vue(l: &Livraison) -> LivraisonVue {
                 polices_introuvables: m.polices_introuvables.clone(),
             }
         });
-        Some(DestinataireVue {
-            provider: plate.to_string(),
+        DestinataireVue {
+            provider: gabarit,
             papier: liv.fabrication.papier.clone(),
             dos_mm: liv.dos_mm,
             fond_perdu_mm: liv.fond_perdu_mm,
             compose,
-        })
+        }
     };
     LivraisonVue {
-        destinataires: l.livrables.iter().filter_map(&vue).collect(),
+        destinataires: l.livrables.iter().map(&vue).collect(),
         courant: l
             .courant()
-            .and_then(|liv| cle_plate(&liv.fabrication))
-            .unwrap_or_default()
-            .to_string(),
+            .map(|liv| liv.fabrication.cle_gabarit())
+            .unwrap_or_default(),
         deja_compose: l.deja_compose,
     }
 }
@@ -2279,8 +2248,9 @@ mod tests {
     /// donc en snake_case, comme le `Livre` qu'elle renvoie déjà. Le lire en camelCase
     /// ferait échouer chaque relevé de gabarit saisi, sans que rien ne dise pourquoi.
     ///
-    /// Sur `DestinataireCompat`, la forme de compatibilité : l'écran parle encore la
-    /// clé plate. Ce test sera réécrit une seconde fois contre `Livrable` à la tâche 6.
+    /// Sur `DestinataireCompat`, la forme de compatibilité : l'écran parle encore par
+    /// une clé seule (celle du gabarit, désormais), pas par les quatre axes. Ce test
+    /// sera réécrit une seconde fois contre `Livrable` à la tâche 6.
     #[test]
     fn le_destinataire_de_l_interface_se_lit() {
         let json = r#"{

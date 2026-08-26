@@ -25,7 +25,10 @@ fn main() -> Result<(), String> {
             std::process::exit(2);
         }
     };
-    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::providers()
+        .iter()
+        .find(|p| p.cle == cle)
+        .ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let livre = &projet.meta.livre;
     let int = &projet.meta.interieur;

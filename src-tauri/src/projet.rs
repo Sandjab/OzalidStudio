@@ -349,11 +349,10 @@ pub struct Livraison {
 /// réclamer aucune composition.
 impl Default for Livraison {
     fn default() -> Self {
-        let l = Livrable::pour(
-            crate::catalogue::pods()[0]
-                .fabrication_defaut()
-                .expect("le premier POD du catalogue porte une reliure composable"),
-        );
+        let l = Livrable::pour(crate::catalogue::pods()[0].fabrication_defaut().expect(
+            "tout POD lu porte format, papier et reliure composable : \
+                     `Pod::verifie` les réclame",
+        ));
         Self {
             courant: l.cle(),
             livrables: vec![l],

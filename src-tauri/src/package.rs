@@ -165,13 +165,10 @@ pub fn assembler(
     // livrable suivant du même gabarit, qui la retentera à son tour.
     if interieur.pages < pr.pages_min || interieur.pages > pr.pages_max {
         return Err(format!(
-            "{cle} : {} pages, hors des {} à {} que {} accepte en dos carré collé.",
-            interieur.pages, pr.pages_min, pr.pages_max, pr.libelle
+            "{cle} : {} pages, hors des {} à {} que {} accepte en {}.",
+            interieur.pages, pr.pages_min, pr.pages_max, pr.libelle, pr.fabrication.reliure
         ));
     }
-    // NB : à la tâche 5, quand `Provider` porte sa `fabrication`, ce message cite la
-    // reliure (`en {}`, `pr.fabrication.reliure`) au lieu du « dos carré collé »
-    // générique — c'est la spec § 7.
     let mut polices_introuvables = interieur.polices_introuvables.clone();
 
     // 2. Le dos découle de cette pagination-là, jamais d'une saisie.
@@ -645,6 +642,12 @@ mod tests {
                 },
                 source: None,
             }],
+            fabrication: crate::catalogue::Fabrication {
+                pod: "essai".into(),
+                format: "livre".into(),
+                reliure: "broche".into(),
+                papier: "creme".into(),
+            },
         }
     }
 

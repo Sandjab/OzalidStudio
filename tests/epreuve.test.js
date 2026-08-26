@@ -9,7 +9,7 @@ const assert = require('node:assert');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
@@ -31,8 +31,8 @@ const PROJET = {
   interieur: { police: 'Alegreya' },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
   livraison: {
-    destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-    courant: 'lulu',
+    destinataires: [{ provider: 'lulu-108x175-broche', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
+    courant: 'lulu-108x175-broche',
   },
 };
 

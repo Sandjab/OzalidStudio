@@ -6,7 +6,7 @@ const { charge } = require('./dom_shim');
 const { groupes, lire, ecrire, placeImage } = require('../src/couverture.js');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
+  cle: 'lulu-108x175-broche', libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 
@@ -103,8 +103,8 @@ function projet(couverture) {
     interieur: { police: 'Alegreya' },
     envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
     livraison: {
-      destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-      courant: 'lulu',
+      destinataires: [{ provider: 'lulu-108x175-broche', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
+      courant: 'lulu-108x175-broche',
     },
   };
 }

@@ -384,7 +384,7 @@ impl Pod {
         // La table écrite en dur ne pouvait pas porter un tel POD ; un fichier déposé,
         // si. Sans ce refus il se lirait sans erreur, ne produirait aucune entrée plate,
         // et son imprimeur manquerait à la liste sans que rien ne le dise.
-        if !self.reliures.iter().any(|r| r.geometrie.is_some()) {
+        if self.reliure_composable().is_none() {
             return Err(format!(
                 "{} : aucune reliure composable. Un POD dont aucune reliure ne porte de \
                  géométrie ne produirait aucun format, et disparaîtrait sans un mot — \
@@ -599,6 +599,9 @@ pub struct Provider {
     pub pages_min: u32,
     pub pages_max: u32,
     pub papiers: Vec<Papier>,
+    /// La fabrication par défaut de cette entrée plate : son triplet, et le premier
+    /// papier du POD. C'est elle que l'écran renvoie quand on ajoute depuis la liste.
+    pub fabrication: Fabrication,
 }
 
 impl Provider {
@@ -642,8 +645,14 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
             .pages
             .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
         for f in &pod.formats {
+            let fabrication = Fabrication {
+                format: f.cle.clone(),
+                ..pod.fabrication_defaut().expect(
+                    "reliure composable et papier : `reliure_composable` vient d'en trouver une",
+                )
+            };
             v.push(Provider {
-                cle: f.cle_heritee.clone(),
+                cle: fabrication.cle_gabarit(),
                 libelle: format!("{} — {}", pod.nom, f.nom),
                 // La vue plate garde les tuples de la table historique : c'est ce qui
                 // dispense `interieur` de traduire quoi que ce soit pour les lire.
@@ -656,6 +665,7 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                 pages_min: pagination.min,
                 pages_max: pagination.max,
                 papiers: pod.papiers.clone(),
+                fabrication,
             });
         }
     }
@@ -679,9 +689,17 @@ pub fn providers() -> &'static [Provider] {
     PLATS.get_or_init(|| aplatit(pods()))
 }
 
-/// Le provider de cette clé, ou `None`.
-pub fn provider(cle: &str) -> Option<&'static Provider> {
-    providers().iter().find(|p| p.cle == cle)
+/// Le provider d'une clé **plate historique** — helper de test, hors de l'application.
+///
+/// 76 tests de `interieur`, `planche`, `package`, `ebook` et `maquettes` nomment leurs
+/// gabarits par la clé d'avant les livrables (`"bod"`, `"kdp-55x85"`). Plutôt que de
+/// réécrire 76 ancrages qui ne testent pas l'identité, la traduction vit ici, sur la
+/// même table que la migration.
+#[cfg(test)]
+pub fn provider(plate: &str) -> Option<&'static Provider> {
+    let (_, pod, format, reliure) = HERITEES.iter().find(|(h, ..)| *h == plate)?;
+    let gabarit = format!("{pod}-{format}-{reliure}");
+    providers().iter().find(|p| p.cle == gabarit)
 }
 
 /* ---------- l'identité d'un livrable ---------- */
@@ -833,8 +851,9 @@ impl Resolu {
             .reliure
             .pages
             .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
+        let fabrication = self.fabrication();
         Provider {
-            cle: self.fabrication().cle_gabarit(),
+            cle: fabrication.cle_gabarit(),
             libelle: format!("{} — {}", self.pod.nom, self.format.nom),
             format: (self.format.mm.largeur, self.format.mm.hauteur),
             marge_haut: self.format.marges.haut,
@@ -850,6 +869,7 @@ impl Resolu {
             pages_min: pagination.min,
             pages_max: pagination.max,
             papiers: self.pod.papiers.clone(),
+            fabrication,
         }
     }
 
@@ -1780,7 +1800,13 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         );
         // Deux entrées de même clé dans la vue plate, c'est exactement ce qu'on empêche.
         let plats = aplatit(&pods);
-        assert_eq!(plats.iter().filter(|p| p.cle == "bod").count(), 1);
+        assert_eq!(
+            plats
+                .iter()
+                .filter(|p| p.cle == "bod-135x215-broche")
+                .count(),
+            1
+        );
     }
 
     /// Un fichier qui remplace un fourni reprend ses clés héritées : il ne doit pas se
@@ -1870,37 +1896,78 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
     }
 
     /// La liste que la Livraison donne à lire, telle qu'elle s'y lit : quatorze entrées,
-    /// leurs libellés, leur ordre.
+    /// chacune sa clé de gabarit, son libellé, son papier par défaut — le triplet du
+    /// livrable qu'on obtient en l'ajoutant depuis la liste — et leur ordre.
     ///
-    /// Le compte, seul, était déjà tenu ; les clés le sont par les ancrages de dos qui les
-    /// nomment. Ni l'un ni les autres ne voient un `nom` de POD réécrit ni deux fichiers
-    /// fournis permutés — les deux passaient toute la suite. Or c'est un choix de
-    /// prestataire que l'utilisateur fait dans cette liste, à la lecture de ces libellés :
-    /// l'ordre vient des `FOURNIS`, le libellé du POD et du format, et rien d'autre ici ne
-    /// le dit.
+    /// Converti et non retiré (décision du 26/08) : la clé change de convention à cette
+    /// tâche, le compte et l'ordre restent les mêmes tant que le lot 3 n'a pas remplacé
+    /// cette liste par la cascade. Le compte, seul, était déjà tenu ; les clés le sont
+    /// par les ancrages de dos qui les nomment. Ni l'un ni les autres ne voient un `nom`
+    /// de POD réécrit ni deux fichiers fournis permutés — les deux passaient toute la
+    /// suite. Or c'est un choix de prestataire que l'utilisateur fait dans cette liste, à
+    /// la lecture de ces libellés : l'ordre vient des `FOURNIS`, le libellé du POD et du
+    /// format, et rien d'autre ici ne le dit.
     #[test]
     fn la_liste_des_prestataires_garde_ses_quatorze_libelles_dans_l_ordre() {
-        let vue: Vec<(&str, &str)> = providers()
+        let vue: Vec<(&str, &str, &str)> = providers()
             .iter()
-            .map(|p| (p.cle.as_str(), p.libelle.as_str()))
+            .map(|p| {
+                (
+                    p.cle.as_str(),
+                    p.libelle.as_str(),
+                    p.fabrication.papier.as_str(),
+                )
+            })
             .collect();
         assert_eq!(
             vue,
             [
-                ("lulu", "Lulu — poche 108 × 175"),
-                ("bod", "BoD — 13,5 × 21,5 cm"),
-                ("kdp-5x8", "Amazon KDP — 5 × 8 po"),
-                ("kdp-55x85", "Amazon KDP — 5,5 × 8,5 po"),
-                ("kdp-6x9", "Amazon KDP — 6 × 9 po"),
-                ("coollibri-110x170", "CoolLibri — 11 × 17 cm"),
-                ("coollibri-148x210", "CoolLibri — A5"),
-                ("coollibri-160x240", "CoolLibri — 16 × 24 cm"),
-                ("tbe-110x170", "TheBookEdition — Poche 11 × 17"),
-                ("tbe-120x180", "TheBookEdition — Manga 12 × 18"),
-                ("tbe-1485x210", "TheBookEdition — A5 14,8 × 21"),
-                ("bookvault-127x203", "Bookvault — Novel 127 × 203"),
-                ("bookvault-129x198", "Bookvault — B Format 129 × 198"),
-                ("bookvault-148x210", "Bookvault — A5 148 × 210"),
+                ("lulu-108x175-broche", "Lulu — poche 108 × 175", "standard"),
+                ("bod-135x215-broche", "BoD — 13,5 × 21,5 cm", "creme-90"),
+                ("kdp-5x8-broche", "Amazon KDP — 5 × 8 po", "creme"),
+                ("kdp-55x85-broche", "Amazon KDP — 5,5 × 8,5 po", "creme"),
+                ("kdp-6x9-broche", "Amazon KDP — 6 × 9 po", "creme"),
+                (
+                    "coollibri-110x170-broche",
+                    "CoolLibri — 11 × 17 cm",
+                    "mesure"
+                ),
+                ("coollibri-148x210-broche", "CoolLibri — A5", "mesure"),
+                (
+                    "coollibri-160x240-broche",
+                    "CoolLibri — 16 × 24 cm",
+                    "mesure"
+                ),
+                (
+                    "tbe-110x170-broche",
+                    "TheBookEdition — Poche 11 × 17",
+                    "munken-80"
+                ),
+                (
+                    "tbe-120x180-broche",
+                    "TheBookEdition — Manga 12 × 18",
+                    "munken-80"
+                ),
+                (
+                    "tbe-1485x210-broche",
+                    "TheBookEdition — A5 14,8 × 21",
+                    "munken-80"
+                ),
+                (
+                    "bookvault-127x203-broche",
+                    "Bookvault — Novel 127 × 203",
+                    "creme-70"
+                ),
+                (
+                    "bookvault-129x198-broche",
+                    "Bookvault — B Format 129 × 198",
+                    "creme-70"
+                ),
+                (
+                    "bookvault-148x210-broche",
+                    "Bookvault — A5 148 × 210",
+                    "creme-70"
+                ),
             ]
         );
     }
@@ -2149,10 +2216,11 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
     }
 
     /// L'ancrage de la fabrique : pour chacune des quatorze clés héritées, le `Provider`
-    /// fabriqué depuis le triplet (et le papier par défaut du POD) est **identique** à celui
-    /// de la vue plate — la clé exceptée, neutralisée dans la comparaison, qui change de
-    /// convention à la tâche 5. La comparaison porte sur `Provider` entier : un champ ajouté
-    /// et renseigné d'un seul côté devient rouge tout seul, sans qu'il faille l'énumérer ici.
+    /// fabriqué depuis le triplet (et le papier par défaut du POD) est **identique** à
+    /// celui de la vue plate — clé comprise, désormais : les deux la fabriquent depuis
+    /// `Fabrication::cle_gabarit()` depuis la tâche 5. La comparaison porte sur
+    /// `Provider` entier : un champ ajouté et renseigné d'un seul côté devient rouge
+    /// tout seul, sans qu'il faille l'énumérer ici.
     #[test]
     fn le_livrable_resolu_fabrique_le_provider_de_la_vue_plate() {
         for (heritee, pod, format, reliure) in HERITEES {
@@ -2161,13 +2229,7 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
             let fait = resout(&fabrication(pod, format, reliure, papier))
                 .unwrap()
                 .provider();
-            assert_eq!(
-                fait,
-                Provider {
-                    cle: fait.cle.clone(),
-                    ..plat.clone()
-                }
-            );
+            assert_eq!(fait, plat.clone());
         }
     }
 

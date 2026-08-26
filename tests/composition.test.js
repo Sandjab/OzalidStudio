@@ -7,17 +7,17 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
+  cle: 'lulu-108x175-broche', libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
-  cle: 'kdp-6x9', libelle: 'Amazon KDP — 6 × 9 po',
+  cle: 'kdp-6x9-broche', libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
   papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
-  cle: 'coollibri-148x210', libelle: 'CoolLibri — A5',
+  cle: 'coollibri-148x210-broche', libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
   papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
@@ -158,13 +158,13 @@ async function ouvre(p, sur = {}) {
 
 test('le choix du papier n\'est offert que quand il y en a plusieurs', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('dest-papier-lulu').disabled, true);
-  assert.strictEqual(els.get('dest-papier-lulu').children.length, 1);
+  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche').disabled, true);
+  assert.strictEqual(els.get('dest-papier-lulu-108x175-broche').children.length, 1);
 
   const { els: chezKdp } = await ouvre(KDP);
-  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9').disabled, false);
+  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9-broche').disabled, false);
   assert.deepStrictEqual(
-    [...chezKdp.get('dest-papier-kdp-6x9').children].map((o) => o.value),
+    [...chezKdp.get('dest-papier-kdp-6x9-broche').children].map((o) => o.value),
     ['creme', 'blanc']
   );
 });
@@ -183,7 +183,7 @@ test('un prestataire à gabarit annonce que le fond perdu se relève', async () 
  */
 test('le pied nomme le destinataire visé et l\'état de son dos', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('inDestinataire').value, 'lulu');
+  assert.strictEqual(els.get('inDestinataire').value, 'lulu-108x175-broche');
   assert.deepStrictEqual(els.get('inDestinataire').textes('option'), ['Lulu — poche 108 × 175']);
   assert.match(els.get('piedDos').textContent, /dos non composé/);
 });

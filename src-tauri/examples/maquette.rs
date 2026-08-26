@@ -23,7 +23,10 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let pr = catalogue::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::providers()
+        .iter()
+        .find(|p| p.cle == cle)
+        .ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let dossier = PathBuf::from(&sortie);
     std::fs::create_dir_all(&dossier).map_err(|e| format!("{sortie} : {e}"))?;
