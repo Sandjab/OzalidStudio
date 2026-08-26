@@ -46,7 +46,7 @@ fn nom_de_fichier(titre: &str) -> String {
 
 /// Écrit le PDF et l'EPUB du livre dans `dossier`.
 ///
-/// `dos_mm` vient du destinataire visé : il ne sert qu'au cadrage panoramique de la
+/// `dos_mm` vient du livrable visé : il ne sert qu'au cadrage panoramique de la
 /// couverture. Absent, l'image se cadre sur la seule 1ère — ce que fait déjà l'aperçu à
 /// l'écran, et ce n'est pas un refus de plus.
 pub fn generer(

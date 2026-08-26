@@ -112,7 +112,7 @@ côté du titre, tronqué s'il le faut et entier au survol ; l'état d'une étap
 son nom. Empilées, elles prenaient 176 px à toutes les étapes pour dire six choses
 courtes — et c'était la Couverture qui les payait, en aperçu. Les Envois ont leur étape :
 les mains, les mots et la liste des dédicataires débordaient la Livraison de quatre
-défilements — elle ne garde que les destinataires et leurs packages. Ce qui
+défilements — elle ne garde que les livrables et leurs packages. Ce qui
 ne tient pas se règle par la mise en page ; le panneau de réglages de la couverture
 garde son propre ascenseur — sa longueur est irréductible. Une étape qui déborde
 tombe, elle, dans le filet de la bande de contenu : c'est le cas de la Livraison dès
@@ -190,7 +190,7 @@ connaît le nom sans suffixe. Relevé le 25/08/2026, contre le service. Laissé
 vide, le champ n'est pas envoyé : un `"model"` vide ferait refuser les fournisseurs qui
 n'en attendent aucun. La clé, elle, ne redescend jamais à l'écran.
 
-Changer de destinataire au pied change la pagination : le rail et le canevas se
+Changer de livrable au pied change la pagination : le rail et le canevas se
 refont. Sans quoi l'on viserait la page 264 d'un intérieur qui n'en fait plus que 190,
 et seul le refus à la génération le dirait — une fois le mot écrit.
 
@@ -262,7 +262,7 @@ couverture, et faire tourner Typst une minute à qui n'a rien demandé coûterai
 que ce qu'on lui épargne. Un `.ozalid` rouvert montre ce que son archive porte : les
 chiffres de la dernière composition, sans rien recalculer.
 
-Ensuite, la **veille** : dès que la mesure du destinataire visé disparaît — la police,
+Ensuite, la **veille** : dès que la mesure du livrable visé disparaît — la police,
 le papier, le gabarit, le texte, un champ du livre —, la composition repart d'elle-même,
 débouncée à 400 ms pour qu'une rafale de réglages n'en lance qu'une. Une seule à la
 fois, et la dernière gagne : ce qui a bougé pendant qu'elle tournait la fait
@@ -339,7 +339,7 @@ Une archive, un document :
 
 ```
 projet.toml     identité du livre, police de l'intérieur, réglages de couverture,
-                destinataires, envois, chemin source du manuscrit
+                livrables, envois, chemin source du manuscrit
 manuscrit.md
 images/         photos source de la 1ère et de la 4ème
 polices/        la police manuscrite de l'auteur, quand il en fournit une
@@ -362,7 +362,7 @@ l'identique sur une machine où elle n'est installée nulle part.
 
 La police de l'intérieur est une section à part, `[interieur]`, qui vaut `EB Garamond`
 quand elle manque — un projet écrit avant qu'elle existe s'ouvre donc sans rien dire.
-Les destinataires en sont une autre, `[livraison]`, avec le même principe : un projet
+Les livrables en sont une autre, `[livraison]`, avec le même principe : un projet
 qui ne la porte pas se voit doté du premier gabarit de la table. La version du format
 ne bouge pas pour autant — ajouter une section facultative ne rend illisible aucun
 fichier existant, et la monter interdirait aux binaires déjà distribués d'ouvrir les

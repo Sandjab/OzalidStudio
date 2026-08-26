@@ -328,7 +328,7 @@ pub struct Livraison {
     #[serde(default)]
     pub courant: String,
     /// Ce livre a été composé au moins une fois, pour n'importe lequel des
-    /// destinataires. Posé à la première composition, **jamais repris** : c'est de
+    /// livrables. Posé à la première composition, **jamais repris** : c'est de
     /// l'histoire du projet, pas un état courant.
     ///
     /// Il dit la seule chose qu'une mesure effacée ne dit plus : la différence entre un
@@ -389,7 +389,7 @@ impl Livraison {
     /// Retient ce qu'une composition vient de mesurer pour un gabarit.
     ///
     /// Sans effet si plus aucun livrable ne porte ce gabarit : une composition dont le
-    /// destinataire a disparu en chemin n'a personne à renseigner.
+    /// livrable a disparu en chemin n'a personne à renseigner.
     pub fn retenir_mesure(&mut self, cle_gabarit: &str, mesure: Mesure) {
         if self
             .livrables

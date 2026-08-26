@@ -209,7 +209,7 @@ pub struct ProjetVue {
     pub couverture_importee: bool,
     pub images: Vec<String>,
     pub interieur: Interieur,
-    /// Le PDF de l'intérieur composé pour le destinataire visé, s'il est sur le disque.
+    /// Le PDF de l'intérieur composé pour le livrable visé, s'il est sur le disque.
     ///
     /// **Dérivé, jamais retenu.** Un `.ozalid` déplacé — ou ouvert sur une autre machine,
     /// ce pour quoi il est fait — porterait un chemin absolu qui ne mène nulle part. Il
@@ -743,7 +743,7 @@ pub fn livrable_viser(cle: String, atelier: State<Atelier>) -> Result<ProjetVue,
     vue_modifiee(o)
 }
 
-/// Compose l'intérieur du projet ouvert pour le destinataire visé, et rend le compte
+/// Compose l'intérieur du projet ouvert pour le livrable visé, et rend le compte
 /// de pages avec le dos qui en découle.
 #[tauri::command]
 pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
@@ -1100,7 +1100,7 @@ pub fn couverture_apercu(
         .maquette
         .as_ref()
         .ok_or("aucune maquette : en choisir une.")?;
-    // Le format vient du destinataire visé, et le fond perdu de son relevé quand le
+    // Le format vient du livrable visé, et le fond perdu de son relevé quand le
     // prestataire n'en publie pas : les deux sont dans le projet, plus dans un champ.
     let (pr, _, d) = vise(o)?;
     let fond_perdu_mm = d.fond_perdu_mm;
@@ -1401,9 +1401,9 @@ pub struct Resultat {
     pub erreur: Option<String>,
 }
 
-/// Génère le package de chaque destinataire du livre, chacun dans son répertoire.
+/// Génère le package de chaque livrable du livre, chacun dans son répertoire.
 ///
-/// Une seule maquette, N destinataires, aucun réglage retouché entre eux : chacun
+/// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun
 /// compose son propre intérieur, donc sa propre pagination, donc son propre dos. C'est
 /// la promesse de l'étape Livraison, et la liste vient du projet — plus de cases à
 /// cocher qui désigneraient les prestataires une seconde fois.
@@ -1448,9 +1448,9 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
         });
     }
 
-    // `?` fait échouer la commande entière, sans `Resultat` par destinataire : à la
+    // `?` fait échouer la commande entière, sans `Resultat` par livrable : à la
     // différence d'un prestataire ou d'un papier inconnu, une racine de sorties
-    // inutilisable (projet non enregistré) ne concerne aucun destinataire en
+    // inutilisable (projet non enregistré) ne concerne aucun livrable en
     // particulier, et rien ne peut être tenté avant qu'elle existe.
     let racine = sorties_racine(o)?;
     let cibles: Vec<package::Cible> = etapes
@@ -1875,7 +1875,7 @@ fn empreinte(s: &str) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// Toutes les pages de l'intérieur en vignettes, pour le destinataire visé.
+/// Toutes les pages de l'intérieur en vignettes, pour le livrable visé.
 ///
 /// Aucun cache : les 190 pages du livre témoin coûtent six dixièmes de seconde, et
 /// l'interface ne demande cette série qu'à l'ouverture de l'étape. Un cache achèterait
