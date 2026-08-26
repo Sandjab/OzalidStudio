@@ -142,10 +142,12 @@ catalogue amputé sans savoir pourquoi.
 **Un fichier embarqué fautif est un bug de compilation logique**, pas un cas d'usage : il
 est attrapé par un test qui les charge tous, et le chargement peut alors échouer bruyamment.
 
-Le catalogue est chargé une fois dans un `OnceLock`. C'est ce qui garde valides les deux
-seules signatures `&'static Provider` hors tests — `commands.rs:467` et `commands.rs:1890` :
-le reste du code prend déjà des références ordinaires. Le refactor est plus superficiel
-qu'il n'en a l'air. `providers.rs` devient `catalogue.rs`.
+Le catalogue est chargé une fois dans un `OnceLock`. Les deux seules signatures
+`&'static Provider` hors tests étaient celles de `vise` et de `papier` (`commands.rs:479`
+et `1904` à l'époque — la spec avait écrit « couple », 467 et 1890) ; le lot 2 les a
+retirées pour neuf esperluettes et deux `clone()`, comme la reconnaissance l'avait mesuré
+(verdict 1c) : le reste du code prenait déjà des références ordinaires. Le refactor était
+plus superficiel qu'il n'en avait l'air. `providers.rs` devient `catalogue.rs`.
 
 ## 4. Le livrable
 
@@ -157,8 +159,11 @@ Conséquence assumée : deux livrables qui ne différeraient que par la finition
 est portée par le livrable et paraît au récapitulatif : c'est une donnée de commande, pas de
 fabrication.
 
-Le répertoire de package suit cette identité : `bod-135x215-broche-creme90/`, et les
-fichiers qu'il porte de même. Les relevés — dos et fond perdu, chez les POD qui ne les
+Le répertoire de package suit cette identité : `bod-135x215-broche-creme-90/`, et les
+fichiers qu'il porte de même — les quatre clés jointes par des tirets, **telles quelles**,
+jamais transformées ni re-découpées : le séparateur vit déjà dans les valeurs
+(`creme-90`), et une clé se fabrique et se compare, elle ne se parse pas (arbitrage du
+26/08). Les relevés — dos et fond perdu, chez les POD qui ne les
 publient pas — restent sur le livrable : ils dépendent du papier et de la pagination.
 
 **Migration.** Les quatorze clés actuelles se convertissent sans ambiguïté : `bod` → POD `bod`,
@@ -233,7 +238,10 @@ vérifiée : le package, lui, **recompose** — `package::assembler` repasse par
 avec le gabarit courant —, donc aucune couverture fausse ne part à l'impression. Ce qui
 traverse est le **dos affiché** et le placement des envois. C'est la politique d'invalidation
 des mesures qu'il faut reprendre, pas le catalogue : le lot 2 la déplace déjà sous la clé
-(POD, format, reliure), c'est là qu'elle se traite.
+(POD, format, reliure), c'est là qu'elle se traite. **Fermé par le lot 2** : la mesure
+porte l'empreinte de ce qui pagine (format, marges, gouttières), comparée une fois à
+l'ouverture — un gabarit réécrit périme la mesure ; le dos affiché, lui, se recalcule à
+chaque vue depuis la formule du papier, et se corrige donc tout seul.
 
 **Un `.ozalid` converti ne se relit plus par l'ancienne version.** C'est le cas de toute
 migration ; il est acceptable ici parce qu'aucune version n'est diffusée hors du poste.

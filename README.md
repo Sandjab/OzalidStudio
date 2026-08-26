@@ -370,11 +370,12 @@ projets écrits ensuite. Un prestataire ou un papier que la table ne porte plus 
 **élagué à l'ouverture** plutôt que de faire refuser le projet : le manuscrit et la
 maquette sont intacts, et la liste se refait en trois clics.
 
-La version **est à 4**, et elle a bougé une fois pour une raison que la règle ci-dessus
-n'a pas : un champ ne s'est pas ajouté, il s'est **déplacé**. La main appartenait au
-livre, `[envois.main]` ; elle appartient désormais à chaque exemplaire,
-`[envois.liste.main]` — c'est tout l'objet du chantier, écrire à la main pour l'une et
-composer pour l'autre. Un binaire d'avant lisant un fichier d'après ne trouverait plus
+La version **est à 5**, et elle n'a bougé que pour la raison que la règle ci-dessus
+n'a pas : un champ ne s'ajoute pas, il se **déplace**. En v4, la main du livre est
+descendue dans chaque exemplaire (`[envois.main]` → `[envois.liste.main]`). En v5, le
+destinataire est devenu un **livrable** — quatre axes, POD, format, reliure, papier, à
+la place d'une clé plate — et la mesure a quitté le destinataire pour la table
+`[livraison.mesures]`, rangée par gabarit d'intérieur. Un binaire d'avant lisant un fichier d'après ne trouverait plus
 la main du livre et ne saurait pas lire celle des envois : serde l'ignorerait, et **tous
 les envois s'écriraient dans la main par défaut**, sans un mot. Ce n'est pas un fichier
 illisible, c'est un livre faux — et c'est exactement ce que la version sert à empêcher :
@@ -383,17 +384,23 @@ descendre l'ancienne main dans chaque envoi et remonter le gabarit sur `[envois]
 envoi qui porte déjà la sienne n'est pas touché, une migration rejouée n'écrase donc
 aucun travail.
 
-Chaque destinataire y porte en outre **ce que sa dernière composition a mesuré** —
-pages, gouttière, blanche, dos. Une par destinataire, parce que le même manuscrit ne
-fait pas le même nombre de pages en poche et en grand format, et dans le fichier, parce
-que rouvrir un livre composé la veille ne doit pas redemander une composition entière
-pour un chiffre qui n'a pas bougé. L'invariant qui tient tout le dispositif tient en une
-phrase : **une mesure enregistrée vaut toujours.** Rien n'y est estampillé, rien n'est à
+La livraison porte en outre **ce que les compositions ont mesuré** — pages, gouttière,
+blanche — par **gabarit d'intérieur** (POD, format, reliure), et non par livrable : la
+pagination ne dépend ni du papier ni de la finition, et c'est ce partage qui rend la
+comparaison de deux papiers gratuite. Le dos n'y est pas : il dépend du papier, il se
+**recalcule** à chaque vue depuis sa formule. Une mesure par gabarit parce que le même
+manuscrit ne fait pas le même nombre de pages en poche et en grand format, et dans le
+fichier parce que rouvrir un livre composé la veille ne doit pas redemander une
+composition entière pour un chiffre qui n'a pas bougé. L'invariant qui tient tout le
+dispositif tient en une phrase : **une mesure enregistrée vaut toujours.** Rien n'est à
 comparer avant de s'en servir — ce qui pourrait la périmer l'efface à la source, dans le
 Rust, au moment du geste : le livre (`modifier_livre` — une dédicace prend une belle
-page et sa blanche), la police (`modifier_interieur`), le texte (`remplacer_texte`), le
-papier et le relevé (`destinataire_regler`). Grossièrement et sans rien comparer :
-recomposer pour rien coûte une composition, en rater une imprime un mauvais dos.
+page et sa blanche), la police (`modifier_interieur`), le texte (`remplacer_texte`). La
+seule cause qui échappe aux gestes — un gabarit réécrit dans `<config>/pods/` pendant
+que le livre était fermé — est rattrapée à l'ouverture : la mesure porte l'empreinte de
+ce qui pagine, et une empreinte qui ne correspond plus la périme. Grossièrement et sans
+rien comparer : recomposer pour rien coûte une composition, en rater une imprime un
+mauvais dos.
 
 Un envoi ne figure pas dans cette liste, et c'est un second invariant : **un envoi ne
 crée aucune page**, sur n'importe laquelle. Il se pose en `foreground`, qui ne réordonne

@@ -2348,9 +2348,11 @@ plus, spec § 8).
 1. **La migration** : ouvrir un `.ozalid` v4 — il s'ouvre sans un mot, la Livraison
    montre son destinataire d'hier (Lulu, papier Standard), enregistrer, rouvrir :
    toujours là, et le fichier est en v5.
-2. **La comparaison de papiers** : déclarer KDP 6×9 crème **et** KDP 6×9 blanc (BoD n'a
+2. **La comparaison de papiers** : ajouter KDP 6×9 (il arrive en crème), **changer son
+   papier en blanc sur la ligne**, puis ajouter KDP 6×9 une seconde fois (crème) — ajouter
+   deux fois de suite sans régler le papier serait refusé, même identité (BoD n'a
    qu'un papier tant que le lot 4 ne l'a pas complété — la spec dit BoD, KDP est
-   l'équivalent disponible), générer : **deux répertoires**
+   l'équivalent disponible). Générer : **deux répertoires**
    (`kdp-6x9-broche-creme/`, `kdp-6x9-broche-blanc/`), deux dos différents dans les
    comptes rendus, et le second package copié, pas recomposé (les deux
    `interieur-*.pdf` identiques à l'octet — `cmp` fait foi).
