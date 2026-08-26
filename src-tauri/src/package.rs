@@ -116,6 +116,41 @@ pub fn composer_interieur(
     })
 }
 
+/// Refuse une pagination hors de ce que le livrable admet, en nommant qui la borne.
+///
+/// Hors d'`assembler` pour être testable : le contrôle y était inline, et aucun test ne
+/// pouvait l'atteindre sans composer un intérieur. C'est le même arbitrage que
+/// `verifie_pages`, dans ce fichier.
+///
+/// Le message nomme le **papier** quand la reliure seule aurait accepté ce compte de
+/// pages : « hors des 24 à 900 que BoD accepte en broche » enverrait chercher l'erreur du
+/// mauvais côté pour un livre de 880 pages en photo brillant. À l'inverse, un compte que
+/// la reliure seule refuse déjà ne nomme pas le papier — changer de papier ne le sauverait
+/// pas.
+fn verifie_pagination(cle: &str, pages: u32, pr: &Provider, papier: &Papier) -> Result<(), String> {
+    let (min, max) = papier.bornes_dans(pr.pages_min, pr.pages_max);
+    if pages >= min && pages <= max {
+        return Ok(());
+    }
+    // La vraie question n'est pas à qui appartient la borne affichée, mais si la reliure
+    // seule aurait accepté ce compte : changer de papier ne sauve un livre que si c'est
+    // le papier, et lui seul, qui l'a fait échouer.
+    let du_papier = if pages < min {
+        pages >= pr.pages_min
+    } else {
+        pages <= pr.pages_max
+    };
+    let en = if du_papier {
+        format!("{} en {}", pr.fabrication.reliure, papier.nom)
+    } else {
+        pr.fabrication.reliure.clone()
+    };
+    Err(format!(
+        "{cle} : {pages} pages, hors des {min} à {max} que {} accepte en {en}.",
+        pr.libelle
+    ))
+}
+
 /// Assemble un package : le dos, découlant de la pagination de l'intérieur, puis la
 /// planche. L'intérieur lui-même n'est pas recomposé — il est reçu tout fait, composé
 /// une fois par gabarit par `composer_interieur` (directement ou via `lot`), et copié
@@ -163,12 +198,7 @@ pub fn assembler(
     // Ce contrôle tombe après la composition de l'intérieur du gabarit : un refus ici
     // coûte donc une composition — que la mémoïsation de `lot` ne repaie pas pour le
     // livrable suivant du même gabarit, qui la retentera à son tour.
-    if interieur.pages < pr.pages_min || interieur.pages > pr.pages_max {
-        return Err(format!(
-            "{cle} : {} pages, hors des {} à {} que {} accepte en {}.",
-            interieur.pages, pr.pages_min, pr.pages_max, pr.libelle, pr.fabrication.reliure
-        ));
-    }
+    verifie_pagination(cle, interieur.pages, pr, papier)?;
     let mut polices_introuvables = interieur.polices_introuvables.clone();
 
     // 2. Le dos découle de cette pagination-là, jamais d'une saisie.
@@ -640,6 +670,7 @@ mod tests {
                     par: 0.0675,
                     plus: 0.6,
                 },
+                pages: None,
                 source: None,
             }],
             fabrication: crate::catalogue::Fabrication {
@@ -649,6 +680,107 @@ mod tests {
                 papier: "creme".into(),
             },
         }
+    }
+
+    fn papier_plafonne(cle: &str, bornes: Option<(u32, u32)>) -> Papier {
+        Papier {
+            cle: cle.into(),
+            nom: format!("papier {cle}"),
+            teinte: r##"#ffffff"##.into(),
+            dos: crate::catalogue::Dos::Multiplie {
+                par: 0.0675,
+                plus: 0.6,
+            },
+            pages: bornes.map(|(min, max)| crate::catalogue::Pagination { min, max }),
+            source: None,
+        }
+    }
+
+    /// Le `Provider` d'essai, sous d'autres bornes de pagination : celui de base en pose
+    /// de très larges (1 à 900), et c'est le resserrement qui s'observe ici.
+    fn provider_pagine(min: u32, max: u32) -> Provider {
+        Provider {
+            pages_min: min,
+            pages_max: max,
+            ..provider_d_essai()
+        }
+    }
+
+    /// Le plafond d'un papier resserre celui de la reliure, et le refus le nomme.
+    ///
+    /// BoD accepte 900 pages en broché, mais 868 seulement en photo brillant 130 g : le
+    /// plafond appartient au papier, pas à la reliure. Sans ce resserrement, l'application
+    /// laisserait composer une couverture pour un livre que l'imprimeur refusera à la
+    /// commande — et le dos, lui, serait juste, ce qui rend l'erreur invisible à l'écran.
+    #[test]
+    fn le_plafond_du_papier_resserre_celui_de_la_reliure() {
+        let pr = provider_pagine(24, 900);
+        let brillant = papier_plafonne("photo-brillant-130", Some((24, 868)));
+        let creme = papier_plafonne("creme-90", None);
+
+        let err = verifie_pagination("bod-135x215-broche-photo-brillant-130", 880, &pr, &brillant)
+            .unwrap_err();
+        assert!(err.contains("880"), "{err}");
+        assert!(err.contains("868"), "{err}");
+        assert!(
+            err.contains(&brillant.nom),
+            "le refus doit nommer le papier qui plafonne : {err}"
+        );
+
+        assert!(
+            verifie_pagination("bod-135x215-broche-creme-90", 880, &pr, &creme).is_ok(),
+            "le même compte passe sur un papier qui ne plafonne pas"
+        );
+    }
+
+    /// Le refus nomme le papier quand la reliure seule aurait accepté ce compte de pages
+    /// — c'est-à-dire quand changer de papier sauverait le livre. Un papier qui ne
+    /// resserre que le plancher n'est donc pour rien dans un plafond dépassé : le compte
+    /// dépasse ce que la reliure admet, et lui seul.
+    #[test]
+    fn le_papier_est_nomme_quand_la_reliure_seule_aurait_accepte() {
+        let pr = provider_pagine(24, 900);
+        let plancher = papier_plafonne("papier-a-plancher", Some((30, 2000)));
+
+        // Le plafond de la reliure est franchi : le papier n'y est pour rien.
+        let trop = verifie_pagination("essai", 950, &pr, &plancher).unwrap_err();
+        assert!(
+            !trop.contains(&plancher.nom),
+            "le papier ne resserre pas ce plafond, il ne doit pas être nommé : {trop}"
+        );
+
+        // Le plancher, lui, est bien celui du papier : il se nomme.
+        let trop_peu = verifie_pagination("essai", 26, &pr, &plancher).unwrap_err();
+        assert!(
+            trop_peu.contains(&plancher.nom),
+            "le plancher franchi est celui du papier : {trop_peu}"
+        );
+        // Et la borne affichée est celle, resserrée, du papier — 30, pas les 24 de la
+        // reliure seule : nommer le papier en montrant le chiffre de la reliure
+        // désignerait le bon coupable avec la mauvaise pièce à conviction.
+        assert!(
+            trop_peu.contains("hors des 30"),
+            "la borne affichée doit être celle du papier : {trop_peu}"
+        );
+    }
+
+    /// Un papier qui resserre le plafond n'est pour rien quand la reliure seule, sans
+    /// lui, refuserait déjà ce compte de pages.
+    ///
+    /// Cas distinct de celui qui précède : ici la borne **affichée** est bien celle du
+    /// papier (868 < 900), mais changer de papier ne sauverait pas ce livre — la reliure
+    /// seule plafonne à 900, que 950 dépasse tout autant. Nommer le papier enverrait
+    /// rouvrir un choix qui n'aurait rien changé.
+    #[test]
+    fn le_papier_n_est_pas_nomme_si_la_reliure_seule_refuserait_deja() {
+        let pr = provider_pagine(24, 900);
+        let brillant = papier_plafonne("photo-brillant-130", Some((24, 868)));
+
+        let err = verifie_pagination("essai", 950, &pr, &brillant).unwrap_err();
+        assert!(
+            !err.contains(&brillant.nom),
+            "la reliure seule refuserait déjà 950 pages, le papier ne doit pas être nommé : {err}"
+        );
     }
 
     /// Le `Livre` du témoin, réduit à ce qu'`assembler` et `composer_interieur` lisent.
@@ -734,6 +866,7 @@ mod tests {
                 par: 0.08,
                 plus: 2.0,
             },
+            pages: None,
             source: None,
         };
         let cibles = [

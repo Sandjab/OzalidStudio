@@ -190,8 +190,29 @@ pub struct Papier {
     /// aplat sur toutes les pages.
     pub teinte: String,
     pub dos: Dos,
+    /// Pagination que **ce papier** admet, quand il est plus restrictif que la reliure.
+    ///
+    /// Absent chez le cas courant : c'est la reliure qui borne, et un papier n'a rien à
+    /// redire. Présent chez BoD, dont le photo brillant 130 g plafonne à 868 pages là où
+    /// le broché va à 900 — une contrainte de l'épaisseur du papier, pas du collage.
+    ///
+    /// Les deux bornes se **croisent**, elles ne se remplacent pas : le livrable admet ce
+    /// que la reliure et le papier admettent tous deux.
+    #[serde(default)]
+    pub pages: Option<Pagination>,
     #[serde(default)]
     pub source: Option<String>,
+}
+
+impl Papier {
+    /// Les bornes de pagination d'un livrable fait de ce papier, à l'intérieur de celles
+    /// que la reliure impose. Sans plafond propre, le papier ne resserre rien.
+    pub fn bornes_dans(&self, min: u32, max: u32) -> (u32, u32) {
+        match self.pages {
+            Some(p) => (min.max(p.min), max.min(p.max)),
+            None => (min, max),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -542,6 +563,45 @@ impl Pod {
                 }
             }
             Dos::Mesure => {}
+        }
+        if let Some(pg) = &p.pages {
+            if pg.min == 0 {
+                return Err(format!(
+                    "{ou} : pagination de papier à partir de zéro page. Un livre de zéro \
+                     page n'existe pas."
+                ));
+            }
+            if pg.min > pg.max {
+                return Err(format!(
+                    "{ou} : pagination de papier à l'envers ({}–{} pages).",
+                    pg.min, pg.max
+                ));
+            }
+            // Un papier s'apparie à **chaque** reliure composable — `aplatit` les
+            // combine toutes, `resout` laisse choisir librement — donc un intervalle
+            // qui n'en recouvre qu'une partie laisse un livrable mort pour les autres :
+            // la reliure delaissée le refusera systématiquement, silencieusement.
+            // `verifie_reliure` a déjà tourné sur chaque reliure ici : une reliure
+            // composable porte donc sa pagination, valide.
+            if let Some(r) = self
+                .reliures
+                .iter()
+                .filter(|r| r.geometrie.is_some())
+                .find(|r| {
+                    let rp = r.pages.expect(
+                        "une reliure composable porte sa pagination : `verifie_reliure` la \
+                         réclame",
+                    );
+                    pg.min > rp.max || rp.min > pg.max
+                })
+            {
+                return Err(format!(
+                    "{ou} : pagination de papier ({}–{} pages) sans recouvrement avec la \
+                     reliure {}. Ce papier ne composera jamais rien avec elle — élargir \
+                     l'un des deux intervalles, ou retirer cette reliure du POD.",
+                    pg.min, pg.max, r.cle
+                ));
+            }
         }
         Ok(())
     }
@@ -1389,6 +1449,62 @@ non_outille = "géométrie du casewrap non relevée"
         let f = sauf(FORMAT, "de = 24", "de = 0");
         let e = Pod::depuis_toml(&pod(&[&f, RELIURE, PAPIER])).unwrap_err();
         assert!(e.contains("135x215") && e.contains("zéro page"), "{e}");
+
+        let p = format!("{PAPIER}pages = {{ min = 0, max = 100 }}\n");
+        let e = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
+        assert!(e.contains("creme-90") && e.contains("zéro page"), "{e}");
+    }
+
+    /// Une pagination de papier inversée est refusée au chargement, comme les autres
+    /// valeurs impossibles : un fichier qui l'écrit se corrige, il ne se devine pas.
+    #[test]
+    fn une_pagination_de_papier_inversee_est_refusee() {
+        let p = format!("{PAPIER}pages = {{ min = 200, max = 100 }}\n");
+        let err = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
+        assert!(
+            err.contains("creme-90") && err.contains("à l'envers"),
+            "{err}"
+        );
+    }
+
+    /// Un papier dont la pagination ne croise celle d'aucune reliure composable ne
+    /// composera jamais rien : quel que soit le compte de pages, la reliure choisie le
+    /// refusera avant lui ou lui après elle. C'est une incohérence du fichier, du même
+    /// ordre que la reliure sans géométrie — à voir au chargement, pas à l'usage.
+    #[test]
+    fn un_papier_dont_la_pagination_ne_croise_aucune_reliure_est_refuse() {
+        // RELIURE admet 24 à 900 pages ; ce papier n'en admet qu'à partir de 950.
+        let p = format!("{PAPIER}pages = {{ min = 950, max = 2000 }}\n");
+        let err = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &p])).unwrap_err();
+        assert!(err.contains("creme-90"), "{err}");
+        assert!(err.contains("950") && err.contains("2000"), "{err}");
+    }
+
+    /// Un POD à deux reliures composables — le cas même que documente `aplatit`, dos
+    /// carré collé et rigide au même format — refuse un papier qui n'en recouvre qu'une :
+    /// le livrable de l'autre reliure ne composerait jamais rien, silencieusement.
+    #[test]
+    fn un_papier_qui_ne_recouvre_pas_toutes_les_reliures_composables_est_refuse() {
+        const RIGIDE: &str = r#"
+[[reliure]]
+cle = "rigide"
+nom = "Rigide"
+geometrie = "dos-carre-colle"
+pages = { min = 24, max = 300 }
+parite = "paire"
+"#;
+        // Recouvre la broche (24–900) mais pas la rigide (24–300).
+        let p = format!("{PAPIER}pages = {{ min = 400, max = 800 }}\n");
+        let err = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, RIGIDE, &p])).unwrap_err();
+        assert!(err.contains("creme-90"), "{err}");
+        assert!(
+            err.contains("rigide"),
+            "le refus doit nommer la reliure fautive : {err}"
+        );
+
+        // Le même papier, élargi pour recouvrir les deux, passe.
+        let p = format!("{PAPIER}pages = {{ min = 200, max = 800 }}\n");
+        assert!(Pod::depuis_toml(&pod(&[FORMAT, RELIURE, RIGIDE, &p])).is_ok());
     }
 
     /// Deux tranches qui se chevauchent, et l'appelant prend la première qui correspond :
