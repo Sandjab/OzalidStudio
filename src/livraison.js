@@ -109,12 +109,20 @@ function afficherLivrables() {
   const box = $('livrables');
   box.replaceChildren();
   const declares = projet.livraison.livrables;
+  // Périmé, ou seulement pas encore mesuré : la nuance se tranche pour toutes les lignes
+  // à la fois, parce qu'une modification qui repagine efface **toutes** les mesures d'un
+  // coup (`Livraison::oublier_mesures`). Ligne à ligne, le test du pied — le livre a été
+  // composé et cette ligne n'a pas de mesure — dirait rouge sur un gabarit qu'on vient
+  // d'ajouter à un livre déjà composé, et sur tous ceux que la dernière composition n'a
+  // pas visés : composer ne mesure que le gabarit courant. Ceux-là n'ont rien perdu.
+  const perimees = projet.livraison.deja_compose && declares.every((x) => !x.compose);
   for (const d of declares) {
     const p = providers.find((pr) => pr.cle === d.gabarit);
     const pod = pods.find((x) => x.cle === d.pod);
     const ligne = h('div', undefined, 'livrable');
     let releve;
     let raison;
+    let mesure;
     ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
 
     if (pod) {
@@ -188,6 +196,7 @@ function afficherLivrables() {
         if (!dosPublie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
         if (p?.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
       }
+      mesure = noteMesure(d, dosPublie, perimees);
       if (p) ligne.append(h('span', noteFormat(p), 'note'));
     }
 
@@ -201,6 +210,7 @@ function afficherLivrables() {
       afficherProjet(await invoke('livrable_retirer', { cle: d.cle }))));
     ligne.append(retirer);
     if (releve) ligne.append(releve);
+    if (mesure) ligne.append(mesure);
     if (raison) ligne.append(raison);
     box.append(ligne);
   }
@@ -247,6 +257,43 @@ function afficherFormatsDuPod() {
   // l'emporte de lui-même : un format que le nouveau ne porte pas ne se retrouve pas.
   if (p?.formats.some((f) => f.cle === choisi)) sel.value = choisi;
   sel.disabled = !p || p.formats.length < 2;
+}
+
+/**
+ * Ce que la composition a mesuré pour ce livrable, ou pourquoi elle ne l'a pas mesuré.
+ *
+ * Un rang à soi sous la ligne, et non un ajout à la note du format : le format et le
+ * fond perdu viennent du catalogue — connus sans rien composer, jamais périmés —, quand
+ * pages, gouttière et dos viennent d'une composition qui n'a pas forcément eu lieu. Les
+ * coudre dans la même phrase donnerait à lire comme également su ce qui ne l'est pas.
+ *
+ * Les décimales sont celles du compte rendu de package, plus bas dans le même onglet :
+ * gouttière au dixième, dos au centième. Le pied fait l'inverse — un écart qui lui
+ * appartient, et que ce lot ne corrige pas.
+ */
+function noteMesure(d, dosPublie, perimees) {
+  const ligne = h('p', undefined, 'note mesure');
+  ligne.id = `liv-mesure-${d.cle}`;
+  if (!d.compose) {
+    // Une mesure périmée réclame une recomposition, une mesure jamais faite ne réclame
+    // rien : c'est toute la différence, et c'est pour elle que l'une est rouge.
+    ligne.textContent = perimees ? 'mesure périmée' : 'non composé';
+    if (perimees) ligne.className = 'note alerte mesure';
+    return ligne;
+  }
+  // Le dos calculé là où le papier publie sa formule ; ailleurs le relevé fait sur le
+  // gabarit, nommé comme tel — sans quoi il se lirait comme un chiffre que l'application
+  // aurait trouvé seule. Et rien du tout si rien n'a été relevé : un dos absent ne
+  // devient pas zéro parce que la pagination, elle, est connue.
+  const dos = dosPublie ? d.compose.dos : d.dos_mm;
+  ligne.textContent = [
+    `${d.compose.pages} pages`,
+    `gouttière ${nb(d.compose.gouttiere, 1)} mm`,
+    ...(dos === null || dos === undefined
+      ? []
+      : [`dos ${nb(dos)} mm${dosPublie ? '' : ' (relevé)'}`]),
+  ].join(' · ');
+  return ligne;
 }
 
 function noteFormat(p) {

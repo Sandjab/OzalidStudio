@@ -658,6 +658,111 @@ test('le relevé de dos suit le papier, pas le POD', async () => {
   );
 });
 
+/* ---------- ce que la composition a mesuré, ligne à ligne ---------- */
+
+/**
+ * Le format et le fond perdu viennent du catalogue : ils se lisent sans rien composer.
+ * Les trois autres chiffres viennent d'une composition, et c'est pour eux que la ligne
+ * porte un second rang — les coudre dans la note du format donnerait à lire comme
+ * également su ce qui ne l'est pas.
+ */
+test('une ligne mesurée donne ses pages, sa gouttière et son dos', async () => {
+  const { els } = await ouvre([LULU], { composer: COMPOSITION });
+  await faireComposer(els);
+  assert.strictEqual(
+    els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
+    '262 pages · gouttière 25,0 mm · dos 16,51 mm'
+  );
+});
+
+/**
+ * Un livrable qu'aucune composition n'a touché ne chiffre rien : un nombre de pages
+ * inventé se lirait comme une pagination, et c'est sur elle que le dos se calcule.
+ */
+test('une ligne jamais composée ne chiffre rien', async () => {
+  const { els } = await ouvre([LULU]);
+  const mesure = els.get('liv-mesure-lulu-108x175-broche-standard');
+  assert.strictEqual(mesure.textContent, 'non composé');
+  assert.doesNotMatch(mesure.className, /alerte/, 'rien n\'est périmé, rien n\'a été composé');
+});
+
+/**
+ * **Le test qui protège la nuance du lot.** Le pied reconnaît un dos périmé à
+ * `deja_compose && !compose`, et c'est juste pour le seul livrable visé. Ligne à ligne,
+ * ce test-là est faux : composer l'intérieur ne mesure que le gabarit visé, et les
+ * autres lignes deviendraient rouges alors qu'elles n'ont jamais été composées.
+ *
+ * Comme une modification efface **toutes** les mesures d'un coup, la péremption se
+ * reconnaît à ce qu'aucune ligne n'en porte plus.
+ */
+test('un gabarit non encore composé ne se lit pas périmé', async () => {
+  const { els } = await ouvre([LULU, KDP], { composer: COMPOSITION }, {
+    livrables: [chez(LULU), chez(KDP)],
+  });
+  await faireComposer(els);
+  assert.match(
+    els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
+    /262 pages/,
+    'le gabarit visé est le seul que composer mesure'
+  );
+  const kdp = els.get('liv-mesure-kdp-6x9-broche-creme');
+  assert.strictEqual(kdp.textContent, 'non composé');
+  assert.doesNotMatch(kdp.className, /alerte/, 'un gabarit jamais composé n\'est pas périmé');
+});
+
+/**
+ * Changer la police repagine : le Rust oublie toutes les mesures, et les lignes ne
+ * doivent plus donner à lire les chiffres d'avant. L'alerte est ce qui distingue « pas
+ * encore » de « plus vrai », et c'est la seconde qui réclame une recomposition.
+ *
+ * Lu avant que la recomposition automatique n'aboutisse — c'est exactement la fenêtre
+ * où un écran qui garderait ses chiffres mentirait.
+ */
+test('une modification qui repagine périme toutes les lignes', async () => {
+  const { els } = await ouvre([LULU, KDP], { composer: COMPOSITION }, {
+    livrables: [chez(LULU), chez(KDP)],
+  });
+  await faireComposer(els);
+
+  els.get('inPoliceInterieur').value = 'Cardo';
+  await els.get('inPoliceInterieur').declenche('change');
+  await attendreApercu();
+
+  for (const cle of ['lulu-108x175-broche-standard', 'kdp-6x9-broche-creme']) {
+    const mesure = els.get(`liv-mesure-${cle}`);
+    assert.strictEqual(mesure.textContent, 'mesure périmée', cle);
+    assert.match(mesure.className, /alerte/, `${cle} : la péremption doit se voir`);
+  }
+});
+
+/**
+ * Chez un POD dont le papier ne publie pas sa formule — aucun des six fournis, mais un
+ * fichier déposé dans `<config>/pods/` le peut —, le dos n'est pas calculé : c'est le
+ * relevé fait sur le gabarit qui vaut. La ligne le reprend et dit qu'il est relevé,
+ * sans quoi il se lirait comme un chiffre que l'application aurait trouvé seule.
+ */
+test('un papier sans formule reprend le dos relevé, et le dit', async () => {
+  const mesuree = (sur) => ({
+    ...chez(COOLLIBRI),
+    compose: { pages: 262, gouttiere: 25, blanche: true, dos: null },
+    ...sur,
+  });
+
+  const { els } = await ouvre([COOLLIBRI], {}, { livrables: [mesuree({ dos_mm: 16.6 })] });
+  assert.strictEqual(
+    els.get('liv-mesure-coollibri-148x210-broche-mesure').textContent,
+    '262 pages · gouttière 25,0 mm · dos 16,60 mm (relevé)'
+  );
+
+  // Rien de relevé, rien à dire : un dos absent ne devient pas zéro parce que la
+  // pagination, elle, est connue.
+  const { els: vide } = await ouvre([COOLLIBRI], {}, { livrables: [mesuree()] });
+  assert.strictEqual(
+    vide.get('liv-mesure-coollibri-148x210-broche-mesure').textContent,
+    '262 pages · gouttière 25,0 mm'
+  );
+});
+
 /* ---------- les relevés ---------- */
 
 test('un relevé saisi part au projet, avec le papier de la ligne', async () => {

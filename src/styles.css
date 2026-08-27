@@ -1140,6 +1140,13 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    gabarit — alors qu'elle dit ce que l'application ne compose pas. Après `.note` dans
    le fichier, à spécificité égale : c'est cet ordre-là qui reprend l'alignement. */
 .livrable .raison { flex-basis: 100%; text-align: left; }
+/* Ce que la composition a mesuré prend un rang à soi, fer à gauche, pour la même raison
+   que la raison d'une reliure non outillée : sans le `flex-basis` entier, ses trois
+   chiffres iraient se serrer contre la note de format, à droite, où ils se liraient
+   comme une suite des caractéristiques du gabarit — alors qu'ils viennent d'une
+   composition, et qu'une modification peut les effacer. Après `.livrable .note` dans le
+   fichier, à spécificité égale : c'est cet ordre-là qui reprend l'alignement. */
+.livrable .mesure { flex-basis: 100%; text-align: left; }
 
 /* Relevés d'un imprimeur à gabarit : côte à côte, sur une ligne à eux. Le
    `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte
