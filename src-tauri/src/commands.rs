@@ -1107,8 +1107,8 @@ pub fn couverture_apercu(
         .maquette
         .as_ref()
         .ok_or("aucune maquette : en choisir une.")?;
-    // Le format vient du livrable visé, et le fond perdu de son relevé quand le
-    // imprimeur n'en publie pas : les deux sont dans le projet, plus dans un champ.
+    // Le format vient du livrable visé, et le fond perdu de son relevé quand
+    // l'imprimeur n'en publie pas : les deux sont dans le projet, plus dans un champ.
     let (pr, _, d) = vise(o)?;
     let fond_perdu_mm = d.fond_perdu_mm;
 

@@ -1805,8 +1805,8 @@ mod tests {
         assert!((largeur_zone(17.43) - (2.0 * FORMAT.0 + 17.43)).abs() < 0.01);
     }
 
-    /// La zone ISBN est laissée vide et blanche : le code-barres est posé par le
-    /// imprimeur. En imprimer un serait le pire des services.
+    /// La zone ISBN est laissée vide et blanche : le code-barres est posé par
+    /// l'imprimeur. En imprimer un serait le pire des services.
     #[test]
     fn la_zone_isbn_est_un_rectangle_blanc_vide() {
         let mut cv = maquettes::fournie("bandeau");

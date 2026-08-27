@@ -681,8 +681,8 @@ test('une écriture déjà chargée ne se redemande pas, une autre si', async ()
 });
 
 /**
- * Le cœur du projet : le dos ne doit jamais apparaître comme un nombre quand le
- * imprimeur n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
+ * Le cœur du projet : le dos ne doit jamais apparaître comme un nombre quand
+ * l'imprimeur n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
  * planche fausse à l'impression sans que rien ne l'ait signalé.
  */
 test('un imprimeur sans formule n\'affiche jamais de dos chiffré', async () => {

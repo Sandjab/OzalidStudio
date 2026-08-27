@@ -2269,7 +2269,7 @@ non_outille = "géométrie du casewrap non relevée"
     /// contrôle sur les valeurs des six fournis : l'un dit ce qu'un TOML a le droit
     /// d'écrire, l'autre ce que les nôtres écrivent. Ils ne se remplacent pas.
     #[test]
-    fn chaque_pod_a_un_papier_par_defaut_et_des_bornes_coherentes() {
+    fn chaque_gabarit_a_un_papier_par_defaut_et_des_bornes_coherentes() {
         for pr in providers() {
             assert!(!pr.papiers.is_empty(), "{} sans papier", pr.cle);
             assert!(pr.pages_min < pr.pages_max, "{} : bornes inversées", pr.cle);
