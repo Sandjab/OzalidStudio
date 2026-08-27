@@ -194,7 +194,9 @@ pub struct Papier {
     ///
     /// Absent chez le cas courant : c'est la reliure qui borne, et un papier n'a rien à
     /// redire. Présent chez BoD, dont le photo brillant 130 g plafonne à 868 pages là où
-    /// le broché va à 900 — une contrainte de l'épaisseur du papier, pas du collage.
+    /// le broché va à 900 — une valeur relevée sans raison publiée, et non une question
+    /// d'épaisseur : le photo brillant est au contraire le plus mince des quatre papiers
+    /// de BoD.
     ///
     /// Les deux bornes se **croisent**, elles ne se remplacent pas : le livrable admet ce
     /// que la reliure et le papier admettent tous deux.

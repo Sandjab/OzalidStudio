@@ -120,10 +120,12 @@ détermine — TheBookEdition accepte 40 à 750 pages en dos carré collé et 24
 au même format. Les tranches de `gouttieres` du format ne sont que des tranches de marge
 intérieure ; hors tranche, on refuse plutôt qu'extrapoler, comme aujourd'hui.
 
-**Le papier peut la resserrer, jamais l'élargir.** `Papier.pages` est optionnel et ne sert
-que quand l'épaisseur du papier impose un plafond plus bas que celui de la reliure — BoD
-plafonne son photo brillant 130 g à 868 pages là où son broché va à 900. Les deux bornes se
-**croisent** : le livrable admet ce que la reliure et le papier admettent tous deux.
+**Le papier peut la resserrer, jamais l'élargir.** `Papier.pages` est optionnel et porte un
+plafond propre au papier, pour la raison que l'imprimeur choisit de lui donner — pas
+nécessairement l'épaisseur : BoD plafonne son photo brillant 130 g à 868 pages là où son
+broché va à 900, sans publier la cause de cette valeur, et le photo brillant est au
+contraire le plus mince des quatre papiers de sa table. Les deux bornes se **croisent** :
+le livrable admet ce que la reliure et le papier admettent tous deux.
 
 Trois règles d'écriture, qui prolongent celle qui tient déjà la table :
 
