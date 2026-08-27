@@ -53,6 +53,31 @@ async function afficherRefusCatalogue() {
 }
 
 /**
+ * Ce que l'ouverture a retiré de la liste.
+ *
+ * Même traitement que les fichiers de catalogue refusés, et à la suite : on ne peut pas
+ * rétablir un livrable dont le catalogue ne porte plus l'axe, mais on peut dire lequel.
+ * Sans ce mot, un livrable réglé disparaît entre deux ouvertures et le livre paraît
+ * s'être défait tout seul.
+ *
+ * Muet quand rien n'a été retiré — presque toujours : une boîte qui s'afficherait vide
+ * à chaque ouverture serait pire que le silence qu'elle corrige.
+ */
+function majElagues(vue) {
+  const partis = vue.elagues ?? [];
+  const box = $('livrablesElagues');
+  box.hidden = partis.length === 0;
+  // La cause dans la phrase, comme les refus la donnent : c'est elle qui dit où aller
+  // corriger — un fichier de `pods/` du poste, ou un livre venu d'une machine mieux
+  // pourvue. Sans elle, la disparition se lirait comme une perte du fichier lui-même.
+  box.textContent = box.hidden
+    ? ''
+    : `${partis.length > 1 ? 'Livrables retirés' : 'Livrable retiré'} à l'ouverture, `
+      + `faute de catalogue qui ${partis.length > 1 ? 'les porte' : 'le porte'} encore : `
+      + `${partis.join(', ')}. Le reste du livre est intact.`;
+}
+
+/**
  * La liste des livrables du livre, et de quoi en ajouter un.
  *
  * Une ligne par livrable : ses trois réglages — reliure, finition, papier —, le format

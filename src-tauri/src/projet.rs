@@ -406,16 +406,27 @@ impl Livraison {
         self.mesures.get(cle_gabarit)
     }
 
-    /// Remet la liste d'accord avec le catalogue.
+    /// Remet la liste d'accord avec le catalogue, et **rend ce qu'elle a retiré**.
     ///
     /// Un `.ozalid` peut nommer un POD, un format, une reliure ou un papier que le
     /// catalogue ne porte plus, ou le même livrable deux fois. Élaguer vaut mieux que
     /// refuser d'ouvrir : le reste du projet — le manuscrit, la maquette — est intact,
     /// et la liste des livrables se refait en trois clics. C'est le même arbitrage que
     /// les projets récents dont le fichier a disparu.
-    fn normalise(&mut self) {
+    ///
+    /// Mais élaguer sans le dire laisse croire que le livre s'est défait tout seul : un
+    /// fichier de `<config>/pods/` réécrit, ou un `.ozalid` venu d'une autre machine,
+    /// font disparaître un livrable réglé entre deux ouvertures. La liste rendue remonte
+    /// donc jusqu'à l'écran, qui la montre comme il montre les fichiers de catalogue
+    /// refusés.
+    ///
+    /// Deux choses n'y figurent pas, et ce n'est pas un oubli. Le repli de papier n'est
+    /// pas un élagage : le livrable reste, sous un autre papier. Le doublon non plus :
+    /// c'est le même livrable, il est toujours dans la liste.
+    fn normalise(&mut self) -> Vec<String> {
         let mut vus = std::collections::BTreeSet::new();
         let vise = self.courant.clone();
+        let mut elagues = Vec::new();
         // Le pointeur porte le papier depuis la v5 : un repli d'office renomme le
         // livrable visé, et sans ce rattrapage `courant` ne le retrouverait plus — il
         // sauterait sur le premier de la liste, faisant rouvrir le livre sur quelqu'un
@@ -427,11 +438,16 @@ impl Livraison {
                 // les trois autres partis — ou la reliure plus outillée —, le livrable
                 // ne désigne plus rien de composable.
                 let Some(pod) = crate::catalogue::pod(&l.fabrication.pod) else {
+                    elagues.push(l.cle());
                     return false;
                 };
                 let avant = l.cle();
                 l.fabrication.papier = pod.papiers[0].cle.clone();
                 if crate::catalogue::resout(&l.fabrication).is_err() {
+                    // Sous la clé que le `.ozalid` portait, et non sous celle que le
+                    // repli vient d'écrire : une clé que personne n'a jamais vue à
+                    // l'écran n'aiderait pas à retrouver ce qui a disparu.
+                    elagues.push(avant);
                     return false;
                 }
                 if avant == vise {
@@ -467,6 +483,7 @@ impl Livraison {
         } else if self.courant().is_none() {
             self.courant = self.livrables[0].cle();
         }
+        elagues
     }
 }
 
@@ -512,6 +529,15 @@ pub struct Projet {
     /// `Envoi::image` : c'est ce lien-là, et non l'ordre de la liste, qui garantit
     /// qu'un exemplaire ne part pas avec le mot d'un autre.
     pub images_envois: BTreeMap<String, Vec<u8>>,
+    /// Les livrables que l'ouverture a retirés faute de catalogue qui les porte encore.
+    ///
+    /// **Hors du `.ozalid`** : le fichier, c'est `meta`, et rien d'autre n'y descend.
+    /// C'est un fait de cette ouverture-ci, sur cette machine-ci, et le réécrire dans
+    /// l'archive le ferait resurgir sur une autre où le catalogue est complet.
+    ///
+    /// Vide partout ailleurs qu'au retour de `lire` : un projet neuf, ou importé, n'a
+    /// rien perdu.
+    pub elagues: Vec<String>,
 }
 
 /// Remonte au livre les textes qu'un projet en version 2 rangeait dans la maquette.
@@ -708,6 +734,7 @@ impl Projet {
             images: BTreeMap::new(),
             polices: BTreeMap::new(),
             images_envois: BTreeMap::new(),
+            elagues: Vec::new(),
         }
     }
 
@@ -922,7 +949,7 @@ impl Projet {
             ));
         }
         let mut meta: Metadonnees = migre(valeur)?;
-        meta.livraison.normalise();
+        let elagues = meta.livraison.normalise();
 
         let texte = fichier(&mut zip, MANUSCRIT_MD)?
             .ok_or_else(|| format!("archive sans {MANUSCRIT_MD}."))?;
@@ -964,6 +991,7 @@ impl Projet {
             images,
             polices,
             images_envois,
+            elagues,
         };
         // La famille de la police personnelle est relevée dans le fichier embarqué, et
         // non lue dans le TOML : un `.ozalid` dont on aurait retiré la police, ou dont
@@ -2003,6 +2031,48 @@ blanche = true
         assert_eq!(
             l.courant, "lulu-108x175-broche-standard",
             "le pointeur désigne un absent"
+        );
+    }
+
+    /// Élaguer un livrable se dit. C'est la seule trace qu'un `.ozalid` ouvert sur une
+    /// machine dont le catalogue a changé laisse à qui le rouvre : sans elle, un
+    /// livrable réglé disparaît entre deux ouvertures et le livre paraît s'être défait
+    /// tout seul.
+    ///
+    /// Les trois sorties du tri dans un seul cas, parce que c'est leur **différence**
+    /// qui compte : le POD parti et la reliure non outillée sont des pertes et se
+    /// nomment ; le papier qui retombe sur celui d'office n'en est pas une — le
+    /// livrable reste, sous un autre papier — et se taire là-dessus vaut autant que
+    /// parler des deux premiers.
+    #[test]
+    fn un_livrable_elague_est_nomme() {
+        let mut l = Livraison {
+            livrables: vec![
+                Livrable::pour(fab("bod", "135x215", "broche", "creme-90")),
+                Livrable::pour(fab("pod-parti", "135x215", "broche", "creme-90")),
+                Livrable::pour(fab("bod", "135x215", "rigide", "creme-90")),
+                Livrable::pour(fab("kdp", "6x9", "broche", "nacre-introuvable")),
+            ],
+            courant: "bod-135x215-broche-creme-90".into(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+
+        let elagues = l.normalise();
+
+        assert_eq!(l.livrables.len(), 2, "les livrables orphelins partent");
+        assert_eq!(elagues.len(), 2, "et ils sont nommés : {elagues:?}");
+        assert!(
+            elagues.iter().any(|e| e.contains("pod-parti")),
+            "le message doit permettre de retrouver le POD disparu : {elagues:?}"
+        );
+        assert!(
+            elagues.iter().any(|e| e.contains("rigide")),
+            "la reliure non outillée est une perte, elle aussi : {elagues:?}"
+        );
+        assert!(
+            !elagues.iter().any(|e| e.contains("nacre-introuvable")),
+            "un papier retombé sur celui d'office n'est pas une perte : {elagues:?}"
         );
     }
 

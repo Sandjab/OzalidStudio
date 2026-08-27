@@ -1139,6 +1139,35 @@ test('l\'onglet Livraison ne meuble pas', async () => {
 });
 
 /**
+ * L'ouverture élague les livrables que le catalogue ne porte plus — un fichier de
+ * `pods/` du poste réécrit, un livre venu d'une autre machine. Sans ce mot, le livrable
+ * réglé disparaît entre deux ouvertures et le livre paraît s'être défait tout seul.
+ */
+test('les livrables retirés à l\'ouverture sont nommés à l\'écran', async () => {
+  const a = atelier({ sur: { elagues: ['bod-135x215-broche-papier-parti'] } });
+  const { els } = await charge({ invoke: a.invoke });
+
+  await els.get('btNouveau').declenche('click');
+
+  assert.equal(els.get('livrablesElagues').hidden, false);
+  assert.match(els.get('livrablesElagues').textContent, /papier-parti/);
+});
+
+/**
+ * Le cas de presque toutes les ouvertures. Une boîte qui s'afficherait vide à chaque
+ * fois serait pire que le silence qu'on corrige : elle apprendrait à ne plus la lire.
+ */
+test('sans rien de retiré, la boîte des élagués se tait', async () => {
+  const a = atelier();
+  const { els } = await charge({ invoke: a.invoke });
+
+  await els.get('btNouveau').declenche('click');
+
+  assert.equal(els.get('livrablesElagues').hidden, true);
+  assert.equal(els.get('livrablesElagues').textContent, '');
+});
+
+/**
  * Les sous-libellés appartiennent au livre ouvert. Refermé, « 12 chapitres » resterait
  * sous l'accueil, où plus rien ne dit de quel livre il parlait — et le témoin de la
  * Couverture y réclamerait une maquette pour un projet qui n'existe plus.

@@ -230,6 +230,10 @@ pub struct ProjetVue {
     /// **vue** depuis la v5 : `compose` y est recalculée par livrable, la donnée range
     /// la mesure sous le gabarit.
     pub livraison: LivraisonVue,
+    /// Les livrables que l'ouverture a retirés faute de catalogue qui les porte encore.
+    /// Vide partout ailleurs — un projet neuf n'a rien perdu — et l'écran se tait alors,
+    /// comme il se tait sur les fichiers de catalogue refusés quand il n'y en a pas.
+    pub elagues: Vec<String>,
     /// La main du livre et ses envois. Toujours sérialisée, même vide : le front y
     /// lit la liste sans avoir à se demander si la section existe.
     pub envois: crate::envoi::Envois,
@@ -2273,6 +2277,7 @@ fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
         interieur: o.projet.meta.interieur.clone(),
         interieur_pdf,
         livraison: livraison_vue(&o.projet.meta.livraison),
+        elagues: o.projet.elagues.clone(),
         envois: o.projet.meta.envois.clone(),
     })
 }

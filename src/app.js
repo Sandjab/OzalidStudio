@@ -616,6 +616,7 @@ function afficherProjet(p) {
   if (p.couverture) afficherCouverture(p.couverture);
   else poserDisposition(false);
   afficherLivrables();
+  majElagues(p);
   afficherEnvois();
   demanderApercu();
   majPied();
