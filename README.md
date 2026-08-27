@@ -1,4 +1,4 @@
-# Ozalid Studio
+![Ozalid Studio — du manuscrit à l'imprimeur](docs/banniere.png)
 
 Ozalid Studio transforme un manuscrit en fichiers prêts pour l'imprimeur. Vous fournissez
 un texte et une idée de couverture. L'application rend l'intérieur composé, la couverture,
