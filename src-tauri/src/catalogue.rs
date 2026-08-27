@@ -1964,13 +1964,14 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
     /// clé de gabarit, son libellé, son papier par défaut — le triplet du livrable qu'on
     /// obtient en l'ajoutant depuis la liste —, dans l'ordre des `FOURNIS`.
     ///
-    /// Le compte n'est pas figé ici : un POD qui publie un format de plus en ajoute une
-    /// entrée sans que ce soit une régression. Ce que ce test protège, c'est l'**ordre**
-    /// — celui des `FOURNIS`, puis celui d'écriture des formats dans chaque fichier, dont
-    /// dépend `Pod::fabrication_defaut` — et le **contenu** de chaque entrée : la clé,
-    /// le libellé du POD et du format, le papier par défaut. Ni l'un ni les autres ne
-    /// voient un `nom` de POD réécrit, un format réordonné ou deux fichiers fournis
-    /// permutés — les trois passeraient un test qui ne compterait que des entrées.
+    /// Ce que ce test protège, ce n'est pas le compte : c'est l'**ordre** — celui des
+    /// `FOURNIS`, puis celui d'écriture des formats dans chaque fichier, dont dépend
+    /// `Pod::fabrication_defaut` — et le **contenu** de chaque entrée : la clé, le
+    /// libellé du POD et du format, le papier par défaut. Ni l'un ni les autres ne se
+    /// voient sur un `nom` de POD réécrit, un format réordonné ou deux fichiers fournis
+    /// permutés — un test qui ne compterait que des entrées les laisserait passer. Le
+    /// prix assumé : `assert_eq!` compare la liste entière, donc un POD qui publie un
+    /// format de plus coûte une ligne de plus ici, à ajouter au bon endroit.
     #[test]
     fn la_liste_plate_garde_ses_libelles_dans_l_ordre() {
         let vue: Vec<(&str, &str, &str)> = providers()

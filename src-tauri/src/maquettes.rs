@@ -912,37 +912,45 @@ mod tests {
     /// deux ne varient donc pas ensemble d'un format à l'autre, et un pied qui dégage le
     /// filet en poche peut le traverser en A4.
     ///
-    /// La maquette Filets porte 17,5 %, et non les 11 % du CSS de l'atelier : c'est le
-    /// seul écart assumé vis-à-vis d'`index.html`, qui a le défaut et ne l'a pas vu. Ce
-    /// n'est pas non plus un choix esthétique — c'est le minimum qui dégage le filet sur
-    /// toute la table, imposé par le 21 × 15 de BoD (lot 4), le format le plus
-    /// contraignant : au-delà du seuil de sécurité que ce test vérifie, il ne reste que
-    /// 0,28 mm de marge sur ce format-là. Sur les formats hauts, à l'inverse, ce même
-    /// pourcentage est déjà large — 17,5 % d'un 21 × 29,7 met le pied à plus de 50 mm du
-    /// bas. L'archive porte la valeur, ce test la borne sur tous les formats de la
-    /// table — c'est ici, et nulle part ailleurs, que la raison de ce 17,5 est écrite :
-    /// ne pas la baisser sans refaire ce calcul, la marge sur le 21 × 15 ne le supporte
-    /// pas.
+    /// La maquette Filets porte 17,5 %, et non les 11 % de Bandeau et Surimpression : ce
+    /// n'est pas un choix esthétique, c'est le minimum qui dégage le filet sur toute la
+    /// table, imposé par le 21 × 15 de BoD (lot 4), le format le plus contraignant :
+    /// au-delà du seuil de sécurité que ce test vérifie, il ne reste que 0,28 mm de marge
+    /// sur ce format-là. Sur les formats hauts, à l'inverse, ce même pourcentage est déjà
+    /// large — 17,5 % d'un 21 × 29,7 met le pied à plus de 50 mm du bas. L'archive porte
+    /// la valeur, ce test la borne sur tous les formats de la table — c'est ici, et nulle
+    /// part ailleurs, que la raison de ce 17,5 est écrite : ne pas la baisser sans refaire
+    /// ce calcul, la marge sur le 21 × 15 ne le supporte pas.
     #[test]
     fn le_pied_editeur_ne_traverse_jamais_le_cadre() {
-        let cv = fournie("filets");
-        let c = &cv.cadre;
-        for pr in crate::catalogue::providers() {
-            let (fw, fh) = pr.format;
-            // Bord intérieur du filet le plus bas, mesuré depuis le bas de la couverture.
-            // Le cadre étant concentrique, c'est la même distance qu'en haut.
-            let filet = c.marge / 100.0 * fh
-                + c.filet1_epaisseur / 100.0 * fw
-                + c.decroche / 100.0 * fw
-                + c.filet2_epaisseur / 100.0 * fw
-                + c.ecart / 100.0 * fw
-                + c.filet2_epaisseur / 100.0 * fw;
-            let pied = cv.pied.y / 100.0 * fh;
-            assert!(
-                pied > filet + 0.5,
-                "{} : pied à {pied:.2} mm du bas, filet à {filet:.2} mm",
-                pr.cle
-            );
+        // Les trois fournies, pas seulement Filets : Bandeau partage le même cadre à
+        // filets, avec un pied à 11 % — sous le seuil que ce test vient de juger
+        // insuffisant. Son pied est inactif aujourd'hui, d'où le passage plus bas ; le
+        // jour où quelqu'un l'allume, c'est cette boucle qui doit le rattraper.
+        for cle in ["bandeau", "filets", "surimpression"] {
+            let cv = fournie(cle);
+            let c = &cv.cadre;
+            if !c.actif || !cv.pied.actif {
+                continue;
+            }
+            for pr in crate::catalogue::providers() {
+                let (fw, fh) = pr.format;
+                // Bord intérieur du filet le plus bas, mesuré depuis le bas de la
+                // couverture. Le cadre étant concentrique, c'est la même distance qu'en
+                // haut.
+                let filet = c.marge / 100.0 * fh
+                    + c.filet1_epaisseur / 100.0 * fw
+                    + c.decroche / 100.0 * fw
+                    + c.filet2_epaisseur / 100.0 * fw
+                    + c.ecart / 100.0 * fw
+                    + c.filet2_epaisseur / 100.0 * fw;
+                let pied = cv.pied.y / 100.0 * fh;
+                assert!(
+                    pied > filet + 0.5,
+                    "{cle} / {} : pied à {pied:.2} mm du bas, filet à {filet:.2} mm",
+                    pr.cle
+                );
+            }
         }
     }
 
