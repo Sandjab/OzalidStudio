@@ -1150,7 +1150,28 @@ test('les livrables retirés à l\'ouverture sont nommés à l\'écran', async (
   await els.get('btNouveau').declenche('click');
 
   assert.equal(els.get('livrablesElagues').hidden, false);
-  assert.match(els.get('livrablesElagues').textContent, /papier-parti/);
+  const dit = els.get('livrablesElagues').textContent;
+  assert.match(dit, /papier-parti/);
+  assert.match(dit, /Livrable retiré/, `accord au singulier : ${dit}`);
+  assert.match(dit, /qui le porte/, `accord au singulier : ${dit}`);
+  // Ce qu'on peut faire est la moitié utile du message, comme « relancer » l'est pour
+  // les fichiers refusés : sans elle, la phrase n'est qu'un constat de perte.
+  assert.match(dit, /rajouter/, `la conséquence manque : ${dit}`);
+});
+
+/** Deux élagués : la phrase s'accorde, et rien d'autre ne le vérifie. */
+test('la phrase des élagués s\'accorde au pluriel', async () => {
+  const a = atelier({
+    sur: { elagues: ['bod-135x215-broche-papier-parti', 'kdp-6x9-rigide-creme'] },
+  });
+  const { els } = await charge({ invoke: a.invoke });
+
+  await els.get('btNouveau').declenche('click');
+
+  const dit = els.get('livrablesElagues').textContent;
+  assert.match(dit, /Livrables retirés/, `accord au pluriel : ${dit}`);
+  assert.match(dit, /qui les porte/, `accord au pluriel : ${dit}`);
+  assert.match(dit, /les rajouter/, `accord au pluriel : ${dit}`);
 });
 
 /**
@@ -1165,6 +1186,26 @@ test('sans rien de retiré, la boîte des élagués se tait', async () => {
 
   assert.equal(els.get('livrablesElagues').hidden, true);
   assert.equal(els.get('livrablesElagues').textContent, '');
+});
+
+/**
+ * La boîte ne suffit pas : elle vit dans la Livraison, et l'application ouvre sur le
+ * Livre. Qui rouvre un livre amputé n'a aucune raison d'aller voir cette étape —
+ * contrairement aux fichiers de catalogue refusés, qu'on va consulter parce qu'on
+ * cherche l'imprimeur qui manque, il ignore qu'il a perdu quelque chose. Le témoin de
+ * l'onglet est le seul signe qui l'y mène, et il doit se voir depuis le Livre.
+ */
+test('un livrable élagué allume l\'onglet Livraison depuis le Livre', async () => {
+  const a = atelier({ sur: { elagues: ['bod-135x215-broche-papier-parti'] } });
+  const { els } = await charge({ invoke: a.invoke });
+
+  await els.get('btNouveau').declenche('click');
+
+  // L'étape ouverte est bien celle qui ne montre pas la boîte : sans cette ligne, le
+  // test passerait aussi dans un écran qui ouvrirait sur la Livraison, où le témoin
+  // n'aurait plus rien à apprendre à personne.
+  assert.deepEqual(montree(els), ['livre']);
+  assert.equal(alerte(els, 'livraison'), true);
 });
 
 /**

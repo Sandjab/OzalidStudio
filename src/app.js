@@ -263,8 +263,11 @@ function etatEtapes(p) {
       alerte: !p.couverture,
     },
     // Rien de vrai à dire avant qu'un package n'ait été généré, et le pied porte déjà
-    // le dos : mieux vaut se taire que meubler.
-    livraison: { sous: '', alerte: false },
+    // le dos : mieux vaut se taire que meubler. Le témoin, lui, a une chose vraie à
+    // dire — et une seule : l'ouverture a retiré un livrable. La boîte qui le nomme vit
+    // dans la Livraison, l'application ouvre sur le Livre, et personne ne va vérifier
+    // une liste qu'il ne sait pas amputée. Le témoin est le seul signe qui y mène.
+    livraison: { sous: '', alerte: (p.elagues ?? []).length > 0 },
     // Le compte des envois est la seule chose vraie que le projet porte ici ; zéro
     // n'est pas une anomalie, donc pas un mot et jamais de témoin.
     envois: {

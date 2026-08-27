@@ -280,6 +280,35 @@ test('chaque commande appelée par le front est déclarée au Rust', () => {
   );
 });
 
+/* ---------- commands.rs → livraison.js ---------- */
+
+/**
+ * `ProjetVue` doit continuer de porter `elagues`.
+ *
+ * `majElagues` le lit derrière un `?? []`, et ce repli est nécessaire : les fixtures des
+ * autres suites ne portent pas le champ. Mais il est aussi une trappe. Le front ne peut
+ * pas distinguer « champ absent de la vue » de « rien n'a été élagué » — les deux
+ * donnent une boîte muette. `elagues` retiré de `ProjetVue`, les deux suites resteraient
+ * vertes et le livrable recommencerait à disparaître en silence, ce que ce champ existe
+ * précisément pour empêcher. C'est le seul lien que rien d'autre ne tient.
+ *
+ * Le bloc de la structure, et non tout `commands.rs` : ailleurs, un commentaire qui
+ * citerait le champ suffirait à rendre vert une vue qui ne le porte plus.
+ */
+test('la vue du projet porte encore les livrables élagués', () => {
+  const rust = source('src-tauri', 'src', 'commands.rs');
+  const debut = rust.indexOf('pub struct ProjetVue {');
+  assert.notEqual(debut, -1, 'ProjetVue introuvable dans commands.rs');
+  const fin = rust.indexOf('\n}', debut);
+  assert.notEqual(fin, -1, 'ProjetVue sans fin');
+  assert.match(
+    rust.slice(debut, fin),
+    /pub elagues: Vec<String>/,
+    'ProjetVue ne porte plus `elagues` : le repli de `majElagues` rendrait la boîte '
+      + 'muette, et un livrable élagué disparaîtrait de nouveau sans un mot'
+  );
+});
+
 /* ---------- menu.rs → RECENT ---------- */
 
 /**

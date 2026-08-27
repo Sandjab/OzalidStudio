@@ -70,11 +70,23 @@ function majElagues(vue) {
   // La cause dans la phrase, comme les refus la donnent : c'est elle qui dit où aller
   // corriger — un fichier de `pods/` du poste, ou un livre venu d'une machine mieux
   // pourvue. Sans elle, la disparition se lirait comme une perte du fichier lui-même.
+  //
+  // La clé brute, et non un libellé, et ce n'est pas un niveau de langage à améliorer :
+  // c'est le seul qui reste. Ces clés portent quatre axes quand `libelleProvider` en
+  // attend trois, et lui il retombe **de toute façon** sur la clé pour un gabarit que la
+  // table plate ne connaît plus — c'est exactement le cas de ceux-ci. Un nom complet est
+  // impossible par construction : ce qui le porterait est précisément ce qui a disparu.
+  //
+  // Et ce qu'on peut faire, à la suite : les refus disent « corriger, puis relancer »,
+  // sans quoi le message ne serait qu'un constat de perte. Ici l'axe manquant peut être
+  // n'importe lequel des quatre, la phrase dit donc « le catalogue » et non l'imprimeur.
+  const pluriel = partis.length > 1;
   box.textContent = box.hidden
     ? ''
-    : `${partis.length > 1 ? 'Livrables retirés' : 'Livrable retiré'} à l'ouverture, `
-      + `faute de catalogue qui ${partis.length > 1 ? 'les porte' : 'le porte'} encore : `
-      + `${partis.join(', ')}. Le reste du livre est intact.`;
+    : `${pluriel ? 'Livrables retirés' : 'Livrable retiré'} à l'ouverture, faute de `
+      + `catalogue qui ${pluriel ? 'les porte' : 'le porte'} encore : ${partis.join(', ')}. `
+      + `Le reste du livre est intact : ${pluriel ? 'les rajouter' : 'le rajouter'} `
+      + 'ci-dessous une fois le catalogue complété.';
 }
 
 /**

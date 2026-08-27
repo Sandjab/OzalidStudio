@@ -2225,6 +2225,44 @@ blanche = true
         assert!(l.courant().is_some());
     }
 
+    /// Une liste **pleine** qui se vide entièrement par élagage : le cas que le test
+    /// ci-dessus n'exerce pas, puisqu'il part d'une liste déjà vide et n'élague rien.
+    ///
+    /// C'est le scénario où le mot compte le plus : l'utilisateur ouvre son livre et y
+    /// trouve un livrable qu'il n'a jamais créé — celui d'office, que `Self::default()`
+    /// vient de poser pour que le pointeur désigne quelqu'un. La liste rendue est la
+    /// seule chose qui le lui explique, et elle doit donc survivre à ce repeuplement.
+    #[test]
+    fn une_liste_entierement_elaguee_dit_encore_ce_qu_elle_a_perdu() {
+        let mut l = Livraison {
+            livrables: vec![
+                Livrable::pour(fab("pod-parti", "135x215", "broche", "creme-90")),
+                Livrable::pour(fab("autre-parti", "6x9", "broche", "creme")),
+            ],
+            courant: "pod-parti-135x215-broche-creme-90".into(),
+            deja_compose: true,
+            mesures: std::collections::BTreeMap::new(),
+        };
+
+        let elagues = l.normalise();
+
+        assert_eq!(
+            elagues.len(),
+            2,
+            "ce qui a été perdu ne survit pas au repeuplement : {elagues:?}"
+        );
+        assert!(
+            elagues.iter().any(|e| e.contains("pod-parti")),
+            "{elagues:?}"
+        );
+        assert_eq!(l.livrables.len(), 1, "le livre repart sur un livrable");
+        assert!(
+            !l.livrables[0].cle().contains("parti"),
+            "le livrable d'office est l'un de ceux qui viennent de partir"
+        );
+        assert!(l.courant().is_some(), "le pointeur ne désigne personne");
+    }
+
     #[test]
     fn un_projet_sans_couverture_ni_images_reste_valide() {
         let p = Projet::nouveau(livre(), "## 01\n\nA.\n".into());
