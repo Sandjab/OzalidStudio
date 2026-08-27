@@ -10,7 +10,7 @@
  *
  * Rappel qui vaut pour tout ce fichier : les tailles et écarts sont en pourcentage de
  * la largeur de couverture, jamais en mm. C'est ce qui rend la maquette portable d'un
- * format à l'autre, donc le choix du prestataire repoussable à la fin.
+ * format à l'autre, donc le choix de l'imprimeur repoussable à la fin.
  */
 
 const CASSES = [['telle', 'Telle quelle'], ['capitales', 'Capitales']];
@@ -747,7 +747,7 @@ function poserRatio() {
  *
  * Des fractions, pas des millimètres : l'aperçu s'affiche à la taille que la fenêtre lui
  * laisse, et seules des proportions y survivent. Elles ne se recalculent pas ici — ce
- * serait redire la règle qui choisit entre le fond perdu publié par le prestataire et
+ * serait redire la règle qui choisit entre le fond perdu publié par l'imprimeur et
  * celui relevé sur son gabarit, et refaire le calcul de dos que la pagination commande.
  */
 function poserReperes(reperes) {
@@ -772,7 +772,7 @@ function rendreReperes() {
  *
  * Rien à recomposer : l'habillage est posé **sur** l'image, pas dedans. C'est ce qui
  * rend la bascule instantanée — et ce qui garantit qu'aucun repère ne peut se glisser
- * dans le PDF remis au prestataire.
+ * dans le PDF remis à l'imprimeur.
  */
 function basculerReperes() {
   reperesVisibles = !reperesVisibles;

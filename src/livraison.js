@@ -93,9 +93,9 @@ function majElagues(vue) {
  * La liste des livrables du livre, et de quoi en ajouter un.
  *
  * Une ligne par livrable : ses trois réglages — reliure, finition, papier —, le format
- * de son gabarit, et les relevés que les prestataires à gabarit exigent — dos et fond
+ * de son gabarit, et les relevés que les imprimeurs à gabarit exigent — dos et fond
  * perdu, qu'eux seuls ne publient pas. Plus de cases à cocher : être dans la liste *est*
- * le fait d'être livrable, et le prestataire n'est plus désigné deux fois.
+ * le fait d'être livrable, et il n'est plus désigné deux fois.
  *
  * Les trois réglages se construisent sur l'**arbre** du catalogue, seul à savoir ce que
  * ce POD offre ; la table plate ne sert plus qu'au format et au fond perdu, qu'elle
@@ -256,7 +256,7 @@ function noteFormat(p) {
 }
 
 /**
- * Un relevé fait sur le gabarit du prestataire.
+ * Un relevé fait sur le gabarit de l'imprimeur.
  *
  * Vide au départ, jamais prérempli : un chiffre par défaut se lirait comme une mesure,
  * et une planche composée sur un dos inventé ne se voit qu'au massicot.
@@ -367,7 +367,7 @@ function afficherPackages(resultats) {
       for (const c of cheminsGroupes(p.chemins)) infos.append(h('p', c, 'chemin'));
       bloc.append(infos);
       // La planche telle qu'elle part à l'impression, avec le dos mesuré de ce
-      // prestataire-là : c'est ici que « est-ce que ça tient » se vérifie, sur du vrai
+      // livrable-là : c'est ici que « est-ce que ça tient » se vérifie, sur du vrai
       // et non sur une approximation qu'on espère fidèle.
       if (r.vignette) {
         const img = h('img', undefined, 'vignette');

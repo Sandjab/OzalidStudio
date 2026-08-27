@@ -355,7 +355,7 @@ function alerter(message) {
  *   l'onglet Intérieur, descendu ici avec l'étape qui a disparu. Il tenait sa place de
  *   ce qu'on allait y réparer ; il tient celle-ci de ce que le pied portait déjà le
  *   dos, et de ce qu'on ne quitte pas la Couverture pour aller lire un onglet.
- * - **relevé sur le gabarit** : chez un prestataire qui ne publie pas de formule, il n'y
+ * - **relevé sur le gabarit** : chez un imprimeur qui ne publie pas de formule, il n'y
  *   a jamais rien à composer, et « non composé » ferait recomposer en boucle un livre
  *   dont la pagination est déjà juste. Ce qui manque est un relevé, pas un calcul —
  *   c'est le vocabulaire que `noteFormat` emploie déjà pour le fond perdu.
@@ -367,7 +367,7 @@ function alerter(message) {
  * pareil, et le second passerait pour un projet neuf.
  */
 function majPied() {
-  // Le prestataire, pas seulement le projet : un démarrage qui n'a pas pu lire les
+  // Le gabarit, pas seulement le projet : un démarrage qui n'a pas pu lire les
   // gabarits laisse la liste vide, et le premier projet ouvert ferait lever le pied
   // au lieu de dire ce qu'il sait — c'est-à-dire rien.
   const p = projet ? providerCourant() : null;
@@ -462,7 +462,7 @@ function lienFichier(chemin, libelle) {
   return a;
 }
 
-/* ---------- prestataires ---------- */
+/* ---------- catalogue ---------- */
 
 async function chargerProviders() {
   providers = await invoke('providers_liste');
@@ -502,7 +502,7 @@ async function chargerProviders() {
  *
  * Le projet ne porte que des clés ; le format, le fond perdu et les papiers viennent
  * de la table, jamais du document — c'est ce qui permet à un `.ozalid` de suivre un
- * prestataire qui change son guide.
+ * imprimeur qui change son guide.
  */
 function providerCourant() {
   const d = livrableCourant();

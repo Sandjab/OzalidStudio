@@ -196,7 +196,7 @@ const COMPOSITION = composition();
 
 /* ---------- livrables ---------- */
 
-/** Un projet ouvert, visé sur le prestataire donné. */
+/** Un projet ouvert, visé sur le gabarit donné. */
 async function ouvre(p, sur = {}) {
   const projet = { ...PROJET, livraison: livraison(p) };
   const ctx = await charge({
@@ -220,7 +220,7 @@ test('le choix du papier n\'est offert que quand il y en a plusieurs', async () 
   );
 });
 
-test('un prestataire à gabarit annonce que le fond perdu se relève', async () => {
+test('un imprimeur à gabarit annonce que le fond perdu se relève', async () => {
   const { els } = await ouvre(COOLLIBRI);
   const note = els.get('livrables').textContent;
   assert.match(note, /148,0 × 210,0 mm/);
@@ -243,10 +243,10 @@ test('le pied nomme le livrable visé et l\'état de son dos', async () => {
 });
 
 /**
- * Chez un prestataire sans formule, il n'y a jamais rien à composer : « non composé »
+ * Chez un imprimeur sans formule, il n'y a jamais rien à composer : « non composé »
  * ferait recomposer en boucle un livre dont la pagination est déjà juste.
  */
-test('un prestataire à gabarit ne réclame pas une composition mais un relevé', async () => {
+test('un imprimeur à gabarit ne réclame pas une composition mais un relevé', async () => {
   const { els } = await ouvre(COOLLIBRI);
   assert.match(els.get('piedDos').textContent, /relevé sur le gabarit/);
 });
@@ -682,10 +682,10 @@ test('une écriture déjà chargée ne se redemande pas, une autre si', async ()
 
 /**
  * Le cœur du projet : le dos ne doit jamais apparaître comme un nombre quand le
- * prestataire n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
+ * imprimeur n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
  * planche fausse à l'impression sans que rien ne l'ait signalé.
  */
-test('un prestataire sans formule n\'affiche jamais de dos chiffré', async () => {
+test('un imprimeur sans formule n\'affiche jamais de dos chiffré', async () => {
   const c = composition(COOLLIBRI, { pages: 190, dos: null });
   const { els } = await charge({
     invoke: faux([COOLLIBRI], {
@@ -701,7 +701,7 @@ test('un prestataire sans formule n\'affiche jamais de dos chiffré', async () =
   assert.match(dos, /relevé sur le gabarit/);
   assert.doesNotMatch(dos, /\d/, `dos chiffré affiché : « ${dos} »`);
   // Les pages, elles, sont mesurées : composé ne veut pas dire chiffré, mais le
-  // manuscrit fait bien 190 pages chez ce prestataire-là.
+  // manuscrit fait bien 190 pages chez cet imprimeur-là.
   assert.match(els.get('piedMesure').textContent, /190 pages/);
 });
 

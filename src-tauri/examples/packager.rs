@@ -1,4 +1,4 @@
-//! Produit les packages d'un projet pour un ou plusieurs prestataires.
+//! Produit les packages d'un projet pour un ou plusieurs livrables.
 //!
 //! C'est la chaîne entière en une commande : intérieur composé, pagination mesurée,
 //! dos calculé, planche assemblée. Sans interface, donc utilisable pour vérifier que
@@ -45,7 +45,7 @@ fn main() -> Result<(), String> {
             papier,
         })?;
         let pr = resolu.provider();
-        // Un relevé de secours pour les prestataires à gabarit, afin que l'exemple
+        // Un relevé de secours pour les imprimeurs à gabarit, afin que l'exemple
         // puisse les traverser aussi ; l'interface, elle, le demande à l'utilisateur.
         let releve = Releve {
             dos: Some(17.0),

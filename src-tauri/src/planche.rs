@@ -1,9 +1,9 @@
-//! La planche de couverture : 4ème | dos | 1ère, au gabarit du prestataire.
+//! La planche de couverture : 4ème | dos | 1ère, au gabarit de l'imprimeur.
 //!
 //! C'est la pièce où le couplage que l'application existe pour tenir devient visible :
 //! la largeur du dos vient de la pagination, la pagination vient de la composition de
-//! l'intérieur, et le format vient du prestataire. Rien n'y est saisi à la main tant
-//! que le prestataire publie ses chiffres.
+//! l'intérieur, et le format vient de l'imprimeur. Rien n'y est saisi à la main tant
+//! que l'imprimeur publie ses chiffres.
 //!
 //! La planche ne porte **aucun trait de coupe ni repère de pli** : Lulu, KDP et
 //! Bookvault les refusent explicitement (« Do not include trim/bleed marks »), et le
@@ -17,7 +17,7 @@ use crate::couverture::{
 use crate::projet::Livre;
 use serde::Serialize;
 
-/// Ce qu'un prestataire ne publie pas et qu'il a fallu relever sur son gabarit.
+/// Ce qu'un imprimeur ne publie pas et qu'il a fallu relever sur son gabarit.
 /// Vide chez ceux qui publient tout — c'est le cas de la plupart.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Releve {
@@ -35,9 +35,9 @@ pub struct Gabarit {
 }
 
 impl Gabarit {
-    /// Gabarit d'un prestataire pour une pagination donnée.
+    /// Gabarit d'un imprimeur pour une pagination donnée.
     ///
-    /// Le dos et le fond perdu viennent de la table quand le prestataire les publie ;
+    /// Le dos et le fond perdu viennent de la table quand l'imprimeur les publie ;
     /// sinon du relevé de l'utilisateur. À défaut des deux, on refuse : une planche
     /// composée sur un dos inventé se voit au massicot, jamais avant.
     pub fn pour(
@@ -553,7 +553,7 @@ pub fn source(
 /// Un aperçu de réglage, pas une sortie : **pas de fond perdu**. Ce qui se règle ici est
 /// le dos rogné, celui qu'on aura sous les yeux le livre en main, et le gabarit fictif
 /// que voici le dit — un fond perdu nul, et le panorama calé sur cette planche-là. C'est
-/// aussi ce qui rend la face disponible chez un prestataire qui ne publie pas son fond
+/// aussi ce qui rend la face disponible chez un imprimeur qui ne publie pas son fond
 /// perdu, là où la planche entière le réclame.
 ///
 /// Le dos est **composé** à sa taille — treize millimètres restent treize millimètres —
@@ -681,9 +681,9 @@ mod tests {
     }
 
     /// La planche mesure exactement deux couvertures, un dos et deux fonds perdus.
-    /// Un millimètre de trop et le prestataire refuse le fichier.
+    /// Un millimètre de trop et l'imprimeur refuse le fichier.
     #[test]
-    fn la_planche_mesure_le_gabarit_du_prestataire() {
+    fn la_planche_mesure_le_gabarit_de_l_imprimeur() {
         let g = gabarit("tbe-110x170", 280);
         assert!((g.dos - 16.8).abs() < 0.01, "dos {}", g.dos);
         assert_eq!(g.fond_perdu, 5.0);
@@ -742,10 +742,10 @@ mod tests {
         );
     }
 
-    /// Chez un prestataire à gabarit, rien ne peut être calculé : l'application doit le
+    /// Chez un imprimeur à gabarit, rien ne peut être calculé : l'application doit le
     /// dire et réclamer le relevé, jamais improviser une épaisseur.
     #[test]
-    fn un_prestataire_a_gabarit_reclame_le_releve_au_lieu_d_inventer() {
+    fn un_imprimeur_a_gabarit_reclame_le_releve_au_lieu_d_inventer() {
         let pr = provider("coollibri-148x210").unwrap();
         let err = Gabarit::pour(pr, pr.papier_defaut(), 280, Releve::default()).unwrap_err();
         assert!(err.contains("dos"), "{err}");
@@ -775,10 +775,10 @@ mod tests {
         assert_eq!(g.dos, 17.0);
     }
 
-    /// Le relevé ne doit jamais prendre le pas sur la formule du prestataire : sinon une
+    /// Le relevé ne doit jamais prendre le pas sur la formule de l'imprimeur : sinon une
     /// valeur saisie une fois survivrait à un changement de pagination.
     #[test]
-    fn la_formule_du_prestataire_prime_sur_le_releve() {
+    fn la_formule_de_l_imprimeur_prime_sur_le_releve() {
         let pr = provider("lulu").unwrap();
         let g = Gabarit::pour(
             pr,
@@ -889,7 +889,7 @@ mod tests {
         assert!(!s.contains("rotate"), "texte émis sans rien à écrire");
     }
 
-    /// La planche ne porte aucun repère : c'est une exigence des prestataires, pas une
+    /// La planche ne porte aucun repère : c'est une exigence des imprimeurs, pas une
     /// préférence. En ajouter ferait rejeter le fichier.
     #[test]
     fn la_planche_ne_porte_aucun_trait_de_coupe() {
@@ -1159,7 +1159,7 @@ mod tests {
     }
 
     /// La face Dos n'a pas de fond perdu à montrer, et c'est ce qui la rend disponible
-    /// là où la planche ne l'est pas : chez un prestataire qui ne le publie pas. Si le
+    /// là où la planche ne l'est pas : chez un imprimeur qui ne le publie pas. Si le
     /// fond perdu revenait dans cette page, la face deviendrait aussi exigeante que la
     /// planche, et pour rien — on ne règle pas des textes sur de la marge à couper.
     #[test]

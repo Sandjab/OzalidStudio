@@ -2,7 +2,7 @@
 // Faux DOM minimal, juste assez pour exécuter le VRAI src/app.js.
 //
 // Réservé au câblage de l'interface : un champ reconstruit qui perd sa valeur, un
-// prestataire sans formule dont on afficherait quand même un dos. Tout ce qui touche
+// imprimeur sans formule dont on afficherait quand même un dos. Tout ce qui touche
 // au rendu réel se vérifie dans l'application, pas ici.
 
 const fs = require('node:fs');
@@ -56,7 +56,7 @@ class El {
 
   /**
    * Un élément créé à la volée devient retrouvable par son identifiant dès qu'il en
-   * reçoit un : la liste des prestataires est construite ainsi, et l'application la
+   * reçoit un : la liste des livrables est construite ainsi, et l'application la
    * relit avec `getElementById`.
    */
   get id() {

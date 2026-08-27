@@ -80,7 +80,7 @@ const face = (els, libelle) =>
   [...els.get('faces').children].find((b) => b.textContent === libelle);
 
 /**
- * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
+ * Un livrable neuf chez un imprimeur, comme le Rust en fabrique un : les quatre axes
  * à plat, et la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
  * jamais.
  *
@@ -158,7 +158,7 @@ function paquet(sur = {}) {
  * Un projet ouvert, avec un Rust de façade qui **tient réellement** la liste des
  * livrables.
  *
- * Depuis le lot 3, le prestataire vit dans le projet et non dans un contrôle : le front
+ * Depuis le lot 3, le livrable vit dans le projet et non dans un contrôle : le front
  * relit la liste à chaque retour de commande. Un faux qui rendrait toujours le même
  * projet ne prouverait donc plus rien — il masquerait justement le câblage qu'on vérifie.
  *
@@ -305,10 +305,10 @@ const dernier = (appels, cmd) => appels.filter(([c]) => c === cmd).pop();
 /* ---------- la liste des livrables ---------- */
 
 /**
- * Un prestataire qui publie sa formule n'a rien à faire saisir : offrir un champ de
+ * Un imprimeur qui publie sa formule n'a rien à faire saisir : offrir un champ de
  * dos donnerait à croire qu'il compte, alors que la formule prime toujours.
  */
-test('seul un prestataire à gabarit demande un relevé', async () => {
+test('seul un imprimeur à gabarit demande un relevé', async () => {
   const { els } = await ouvre([LULU, COOLLIBRI], {}, {
     livrables: [chez(LULU), chez(COOLLIBRI)],
   });
@@ -320,7 +320,7 @@ test('seul un prestataire à gabarit demande un relevé', async () => {
 
 /**
  * La liste ne montre que les livrables du livre — c'est tout l'objet du lot : un
- * prestataire n'est plus désigné deux fois, et la table entière n'a plus à s'afficher.
+ * livrable n'est plus désigné deux fois, et la table entière n'a plus à s'afficher.
  */
 test('la liste ne porte que les livrables déclarés', async () => {
   const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { livrables: [chez(LULU)] });
@@ -328,7 +328,7 @@ test('la liste ne porte que les livrables déclarés', async () => {
     'Lulu — poche 108 × 175',
     '108,0 × 175,0 mm — fond perdu 3,175 mm',
   ]);
-  assert.ok(!els.get('liv-papier-kdp-6x9-broche-creme'), 'un prestataire non livrable est offert');
+  assert.ok(!els.get('liv-papier-kdp-6x9-broche-creme'), 'un gabarit non livrable est offert');
 });
 
 /**
@@ -690,10 +690,10 @@ test('générer ne transmet aucune liste : elle est dans le projet', async () =>
 });
 
 /**
- * Un prestataire en échec ne doit pas emporter les autres : ce qui a été produit est
+ * Un livrable en échec ne doit pas emporter les autres : ce qui a été produit est
  * livrable, et l'échec doit être lisible plutôt que noyé dans un message global.
  */
-test('un prestataire en échec est signalé sans masquer ceux qui ont abouti', async () => {
+test('un livrable en échec est signalé sans masquer ceux qui ont abouti', async () => {
   const { els } = await ouvre([LULU, KDP], {
     packager: () => [
       { cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null },
@@ -831,7 +831,7 @@ test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
 
 /**
  * La vignette est le seul endroit où « est-ce que ça tient » se vérifie sur du vrai,
- * pour chaque prestataire, avec son dos mesuré. Le package qui a échoué n'en a pas —
+ * pour chaque livrable, avec son dos mesuré. Le package qui a échoué n'en a pas —
  * et l'absence ne doit pas poser une image vide, qui se lirait comme une planche.
  */
 test('chaque package abouti montre sa planche en vignette', async () => {
@@ -880,7 +880,7 @@ test('l\'aperçu de planche n\'a pas de dos tant que l\'intérieur n\'est pas co
 
 /**
  * Le gabarit ne voyage plus avec l'aperçu : le Rust le lit dans le projet. Le repasser
- * ici rouvrirait la porte à deux vérités sur le prestataire courant.
+ * ici rouvrirait la porte à deux vérités sur le gabarit courant.
  */
 test('l\'aperçu ne transporte plus de gabarit', async () => {
   const { els, appels } = await ouvre([LULU], {}, { couverture: {} });
@@ -903,7 +903,7 @@ test('une fois l\'intérieur composé, l\'aperçu de planche reçoit ce dos-là'
 });
 
 /** Composer, c'est composer pour le livrable visé : plus rien à lui désigner. */
-test('composer ne transmet plus de prestataire', async () => {
+test('composer ne transmet plus de livrable', async () => {
   const { els, appels } = await ouvre([LULU], { composer: COMPOSITION });
   await faireComposer(els);
   assert.deepStrictEqual(dernier(appels, 'composer')[1], undefined);
@@ -995,7 +995,7 @@ test('un dos calculé pour une autre police ne vaut plus rien', async () => {
 /**
  * **Le test qui porte le lot.** Le même livre a autant de paginations que de gabarits,
  * et chacune coûte une composition entière. Les retenir une par livrable, dans le
- * projet, fait de la lunette ce qu'elle prétend être : revenir sur un prestataire déjà
+ * projet, fait de la lunette ce qu'elle prétend être : revenir sur un livrable déjà
  * composé retrouve son dos, sans rien recalculer et sans emprunter celui du voisin.
  *
  * Le compte des `composer` est la moitié du test : sans lui, une implémentation qui

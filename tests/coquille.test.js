@@ -58,7 +58,7 @@ const PODS = [
 ];
 
 /**
- * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
+ * Un livrable neuf chez un imprimeur, comme le Rust en fabrique un : les quatre axes
  * à plat, la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
  * jamais, et un test qui la rebâtirait à chaque ligne finirait par diverger d'elle.
  *
@@ -115,7 +115,7 @@ const PLACE_DEFAUT = { page: 3, x: 0.5, y: 0.8, taille: 0.6, angle: 0 };
 
 /**
  * Le Rust de façade. Il tient la liste des livrables pour de vrai : depuis le lot 3,
- * le prestataire visé vit dans le projet, et un faux qui rendrait toujours le même
+ * le livrable visé vit dans le projet, et un faux qui rendrait toujours le même
  * projet ne montrerait jamais les gestes qui le déplacent.
  */
 function atelier({
@@ -727,7 +727,7 @@ const pied = (els) => `${els.get('inLivrable').value} ${els.get('piedDos').textC
 // qu'on lit, l'autre qu'on le remarque sans le chercher.
 const piedAlerte = (els) => els.get('piedDos').className === 'alerte';
 
-test('le pied nomme le prestataire et dit le dos non composé', async () => {
+test('le pied nomme le livrable et dit le dos non composé', async () => {
   const a = atelier();
   const { els } = await charge({ invoke: a.invoke });
   await els.get('btNouveau').declenche('click');
@@ -767,7 +767,7 @@ test('sans projet, le pied ne prétend rien', async () => {
 });
 
 /**
- * Le pied appartient au livre ouvert. Refermé, le nom du prestataire et le dos mesuré
+ * Le pied appartient au livre ouvert. Refermé, le nom du livrable et le dos mesuré
  * resteraient affichés sous l'accueil, où plus rien ne dit de quel livre ils parlaient.
  */
 test('fermer le projet efface le pied', async () => {
@@ -789,7 +789,7 @@ const KDP = {
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
 };
 
-/** Un prestataire à gabarit : le dos ne s'y calcule pas, il se relève. */
+/** Un imprimeur à gabarit : le dos ne s'y calcule pas, il se relève. */
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
@@ -797,7 +797,7 @@ const COOLLIBRI = {
 };
 
 /**
- * Un atelier qui compose, pour partir d'un pied qui porte un dos. Tous les prestataires
+ * Un atelier qui compose, pour partir d'un pied qui porte un dos. Tous les gabarits
  * de la liste y sont livrables : c'est ce qui rend le pointeur déplaçable.
  */
 function atelierCompose(liste, composition = COMPOSITION) {
@@ -850,12 +850,12 @@ test('changer de papier garde le dos et fait suivre le pointeur', async () => {
 });
 
 /**
- * Chez un prestataire à gabarit, le dos ne se calcule pas : il se relève. La composition
+ * Chez un imprimeur à gabarit, le dos ne se calcule pas : il se relève. La composition
  * a beau aboutir — 262 pages s'affichent au-dessus — elle ne rend aucun dos, et rien de
  * ce qu'on ferait ensuite n'en produirait un. « Non composé » enverrait recomposer en
  * boucle un livre dont la pagination est déjà juste.
  */
-test('chez un prestataire à gabarit, le pied ne réclame pas une composition', async () => {
+test('chez un imprimeur à gabarit, le pied ne réclame pas une composition', async () => {
   const { els } = await charge({
     invoke: atelierCompose([COOLLIBRI], { ...COMPOSITION, dos: null }),
   });
@@ -868,8 +868,8 @@ test('chez un prestataire à gabarit, le pied ne réclame pas une composition', 
 });
 
 /**
- * Sans gabarit lisible, il n'y a pas de prestataire à nommer — mais les boutons de
- * l'accueil restent cliquables, et le pied est le premier à demander le prestataire quand
+ * Sans gabarit lisible, il n'y a pas de livrable à nommer — mais les boutons de
+ * l'accueil restent cliquables, et le pied est le premier à demander le gabarit quand
  * un projet s'ouvre. Muet, il laisse l'application dégradée ; sans garde, il lève depuis
  * `afficherProjet`, et l'exception traverse `tente()` en laissant l'écran à moitié dessiné.
  */

@@ -169,7 +169,7 @@ test('une police refusée est dite, et le panneau revient au projet', async () =
 /* ---------- épreuve ---------- */
 
 /**
- * L'épreuve ne dépend d'aucune pagination ni d'aucun prestataire : elle doit pouvoir
+ * L'épreuve ne dépend d'aucune pagination ni d'aucun imprimeur : elle doit pouvoir
  * être tirée dès qu'un manuscrit est là, sans intérieur composé au préalable.
  */
 test('l\'épreuve se tire sans intérieur composé', async () => {

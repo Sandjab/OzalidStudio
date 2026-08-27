@@ -176,7 +176,7 @@ body {
 /* La légende tient sur **une ligne**, comme la barre de la Couverture, et pour la même
    raison : lui laisser le droit de se replier ferait revenir en douce une deuxième
    rangée que la Couverture paierait en aperçu. Ce qui cède sous la pression, c'est le
-   libellé du prestataire — le seul dont la longueur ne se prévoit pas. Ajouter une
+   libellé du livrable — le seul dont la longueur ne se prévoit pas. Ajouter une
    mention ici, c'est d'abord vérifier qu'il reste de la place à 900 px.
    Les éléments vides ne prennent pas leur `gap` : un `p` sans contenu n'a pas de boîte
    à espacer, et le pied d'un livre jamais composé ne montre donc pas quatre trous. */
@@ -250,7 +250,7 @@ main {
    manque à la fenêtre, jamais la largeur : une colonne unique de 46rem laissait la
    moitié de l'écran vide en réclamant un ascenseur pour le reste. Mais la grille
    alignait ses rangées, et l'étape Intérieur — depuis absorbée par Livre — partageait
-   la sienne avec Prestataire, alourdie de son bloc de résultat : trois cents pixels de
+   la sienne avec Livraison, alourdie de son bloc de résultat : trois cents pixels de
    vide à gauche pendant que la droite débordait, et Épreuve renvoyée à la rangée
    suivante au lieu de remonter dans ce vide. Un flux, lui, remplit une colonne avant d'ouvrir la suivante — il rend
    exactement la place que la grille gaspillait.
@@ -1103,7 +1103,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 #inAjoutFormat { width: auto; max-width: 24rem; }
 
 /* Les relevés passent sous la ligne plutôt que de la pousser hors de l'écran : chez
-   un prestataire à gabarit, la ligne réclame plus de mille pixels, et un ascenseur
+   un imprimeur à gabarit, la ligne réclame plus de mille pixels, et un ascenseur
    horizontal cacherait justement les champs qu'il faut remplir. */
 .livrable {
   display: flex;
@@ -1126,7 +1126,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    avant que quoi que ce soit d'autre ne se comprime. */
 .livrable select { width: auto; flex: 0 0 auto; max-width: 13rem; }
 /* Le format se réserve une base et non sa largeur pleine : un flex replie avant de
-   comprimer, et la note du prestataire à gabarit — la plus longue des trois, elle
+   comprimer, et la note de l'imprimeur à gabarit — la plus longue des trois, elle
    nomme le fond perdu au lieu de le chiffrer — emportait à elle seule le bouton
    « Retirer » au rang suivant, où il ne finissait plus sa ligne comme celui des
    voisins. Avec une base de 14 rem le rang tient, et le peu qui manque se prend sur la
@@ -1141,9 +1141,9 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    le fichier, à spécificité égale : c'est cet ordre-là qui reprend l'alignement. */
 .livrable .raison { flex-basis: 100%; text-align: left; }
 
-/* Relevés d'un prestataire à gabarit : côte à côte, sur une ligne à eux. Le
+/* Relevés d'un imprimeur à gabarit : côte à côte, sur une ligne à eux. Le
    `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte
-   à côté du bouton dès que la fenêtre s'élargit, et le « Retirer » d'un prestataire à
+   à côté du bouton dès que la fenêtre s'élargit, et le « Retirer » d'un imprimeur à
    gabarit ne finit plus sa ligne comme celui des autres. Une ligne de livrable se
    lit en colonnes, d'un livrable à l'autre. */
 .releve { display: flex; gap: .6rem; flex-basis: 100%; }
@@ -1179,7 +1179,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .package dl dd:last-child { grid-column: 2 / -1; }
 
 /* La planche du package. Une vignette, pas un aperçu : de quoi voir qu'elle tient,
-   avec le dos mesuré de ce prestataire-là. C'est le PDF à côté qui fait foi.
+   avec le dos mesuré de ce livrable-là. C'est le PDF à côté qui fait foi.
    Elle a rétréci de 22 à 12 rem en passant à droite des chiffres, et le chiffre est
    mesuré : au-delà, c'est sa hauteur qui fixe celle du compte rendu au lieu des trois
    lignes de chiffres et des deux de chemins qu'elle accompagne. L'agrandir la rendrait

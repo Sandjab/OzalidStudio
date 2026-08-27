@@ -690,10 +690,10 @@ test('la planche marque la coupe et les deux plis que le Rust donne', async () =
 });
 
 /**
- * Les quatre nombres écrits sous la planche sont ceux du fichier remis au prestataire :
+ * Les quatre nombres écrits sous la planche sont ceux du fichier remis à l'imprimeur :
  * c'est en les comparant à son gabarit qu'on vérifie qu'on lui envoie la bonne planche.
  * Ils viennent du Rust en millimètres et ne se recomposent pas ici — refaire l'addition
- * dans la fenêtre, c'est la voir dériver le jour où un prestataire compte autrement.
+ * dans la fenêtre, c'est la voir dériver le jour où un imprimeur compte autrement.
  * Le fond perdu porte trois décimales et le reste deux, comme la Livraison : un fond
  * perdu se relève au millième de millimètre sur les gabarits, un dos jamais.
  */

@@ -8,7 +8,7 @@
 //!
 //! - **Tout réglage est en pourcentage de la largeur de couverture**, jamais en mm
 //!   absolus. C'est ce qui rend une maquette portable d'un format à l'autre, et ce qui
-//!   permet de ne choisir le prestataire qu'à la fin. Seule exception héritée du CSS :
+//!   permet de ne choisir l'imprimeur qu'à la fin. Seule exception héritée du CSS :
 //!   les décalages verticaux posés en `top`/`bottom` sont des pourcentages de la
 //!   **hauteur**, parce que c'est ainsi que le positionnement absolu les résout.
 //! - **L'identité du livre vient du projet**, pas de la maquette : titre, auteur et
@@ -927,7 +927,7 @@ fn bloc_pied(livre: &Livre, p: &Pied, cv: &Couverture, (fw, fh): (f64, f64)) -> 
 /// Ce dont un élément dispose pour déborder, bord par bord : la bande de fond perdu que
 /// le massicot emportera.
 ///
-/// Elle se déduit de la boîte, jamais du prestataire — et c'est ce qui la rend juste
+/// Elle se déduit de la boîte, jamais de l'imprimeur — et c'est ce qui la rend juste
 /// partout. Nulle du côté du dos, où la face voisine commence et où rien ne serait
 /// coupé ; nulle sur les quatre bords d'un aperçu par face, qui montre le livre déjà
 /// rogné.
@@ -1806,7 +1806,7 @@ mod tests {
     }
 
     /// La zone ISBN est laissée vide et blanche : le code-barres est posé par le
-    /// prestataire. En imprimer un serait le pire des services.
+    /// imprimeur. En imprimer un serait le pire des services.
     #[test]
     fn la_zone_isbn_est_un_rectangle_blanc_vide() {
         let mut cv = maquettes::fournie("bandeau");

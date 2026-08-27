@@ -1,7 +1,7 @@
-//! Le package d'un prestataire : l'intérieur, la planche, et de quoi les relire.
+//! Le package d'un livrable : l'intérieur, la planche, et de quoi les relire.
 //!
-//! Un livre, N prestataires, aucun réglage retouché entre les deux — c'est la « file
-//! d'attente » du COOKBOOK, exécutée. Chaque prestataire coché déclenche sa propre
+//! Un livre, N livrables, aucun réglage retouché entre les deux — c'est la « file
+//! d'attente » du COOKBOOK, exécutée. Chaque livrable déclenche sa propre
 //! composition : son format, sa gouttière, sa pagination, donc son dos et sa planche.
 //!
 //! L'ordre des opérations n'est pas négociable : l'intérieur d'abord, parce que c'est
@@ -43,7 +43,7 @@ pub struct Package {
     pub chemins: Vec<String>,
     /// La planche en PNG, à côté du PDF. Elle ne part pas chez l'imprimeur — d'où sa
     /// place hors de `chemins` : c'est de quoi vérifier d'un coup d'œil que la planche
-    /// tient, pour ce prestataire-là, avec le dos qu'il a réellement mesuré.
+    /// tient, pour ce livrable-là, avec le dos qui a réellement été mesuré.
     pub vignette: String,
     /// Familles que Typst n'a pas trouvées et a remplacées par une écriture de repli
     /// — sans échouer, donc sans que rien d'autre ne le dise. Vide, tout va bien.
@@ -156,7 +156,7 @@ fn verifie_pagination(cle: &str, pages: u32, pr: &Provider, papier: &Papier) -> 
 /// une fois par gabarit par `composer_interieur` (directement ou via `lot`), et copié
 /// ici s'il vient d'un autre répertoire que celui de ce livrable.
 ///
-/// Le `releve` ne sert que chez les prestataires qui ne publient ni dos ni fond perdu ;
+/// Le `releve` ne sert que chez les imprimeurs qui ne publient ni dos ni fond perdu ;
 /// ailleurs, il est ignoré au profit de leur formule.
 // La signature retombera à six arguments à la tâche 5, quand `Provider` portera sa
 // `fabrication` : `pr` seul suffira à ce que `cle` et `releve` disent aujourd'hui à
@@ -368,7 +368,7 @@ pub fn trace<'a>(
     })
 }
 
-/// Refuse un envoi placé sur une page que l'intérieur de ce prestataire n'a pas.
+/// Refuse un envoi placé sur une page que l'intérieur de ce livrable n'a pas.
 ///
 /// Le même manuscrit ne fait pas le même nombre de pages en poche et en grand format.
 /// Pour les liminaires — faux-titre, blanche, titre, copyright, dédicace — les pages
@@ -393,7 +393,7 @@ fn verifie_pages(liste: &[crate::envoi::Envoi], pages: u32) -> Result<(), String
     Ok(())
 }
 
-/// Compose un package par envoi, tous chez le même prestataire.
+/// Compose un package par envoi, tous pour le même livrable.
 ///
 /// **La convergence n'a lieu qu'une fois.** L'envoi se pose par `#place`, qui ne peut
 /// pas créer de page : la gouttière, la parité, le compte de pages, le dos et la

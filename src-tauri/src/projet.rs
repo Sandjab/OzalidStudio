@@ -618,7 +618,7 @@ fn migre(mut v: toml::Value) -> Result<Metadonnees, String> {
 
 /// v4 → v5 : le destinataire devient un livrable, la mesure quitte le destinataire pour
 /// la map des gabarits, `courant` devient une clé à quatre axes. La table `HERITEES`
-/// donne le triplet de chaque clé plate ; un prestataire disparu est élagué, comme
+/// donne le triplet de chaque clé plate ; un gabarit disparu est élagué, comme
 /// `normalise` l'aurait fait. Rejouée sur son propre résultat, elle ne bouge rien :
 /// `destinataires` absent, elle sort au premier pas.
 ///
@@ -655,7 +655,7 @@ fn migre_livraison(v: &mut toml::Value) {
             .iter()
             .find(|(h, ..)| *h == plate)
         else {
-            continue; // prestataire disparu : élagué
+            continue; // gabarit disparu : élagué
         };
         let papier = t
             .get("papier")
@@ -1345,7 +1345,7 @@ papier = "standard"
     }
 
     /// La mesure quitte le destinataire pour la map des gabarits, les relevés restent
-    /// sur le livrable qui les a faits, et un prestataire que la table ne porte plus est
+    /// sur le livrable qui les a faits, et un gabarit que la table ne porte plus est
     /// élagué — comme `normalise` l'aurait fait.
     ///
     /// Lu **avant** `normalise`, comme les tests v3 : la mesure migrée n'a pas
@@ -1361,7 +1361,7 @@ titre = "Candide"
 auteur = "Voltaire"
 genre = "roman"
 [livraison]
-courant = "prestataire-disparu"
+courant = "gabarit-disparu"
 deja_compose = true
 [[livraison.destinataires]]
 provider = "bod"
@@ -1377,7 +1377,7 @@ papier = "creme"
 dos_mm = 18.4
 fond_perdu_mm = 3.0
 [[livraison.destinataires]]
-provider = "prestataire-disparu"
+provider = "gabarit-disparu"
 papier = "standard"
 "#;
         let mut m =
@@ -1386,7 +1386,7 @@ papier = "standard"
         assert_eq!(
             cles,
             ["bod-135x215-broche-creme-90", "kdp-55x85-broche-creme"],
-            "le prestataire disparu n'a pas été élagué"
+            "le gabarit disparu n'a pas été élagué"
         );
 
         let mesure = m

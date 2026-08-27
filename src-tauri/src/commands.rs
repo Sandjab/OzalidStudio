@@ -50,8 +50,7 @@ struct Ouvert {
     candidat: Option<(usize, Vec<u8>)>,
 }
 
-/// Vue d'un prestataire pour l'interface : un gabarit d'intérieur, POD × format ×
-/// reliure.
+/// Vue d'un gabarit d'intérieur pour l'interface : POD × format × reliure.
 ///
 /// Le papier n'y a pas sa place, et ce n'est pas un oubli : il appartient à l'identité
 /// du livrable, jamais du gabarit, et deux livrables qui ne diffèrent que par lui
@@ -250,7 +249,7 @@ pub struct Composition {
     pub gouttiere: f64,
     pub blanche: bool,
     pub chapitres: u32,
-    /// Épaisseur du dos en mm, ou `null` chez un prestataire à gabarit. C'est cette
+    /// Épaisseur du dos en mm, ou `null` chez un imprimeur à gabarit. C'est cette
     /// valeur qui alimentera la planche : elle n'est jamais ressaisie.
     pub dos: Option<f64>,
     pub pdf: String,
@@ -811,7 +810,7 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
 }
 
 /// Tire l'épreuve de relecture à la racine des sorties : elle ne vise aucun éditeur,
-/// elle ne descend donc pas dans un répertoire de prestataire.
+/// elle ne descend donc pas dans un répertoire de livrable.
 #[tauri::command]
 pub fn epreuve_tirer(corps_pt: f64, atelier: State<Atelier>) -> Result<String, String> {
     let garde = atelier.ouvert.lock().unwrap();
@@ -1059,7 +1058,7 @@ pub struct Apercu {
 /// Elles ne se recalculent pas dans la fenêtre : la largeur d'une planche est deux
 /// couvertures, un dos et deux fonds perdus, et cette règle est déjà écrite une fois,
 /// dans `planche::Gabarit`. Redite en JavaScript, elle dériverait le jour où un
-/// prestataire compterait autrement — et le chiffre affiché ne serait plus celui du
+/// imprimeur compterait autrement — et le chiffre affiché ne serait plus celui du
 /// fichier remis.
 #[derive(Serialize)]
 pub struct Mesures {
@@ -1075,7 +1074,7 @@ pub struct Mesures {
 /// et `pli_une` sont les deux plis qui encadrent le dos, comptés depuis le bord gauche.
 /// Les quatre voyagent ensemble parce qu'ils s'affichent ensemble, et qu'aucun n'existe
 /// sans les autres : ce sont les repères d'une planche, ceux-là mêmes que le PDF remis
-/// au prestataire ne porte pas.
+/// à l'imprimeur ne porte pas.
 #[derive(Serialize)]
 pub struct Reperes {
     pub x: f64,
@@ -1109,7 +1108,7 @@ pub fn couverture_apercu(
         .as_ref()
         .ok_or("aucune maquette : en choisir une.")?;
     // Le format vient du livrable visé, et le fond perdu de son relevé quand le
-    // prestataire n'en publie pas : les deux sont dans le projet, plus dans un champ.
+    // imprimeur n'en publie pas : les deux sont dans le projet, plus dans un champ.
     let (pr, _, d) = vise(o)?;
     let fond_perdu_mm = d.fond_perdu_mm;
 
@@ -1134,7 +1133,7 @@ pub fn couverture_apercu(
             dos_mm,
         )?,
         // Le dos seul se compose sans fond perdu : il ne réclame donc que la
-        // pagination, là où la planche réclame aussi le gabarit du prestataire.
+        // pagination, là où la planche réclame aussi le gabarit de l'imprimeur.
         "dos" => {
             let dos = dos_mm.ok_or(
                 "dos : composer l'intérieur d'abord, c'est la pagination qui donne le dos.",
@@ -1393,8 +1392,8 @@ fn donnee_image(octets: &[u8]) -> String {
 
 /* ---------- packages ---------- */
 
-/// Ce que rend la génération pour un prestataire : le package, ou l'erreur qui l'a
-/// empêché. Un prestataire en échec n'interrompt pas les autres — mais il est dit.
+/// Ce que rend la génération pour un livrable : le package, ou l'erreur qui l'a
+/// empêché. Un livrable en échec n'interrompt pas les autres — mais il est dit.
 #[derive(Serialize)]
 pub struct Resultat {
     /// L'identité du livrable, à quatre axes : c'est elle qui nomme son répertoire.
@@ -1414,7 +1413,7 @@ pub struct Resultat {
 /// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun
 /// compose son propre intérieur, donc sa propre pagination, donc son propre dos. C'est
 /// la promesse de l'étape Livraison, et la liste vient du projet — plus de cases à
-/// cocher qui désigneraient les prestataires une seconde fois.
+/// cocher qui désigneraient les livrables une seconde fois.
 #[tauri::command]
 pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     let garde = atelier.ouvert.lock().unwrap();
@@ -1457,7 +1456,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     }
 
     // `?` fait échouer la commande entière, sans `Resultat` par livrable : à la
-    // différence d'un prestataire ou d'un papier inconnu, une racine de sorties
+    // différence d'un POD ou d'un papier inconnu, une racine de sorties
     // inutilisable (projet non enregistré) ne concerne aucun livrable en
     // particulier, et rien ne peut être tenté avant qu'elle existe.
     let racine = sorties_racine(o)?;
@@ -1496,7 +1495,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
 
 /// Génère les ebooks locaux dans `<projet>/ebook/`.
 ///
-/// Une livraison, mais locale : elle ne vise aucun prestataire, elle emprunte seulement
+/// Une livraison, mais locale : elle ne vise aucun imprimeur, elle emprunte seulement
 /// le gabarit de celui qui est visé — c'est de là que viennent le format, le corps et
 /// l'interligne, faute d'un format d'écran qui voudrait dire quelque chose.
 #[tauri::command]
@@ -2033,7 +2032,7 @@ pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, Str
     donnee_png(&png)
 }
 
-/// Compose un package par envoi, chez le prestataire visé.
+/// Compose un package par envoi, pour le livrable visé.
 ///
 /// Geste distinct de `packager` : l'un prépare le tirage, l'autre prépare des cadeaux,
 /// et les déclencher ensemble composerait des exemplaires que personne n'a demandés.

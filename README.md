@@ -2,7 +2,7 @@
 
 Application de bureau macOS + Windows qui tient la chaîne entière de
 l'auto-édition : manuscrit → intérieur composé → couverture → packages
-prestataires. Sa conception est posée dans
+à remettre à l'imprimeur. Sa conception est posée dans
 `docs/superpowers/specs/2026-08-20-ozalid-studio-design.md`.
 
 Ce qu'elle règle : le nombre de pages ne transite plus par un humain. L'intérieur
@@ -10,7 +10,7 @@ le produit, la couverture le consomme, et le dos suit le manuscrit sans ressaisi
 
 **État : jalon 5** — projet `.ozalid`, import d'un livre existant, composition de
 l'intérieur, moteur de couverture, assemblage de la planche, packages
-multi-prestataires, ebooks locaux en PDF et en EPUB, épreuve de relecture, cycle
+multi-livrables, ebooks locaux en PDF et en EPUB, épreuve de relecture, cycle
 de vie du document — créer, enregistrer, enregistrer sous, fermer, avec une garde
 avant tout ce qui perdrait du travail —, menu natif et ses raccourcis, écran
 d'accueil et projets récents, et vérification Windows par intégration continue :
@@ -142,7 +142,7 @@ photo de mot écrit à la main porte un fond — le papier photographié, jamais
 mais du 230-245 teinté —, et ce fond-là s'imprime : sur un crème, il fait un rectangle.
 Deux seuils en luminance le rendent transparent, estimés à la pose et repris à la main,
 appliqués sur le chemin de Typst et jamais dans l'archive, qui garde la photo d'origine.
-La teinte du papier est une **convention d'Ozalid, pas une mesure** : aucun prestataire
+La teinte du papier est une **convention d'Ozalid, pas une mesure** : aucun imprimeur
 ne publie celle de son crème, et un papier dont le libellé ne dit pas « crème » est tenu
 pour blanc plutôt que deviné. Elle ne sert qu'à l'écran — le PDF n'a pas de fond, et lui
 en donner un ferait imprimer un aplat sur toutes les pages.
@@ -299,7 +299,7 @@ la saisir », le compte de pages compris, puisqu'il vient d'être mesuré.
 
 Chaque package généré affiche sa **planche en vignette**, à côté de ses chiffres et de
 ses chemins de fichiers. C'est là que « est-ce que ça tient » se vérifie : sur du vrai,
-pour chaque prestataire, avec son dos mesuré — et non sur une approximation qu'on
+pour chaque livrable, avec son dos mesuré — et non sur une approximation qu'on
 espère fidèle. Le PNG est écrit à côté du PDF, depuis la même source Typst ; c'est le
 PDF qui part à l'impression.
 
@@ -326,7 +326,7 @@ résultats. Tout le reste est testable sans fenêtre.
 | `diffusion` | Demander une image à un modèle : le gabarit et ses cinq marques, le contrat, et la clé qui ne remonte jamais |
 | `epreuve` | Source Typst de l'épreuve de relecture : A4, numéros de ligne, marge d'annotation |
 | `planche` | Assemblage 4ème \| dos \| 1ère au gabarit, et dos composé élément par élément |
-| `package` | Un prestataire, un intérieur, une planche, dans son répertoire |
+| `package` | Un livrable, un intérieur, une planche, dans son répertoire |
 | `epub` | Chapitres, couverture et police → une archive EPUB 3 reflowable, sans disque ni Typst |
 | `ebook` | Le PDF et l'EPUB du livre entier, à côté du projet : le pendant local de `package` |
 | `preferences` | Le `preferences.toml` : projets récents, et ce qui ne tient pas dans un livre |
@@ -335,7 +335,7 @@ résultats. Tout le reste est testable sans fenêtre.
 
 `providers` fusionne les deux tables historiques du projet — celle d'`index.html`
 pour la couverture, celle de `gen_interieur.py` pour l'intérieur — qui décrivaient
-les mêmes prestataires sans jamais se recouper.
+les mêmes imprimeurs sans jamais se recouper.
 
 ## Le fichier .ozalid
 
@@ -370,7 +370,7 @@ Les livrables en sont une autre, `[livraison]`, avec le même principe : un proj
 qui ne la porte pas se voit doté du premier gabarit de la table. La version du format
 ne bouge pas pour autant — ajouter une section facultative ne rend illisible aucun
 fichier existant, et la monter interdirait aux binaires déjà distribués d'ouvrir les
-projets écrits ensuite. Un prestataire ou un papier que la table ne porte plus est
+projets écrits ensuite. Un gabarit ou un papier que la table ne porte plus est
 **élagué à l'ouverture** plutôt que de faire refuser le projet : le manuscrit et la
 maquette sont intacts, et la liste se refait en trois clics.
 
@@ -413,7 +413,7 @@ planche. Ce n'est pas une intention mais une mesure : le test
 `un_envoi_ne_cree_aucune_page_ou_qu_il_se_pose` compose pour de vrai, sur quatre pages
 visées — la première, la page de titre, une page du corps, la dernière — et dans les
 deux formes, texte et image, puis compare les paginations. La page visée, en revanche,
-appartient à **une** pagination : elle n'existe pas forcément chez le prestataire
+appartient à **une** pagination : elle n'existe pas forcément dans le livrable
 suivant. La génération refuse alors en nommant la personne, la page et le compte :
 « Mo : envoi placé page 264, l'intérieur n'en fait que 190. »
 
@@ -432,11 +432,11 @@ chapitres attendus et ceux du manuscrit embarqué est affiché — c'est le seul
 qu'une copie est périmée.
 
 Les **sorties ne sont pas dans l'archive** : elles vont à côté, dans
-`<nom-du-projet>/<prestataire>/`. Un projet non enregistré ne peut donc pas
+`<nom-du-projet>/<livrable>/`. Un projet non enregistré ne peut donc pas
 composer, faute d'endroit où écrire. Seule l'épreuve de relecture reste à la racine,
-en `epreuve.pdf` : elle ne vise aucun prestataire, elle n'a rien à faire dans leurs
+en `epreuve.pdf` : elle ne vise aucun livrable, elle n'a rien à faire dans leurs
 répertoires. Les ebooks n'en visent pas davantage, et ils ont pourtant leur
-répertoire, `ebook/`, frère de ceux des prestataires : ils sont deux fichiers et non
+répertoire, `ebook/`, frère de ceux des livrables : ils sont deux fichiers et non
 un, et les poser à la racine mêlerait le livre du lecteur à l'épreuve du relecteur.
 
 ## Le fichier .maquette
@@ -620,7 +620,7 @@ tout ce qui se voit se vérifie dans l'application.
   deux millimètres près. Le fond de la pastille descend donc sous la coupe, et son
   placement suit d'autant — le texte ne bouge pas. Sans cela le tirage rendrait tantôt
   une pastille amputée, tantôt un liseré de couverture entre elle et le bord. Le débord
-  se déduit de la boîte, jamais du prestataire : nul du côté du dos, nul sur un aperçu
+  se déduit de la boîte, jamais de l'imprimeur : nul du côté du dos, nul sur un aperçu
   par face.
 - **Le manuscrit n'admet qu'un sous-ensemble de Markdown.** Tout le reste est
   refusé avec son numéro de ligne — un aplatissement silencieux donnerait un

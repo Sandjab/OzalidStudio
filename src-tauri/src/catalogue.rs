@@ -6,12 +6,12 @@
 //! remplacent le fourni de même clé. Ce module porte les types, leur lecture, les six
 //! fichiers fournis, le chargement et la vue plate.
 //!
-//! Un prestataire se décrit à un seul endroit, son fichier, où la couverture — fond
+//! Un POD se décrit à un seul endroit, son fichier, où la couverture — fond
 //! perdu, formule de dos — et l'intérieur — format, marges, gouttières — se tiennent
 //! ensemble. Séparés, ils dérivaient : la même pagination désignait deux formats.
 //!
 //! **Aucune valeur n'est reconstituée.** Chacune vient d'un relevé — guide, gabarit ou
-//! calculateur du prestataire, parfois un livre réel — que le `source` du bloc où elle
+//! calculateur de l'imprimeur, parfois un livre réel — que le `source` du bloc où elle
 //! sert cite. Hors tranche connue, on refuse plutôt que d'extrapoler. Ce sont les
 //! `dos_…_ancre_sur_…` du module qui tiennent ces relevés : ils ne comparent le
 //! catalogue à rien d'interne, ils l'ancrent au dehors.
@@ -34,7 +34,7 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
-/// Épaisseur du dos. Trois formes, parce que les prestataires en publient trois.
+/// Épaisseur du dos. Trois formes, parce que les imprimeurs en publient trois.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(tag = "forme", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Dos {
@@ -50,7 +50,7 @@ pub enum Dos {
 }
 
 impl Dos {
-    /// Épaisseur en mm, ou `None` quand le prestataire ne publie pas de formule.
+    /// Épaisseur en mm, ou `None` quand l'imprimeur ne publie pas de formule.
     pub fn mm(&self, pages: u32) -> Option<f64> {
         let p = f64::from(pages);
         match *self {
@@ -136,7 +136,7 @@ pub struct Format {
     /// Format de rognage, en mm.
     pub mm: Dimensions,
     pub marges: Marges,
-    /// Seules les tranches vérifiées dans le guide du prestataire figurent ici. Hors
+    /// Seules les tranches vérifiées dans le guide de l'imprimeur figurent ici. Hors
     /// tranche, on refuse plutôt qu'inventer.
     pub gouttieres: Vec<Tranche>,
     /// Surcharge du fond perdu du POD, quand un format s'en écarte.
@@ -184,7 +184,7 @@ pub struct Papier {
     pub nom: String,
     /// La couleur du papier, en notation CSS, telle que le canevas la peint.
     ///
-    /// **Convention d'Ozalid et non mesure** : aucun prestataire ne publie la teinte de
+    /// **Convention d'Ozalid et non mesure** : aucun imprimeur ne publie la teinte de
     /// son crème. Elle suit ce que le libellé annonce, et rien d'autre. Elle ne sert
     /// qu'à l'écran : le PDF n'a pas de fond, et lui en donner un ferait imprimer un
     /// aplat sur toutes les pages.
@@ -667,7 +667,7 @@ impl Provider {
             .ok_or_else(|| {
                 format!(
                     "{pages} pages : tranche de gouttière absente du gabarit {} — \
-                     la compléter depuis le guide du prestataire.",
+                     la compléter depuis le guide de l'imprimeur.",
                     self.cle
                 )
             })
@@ -994,7 +994,7 @@ fn repertoire(config: &Path) -> PathBuf {
 /// Deux fichiers du poste pour un même POD ne sont pas une faute — c'est le même
 /// imprimeur — mais le dernier par nom de fichier l'emporte, et il vaut mieux le savoir
 /// que le découvrir. Un fichier dont une clé héritée est déjà portée par un autre POD est
-/// en revanche refusé : c'est elle qui nomme le prestataire dans le projet enregistré.
+/// en revanche refusé : c'est elle qui nomme le POD dans le projet enregistré.
 ///
 /// Rend aussi ce qui a été refusé, pour que l'interface puisse le dire. Un journal que
 /// personne n'ouvre laisserait l'utilisateur devant un catalogue amputé.
@@ -2155,12 +2155,12 @@ non_outille = "géométrie du casewrap non relevée"
     // les bons chiffres. Aucune valeur n'a été recalculée à la migration.
 
     fn p(cle: &str) -> &'static Provider {
-        provider(cle).unwrap_or_else(|| panic!("prestataire inconnu : {cle}"))
+        provider(cle).unwrap_or_else(|| panic!("gabarit inconnu : {cle}"))
     }
 
     /// Le dos est ce que l'app promet à l'imprimeur : chaque formule est ancrée sur
     /// un relevé réel, pas sur sa propre arithmétique. Si l'un de ces chiffres bouge,
-    /// c'est le guide du prestataire qui a changé — pas un détail d'implémentation.
+    /// c'est le guide de l'imprimeur qui a changé — pas un détail d'implémentation.
     #[test]
     fn dos_lulu_ancre_sur_le_livre_reel_de_244_pages() {
         let dos = p("lulu").papier_defaut().dos.mm(244).unwrap();
@@ -2229,9 +2229,9 @@ non_outille = "géométrie du casewrap non relevée"
     }
 
     /// Le fond perdu est ce qui sépare une planche imprimable d'une planche rejetée.
-    /// Chaque valeur vient du gabarit du prestataire, aucune n'est un défaut commun.
+    /// Chaque valeur vient du gabarit de l'imprimeur, aucune n'est un défaut commun.
     #[test]
-    fn le_fond_perdu_est_celui_du_gabarit_de_chaque_prestataire() {
+    fn le_fond_perdu_est_celui_du_gabarit_de_chaque_imprimeur() {
         assert_eq!(p("tbe-110x170").fond_perdu, Some(5.0));
         assert_eq!(p("bookvault-127x203").fond_perdu, Some(3.0));
         assert_eq!(p("coollibri-110x170").fond_perdu, None);
@@ -2247,7 +2247,7 @@ non_outille = "géométrie du casewrap non relevée"
     }
 
     /// Hors tranche connue, on refuse. Inventer une gouttière produirait un intérieur
-    /// que le prestataire rejetterait sans que rien ne l'ait signalé.
+    /// que l'imprimeur rejetterait sans que rien ne l'ait signalé.
     #[test]
     fn hors_tranche_le_gabarit_refuse_au_lieu_d_inventer() {
         let err = p("lulu").gouttiere(100).unwrap_err();
@@ -2255,10 +2255,10 @@ non_outille = "géométrie du casewrap non relevée"
         assert!(err.contains("lulu"));
     }
 
-    /// Les prestataires à gabarit ne publient pas de formule : l'app ne doit pas
+    /// Les imprimeurs à gabarit ne publient pas de formule : l'app ne doit pas
     /// pouvoir en fabriquer une, quelle que soit la pagination.
     #[test]
-    fn un_prestataire_a_gabarit_ne_calcule_jamais_de_dos() {
+    fn un_imprimeur_a_gabarit_ne_calcule_jamais_de_dos() {
         let cl = p("coollibri-148x210");
         assert_eq!(cl.papier_defaut().dos.mm(280), None);
         assert_eq!(cl.papier_defaut().dos.mm(9999), None);
@@ -2269,7 +2269,7 @@ non_outille = "géométrie du casewrap non relevée"
     /// contrôle sur les valeurs des six fournis : l'un dit ce qu'un TOML a le droit
     /// d'écrire, l'autre ce que les nôtres écrivent. Ils ne se remplacent pas.
     #[test]
-    fn chaque_prestataire_a_un_papier_par_defaut_et_des_bornes_coherentes() {
+    fn chaque_pod_a_un_papier_par_defaut_et_des_bornes_coherentes() {
         for pr in providers() {
             assert!(!pr.papiers.is_empty(), "{} sans papier", pr.cle);
             assert!(pr.pages_min < pr.pages_max, "{} : bornes inversées", pr.cle);
@@ -2302,7 +2302,7 @@ non_outille = "géométrie du casewrap non relevée"
 
     /// Chaque papier dit sa couleur, en notation CSS : c'est le front qui la peint, et
     /// une conversion en chemin serait une occasion de se tromper. La valeur est une
-    /// convention d'Ozalid, pas une mesure — aucun prestataire ne publie la teinte de
+    /// convention d'Ozalid, pas une mesure — aucun imprimeur ne publie la teinte de
     /// son crème.
     ///
     /// `verifie` se contente d'une teinte non vide, parce qu'un fichier a le droit

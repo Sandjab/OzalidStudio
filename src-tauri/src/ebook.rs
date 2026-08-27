@@ -1,6 +1,6 @@
 //! Les ebooks locaux : le PDF et l'EPUB, écrits à côté du projet.
 //!
-//! Ce module est aux sorties locales ce que `package` est aux prestataires : il
+//! Ce module est aux sorties locales ce que `package` est aux imprimeurs : il
 //! traverse la chaîne, il ne compose rien lui-même. Le PDF vient d'`interieur`, la
 //! couverture de `couverture`, l'archive d'`epub` — et Typst fait les deux rendus.
 //!

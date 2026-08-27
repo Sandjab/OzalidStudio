@@ -2,7 +2,7 @@
 //!
 //! Deux conditions doivent être satisfaites **ensemble** : la gouttière doit
 //! correspondre à la tranche de pagination effective, et le compte de pages doit être
-//! pair — une feuille porte deux pages, les prestataires refusent l'impair. Chacune
+//! pair — une feuille porte deux pages, les imprimeurs refusent l'impair. Chacune
 //! peut déplacer la pagination, d'où la reprise.
 //!
 //! Le compte de pages produit ici est celui que consomme la couverture pour calculer
@@ -17,7 +17,7 @@ use crate::typst::MARQUEUR;
 
 /// Corps du texte, en points.
 ///
-/// Il vivait dans la table des prestataires, **identique dans ses quatorze entrées** :
+/// Il vivait dans la table des gabarits, **identique dans ses quatorze entrées** :
 /// ce n'est pas un fait d'imprimeur mais un choix typographique. La pagination en dépend,
 /// donc le dos : le déplacer est un acte délibéré, à revalider sur un livre réel.
 pub const CORPS_PT: f64 = 9.5;
@@ -50,7 +50,7 @@ fn police_defaut() -> String {
 
 /// Réglages d'intérieur du projet.
 ///
-/// Le prestataire impose le format, les marges, la gouttière et le corps ; le livre
+/// L'imprimeur impose le format, les marges, la gouttière et le corps ; le livre
 /// choisit son caractère. C'est la raison pour laquelle la police n'est pas un champ
 /// de `Provider`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -579,7 +579,7 @@ fn blocs_typst(blocs: &[Bloc]) -> String {
                 s.push_str(&inline(p));
                 s.push_str("\n\n");
             }
-            // Le blanc est en em, non en mm : il suit le corps du prestataire comme
+            // Le blanc est en em, non en mm : il suit le corps de l'intérieur comme
             // l'interligne, là où l'épreuve, qui n'a qu'un format, se règle en mm.
             // Il s'ajoute à l'espace de paragraphe, de part et d'autre — une rupture
             // se voit d'un coup d'œil sur la page, sans la trouer.
@@ -775,7 +775,7 @@ mod tests {
     }
 
     #[test]
-    fn la_source_porte_le_gabarit_du_prestataire_et_le_marqueur() {
+    fn la_source_porte_le_gabarit_de_l_imprimeur_et_le_marqueur() {
         let pr = provider("bod").unwrap();
         let r = Reglage {
             gouttiere: 20.0,
@@ -789,12 +789,12 @@ mod tests {
         assert!(s.trim_end().ends_with(MARQUEUR), "marqueur de pagination");
     }
 
-    /// Le corps et l'interligne ne sont pas des faits de prestataire : ils étaient
+    /// Le corps et l'interligne ne sont pas des faits d'imprimeur : ils étaient
     /// identiques dans les quatorze entrées de la table. Ils vivent ici désormais, et la
     /// source composée les porte quel que soit le gabarit visé — un poche et un grand
     /// format se composent au même corps.
     #[test]
-    fn le_corps_et_l_interligne_ne_dependent_pas_du_prestataire() {
+    fn le_corps_et_l_interligne_ne_dependent_pas_de_l_imprimeur() {
         let r = Reglage {
             gouttiere: 20.0,
             blanche: false,
