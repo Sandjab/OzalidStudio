@@ -248,10 +248,10 @@ fn fini_non_negatif(v: f64) -> bool {
 }
 
 /// Une clé du catalogue — POD, format, reliure, finition ou papier — nomme un répertoire
-/// de package ou un identifiant : elle doit être un nom de fichier et rien d'autre. Une clé vide ne se choisit pas dans l'interface et ne se
-/// retrouve pas dans un `.ozalid` : elle ne désigne rien, et n'est donc pas davantage un
-/// nom. `../../ailleurs` ou `C:nul*` s'écrivent sans peine dans un TOML, et `package` en
-/// ferait un chemin.
+/// de package ou un identifiant : elle doit être un nom de fichier et rien d'autre. Une
+/// clé vide ne se choisit pas dans l'interface et ne se retrouve pas dans un `.ozalid` :
+/// elle ne désigne rien, et n'est donc pas davantage un nom. `../../ailleurs` ou `C:nul*`
+/// s'écrivent sans peine dans un TOML, et `package` en ferait un chemin.
 fn est_un_nom(cle: &str) -> bool {
     !cle.is_empty()
         && cle
@@ -1733,6 +1733,31 @@ gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
         // à BoD, tous présents.
         let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
         assert_eq!(formats, 23, "vingt-trois formats attendus");
+    }
+
+    /// Le squelette de POD que le COOKBOOK donne en exemple se lit vraiment.
+    ///
+    /// C'est le seul contrôle mécanique qui vaille sur ce document : le squelette est ce
+    /// qu'on **copie** pour ajouter un imprimeur, et un exemple qui ne passe pas
+    /// `depuis_toml` envoie son lecteur droit dans un refus. Le reste du cookbook — les
+    /// chiffres des tableaux, leurs sources — relève de la relecture ; celui-ci se garde.
+    ///
+    /// Il rougira le jour où `verifie` gagnera un contrôle que l'exemple ne satisfait pas,
+    /// et c'est exactement ce qu'on lui demande : la doc et le code se périment ensemble
+    /// ou pas du tout.
+    #[test]
+    fn le_squelette_du_cookbook_est_un_pod_valide() {
+        const COOKBOOK: &str = include_str!("../../docs/COOKBOOK.md");
+        // Le **premier** bloc `toml` du document, qui est le squelette du chapitre
+        // « Ajouter un imprimeur ». Les autres extraits TOML du fichier sont en ligne,
+        // dans la prose, et ne forment pas un POD.
+        let squelette = COOKBOOK
+            .split("```toml\n")
+            .nth(1)
+            .and_then(|s| s.split("\n```").next())
+            .expect("le COOKBOOK ne porte plus de bloc ```toml");
+        Pod::depuis_toml(squelette)
+            .expect("le squelette du COOKBOOK ne se lit pas : l'exemple qu'on copie est faux");
     }
 
     /// Chaque POD outillé porte au moins un papier et une reliure composable : sans quoi il

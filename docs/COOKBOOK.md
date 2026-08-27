@@ -8,8 +8,9 @@ ses constantes, et ses pièges.
 Les `src-tauri/pods/*.toml` **font foi** : un fichier par imprimeur, incorporé au binaire,
 que le poste peut remplacer en déposant le sien dans `<config>/pods/`. Les tableaux
 « gabarit » ci-dessous ne les redisent que pour citer la source de chaque valeur et ce
-qu'elle vaut à l'usage. Les guides et calculateurs relevés se rangent dans
-`build/in/editors/`, non tracké.
+qu'elle vaut à l'usage — et seulement quand **une seule valeur couvre tout l'imprimeur** :
+une grandeur qui varie d'un format à l'autre n'y figure pas, elle se lit dans le fichier.
+Les guides et calculateurs relevés se rangent dans `build/in/editors/`, non tracké.
 
 L'ordre est toujours le même — l'intérieur d'abord, la couverture ensuite, le dos suit la
 pagination — mais il n'est plus à tenir à la main : le nombre de pages ne transite plus
@@ -75,7 +76,7 @@ projet — et elle repagine.
 ### Pièges
 
 - **Hors de la tranche 151-400 pages**, la génération refuse plutôt que d'inventer une
-  gouttière. La compléter dans `pods/lulu.toml`, depuis le guide de l'imprimeur.
+  gouttière. La compléter dans `src-tauri/pods/lulu.toml`, depuis le guide de l'imprimeur.
 - **Le massicot mange jusqu'à 3 mm.** Une image à fond perdu s'étend bien jusqu'aux bords
   de la planche, mais ce qui compte y sera peut-être coupé.
 - **Distribution commerciale** : une maquette qui imite une charte de collection existante
@@ -321,8 +322,8 @@ on ne saurait plus lesquels viennent du fichier déposé.
 chacun porte, et pourquoi ce sont quatre listes plutôt qu'un arbre. Attention, la spec est un
 document daté du brainstorming : elle écrit encore les couples en tableaux positionnels
 (`mm = [135.0, 215.0]`), là où les fichiers portent des tables nommées. Ce sont les six
-`pods/*.toml` qui font foi sur la syntaxe. Le minimum vital — un format, une reliure
-composable, un papier :
+`src-tauri/pods/*.toml` qui font foi sur la syntaxe. Le minimum vital — un format, une
+reliure composable, un papier :
 
 ```toml
 cle = "exemple"
@@ -384,12 +385,13 @@ se rédige donc pour être lue, pas pour cocher un champ. Le refus tombe au mome
 jamais après une couverture réglée.
 
 Un POD dont **aucune** reliure ne porte de géométrie est refusé au chargement : il ne
-produirait aucun gabarit, et son imprimeur manquerait à la liste sans que rien ne le dise.
+produirait aucune entrée de la table plate, et son imprimeur manquerait à la liste sans
+que rien ne le dise.
 
 ### Ce qui refuse au chargement
 
-`Pod::verifie` tourne sur chaque fichier, fourni ou déposé, et le message nomme le fichier
-et ce qui manque. De quoi corriger un fichier refusé sans aller lire le Rust :
+`Pod::verifie` tourne sur chaque fichier, fourni ou déposé. De quoi écrire un fichier qui
+passe du premier coup ; un fichier refusé, lui, est déjà nommé avec ce qui manque :
 
 - **Les clés** — POD, format, reliure, finition, papier — sont des noms de fichier :
   minuscules ASCII, chiffres et tirets, et non vides. Elles nomment des répertoires de
