@@ -1163,6 +1163,10 @@ pour la première fois du chantier.
    configuration ; c'est lui qu'il faut modifier.
 6. **Un livrable élagué se dit** (tâche 5) : retirer de ce même fichier un axe qu'un
    livrable du livre utilise, rouvrir, et lire la ligne qui nomme ce qui a disparu.
+7. **L'onglet mène à l'élagage** : sur le livre de la vérification 6, rester sur l'étape
+   Livre et regarder l'onglet Livraison — il porte un point et le compte des retirés. La
+   mécanique est établie par les tests et par le CSS ; c'est l'allure qu'il reste à voir.
+8. **La boîte des élagués se lit au-dessus du sélecteur d'ajout**, et non ailleurs.
 
 ## Ce que ce lot ne fait pas
 
@@ -1175,3 +1179,52 @@ pour la première fois du chantier.
 - **Les cinq imprimeurs tier B et C** du comparatif restent hors périmètre.
 - **Les neuf autres imprimeurs ne sont pas complétés.** Le lot ne traite que BoD ; ce que le
   relevé a appris sur la méthode vaut pour les autres, et la reconnaissance § 5 la décrit.
+
+## Les dettes que ce lot laisse — écrites parce que rien d'autre ne les tient
+
+Relevées par la revue finale du 27/08, qui a lu les 26 commits d'un coup et **composé les
+dix formats** pour regarder les images. Aucune n'était visible depuis une tâche.
+
+1. **Le 21 × 15 ne compose pas proprement en « Filets ».** Sur 150 mm de haut, le bloc titre
+   (≈ 83 mm) et le pied (≈ 45 mm) ne tiennent pas ensemble. Le genre chevauchait déjà le
+   pied avant ce lot ; remonter le bloc de 6,75 mm pour dégager le filet a transformé le
+   contact en recouvrement. **Le défaut préexiste, la correction l'aggrave** — arbitrage de
+   l'utilisateur du 27/08 : livrer et consigner. Le lever demande d'ouvrir la géométrie de
+   composition (écarts du bloc, ou genre masqué sous une hauteur), pas de changer une valeur.
+2. **« Surimpression » traverse son cadre en 21 × 15** — bloc titre à 13,50 mm du haut, filet
+   à 14,35, déficit 1,36. Défaut antérieur au chantier, révélé par le format neuf. Exempté
+   **nommément et étroitement** dans `le_pied_et_le_bloc_titre_ne_traversent_jamais_le_cadre` :
+   ce couple maquette × format seul, tout le reste de Surimpression reste vérifié.
+3. **Les projets déjà composés gardent l'ancienne maquette.** Une `.maquette` est **copiée
+   dans le `.ozalid`** : un livre réglé sur Filets garde son pied à 13,5 % et son bloc à
+   13,0 %. Il n'existe aucun geste, dans l'application, pour mettre à jour une maquette
+   fournie dans un projet existant. Sans conséquence en 13,5 × 21,5 ; visible sur un format
+   large.
+4. **Le README nomme un module supprimé au lot 1.** Sa table des modules porte encore
+   `providers`, jamais remplacé par `catalogue`, et le document d'architecture **ne dit nulle
+   part** que le catalogue vit dans `src-tauri/pods/*.toml` et se surcharge par
+   `<config>/pods/`. Le livrable central de quatre lots y est invisible. La tâche 6 est
+   passée sur ces lignes pour le seul renommage sans voir ce qu'elles décrivaient.
+5. **La finition ne paraît nulle part au compte rendu.** `projet.rs` promet « la finition qui
+   paraîtra au récapitulatif » ; `Resultat.libelle` ne porte que « BoD — 13,5 × 21,5 cm ».
+   La phrase était invérifiable avant ce lot — aucun POD ne déclarait de finition. Elle est
+   fausse depuis qu'on en règle une : l'utilisateur coche « Pelliculage en relief », génère,
+   et le compte rendu qu'il emporte chez l'imprimeur n'en dit rien.
+6. **`normalise` élague quatre axes sur cinq.** `resout` ne connaît que POD × format ×
+   reliure × papier : une finition disparue du catalogue survit en silence à l'ouverture,
+   alors que `reglage_refuse` interdit de la **poser**. Contrôle à l'écriture, aucun à la
+   lecture — l'asymétrie exacte que la tâche 5 est allée corriger sur les quatre autres axes.
+7. **Le témoin ne couvre qu'un axe** : 1 format sur 10, 1 papier sur 4, aucune finition, et
+   il ne voit pas la maquette — il n'assertit que la pagination. Aucune composition Typst
+   n'exerce les neuf formats ajoutés ; la revue finale les a composés à la main, ils passent.
+   Un second témoin sur un format extrême coûterait une composition de plus en CI.
+8. **La justification à 9,5 pt sur les grands formats de BoD.** Le COOKBOOK avertit que la
+   colonne du KDP 6 × 9 fait 120,6 mm, « environ 90 signes ». Les formats neufs vont à
+   173 mm en 21 × 15 (~130 signes). Le piège documenté est deux fois plus sévère chez BoD
+   depuis ce lot, et son chapitre n'en dit rien.
+9. **Trois chapitres du COOKBOOK sur six n'ont pas de tableau « Téléverser »**, alors que le
+   « Geste » promet « les réglages de son chapitre » pour tous. Antérieur au chantier.
+10. **Deux inexactitudes de commentaire, repérées sans être touchées** : `interieur.rs:53`
+    affirme que l'imprimeur impose « le corps », alors que `CORPS_PT` vit dans le module
+    depuis le lot 1 ; et les « aucun éditeur » de `commands.rs` (l. 813 et 2085), dont le
+    sens du mot n'a pas été tranché.
