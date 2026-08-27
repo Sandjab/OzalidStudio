@@ -2744,32 +2744,27 @@ nom = "Pelliculage mat"
         assert!(raison.contains("couverture rigide"), "{raison}");
     }
 
-    /// Le drapeau voyage jusqu'à l'arbre et y suit le fichier, POD par POD : KDP publie
-    /// une formule pour ses deux papiers, CoolLibri pour aucun des siens. Aucun POD fourni
-    /// ne mélange les deux formes dans le même fichier — c'est
+    /// Le drapeau voyage jusqu'à l'arbre et y suit le fichier, papier par papier.
+    ///
+    /// Depuis le lot 5, **les six PODs fournis publient une formule pour chacun de leurs
+    /// papiers** : le dernier qui ne le faisait pas, CoolLibri, a vu son calculateur
+    /// relevé. Plus un seul dos ne se saisit à la main dans le catalogue livré, et c'est
+    /// ce que ce test affirme — un POD fourni qui reviendrait au relevé le ferait rougir,
+    /// et ce serait la bonne conversation à avoir.
+    ///
+    /// La forme `mesure` reste servie pour un fichier déposé sur le poste ; c'est
     /// `la_conversion_d_un_papier_suit_sa_propre_formule_de_dos` qui couvre la règle
     /// « par papier, pas par POD » sur une fixture construite pour l'exercer.
     #[test]
     fn dos_publie_est_porte_par_chaque_papier() {
-        let pods = pods_liste();
-
-        let kdp = pods
-            .iter()
-            .find(|p| p.cle == "kdp")
-            .expect("KDP est fourni");
-        assert!(
-            kdp.papiers.iter().all(|pa| pa.dos_publie),
-            "KDP publie une formule pour ses deux papiers"
-        );
-
-        let coollibri = pods
-            .iter()
-            .find(|p| p.cle == "coollibri")
-            .expect("CoolLibri est fourni");
-        assert!(
-            coollibri.papiers.iter().all(|pa| !pa.dos_publie),
-            "CoolLibri ne publie aucune formule : le dos se relève sur son gabarit"
-        );
+        for pod in pods_liste() {
+            assert!(
+                pod.papiers.iter().all(|pa| pa.dos_publie),
+                "{} : tout papier fourni porte sa formule de dos",
+                pod.cle
+            );
+            assert!(!pod.papiers.is_empty(), "{} sans papier", pod.cle);
+        }
     }
 
     /// Le relevé de dos suit le **papier**, jamais le premier de la liste. Aucun POD fourni

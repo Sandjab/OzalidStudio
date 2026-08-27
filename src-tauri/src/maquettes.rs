@@ -965,19 +965,29 @@ mod tests {
             }
             exercees += 1;
             for pr in crate::catalogue::providers() {
-                // DETTE, non corrigée — arbitrage utilisateur du 27/08. Surimpression
-                // traverse son propre cadre sur ce format précis, et sur lui seul :
-                // bloc titre à 13,50 mm du haut, filet à 14,35 mm (déficit 1,36 mm),
-                // confirmé à l'image (`surimpression-une.png` en 21 × 15). Le défaut est
-                // antérieur à ce lot — Surimpression n'avait jamais porté un format
-                // aussi court avant que BoD (lot 4) publie le 21 × 15 — et c'est ce
-                // format neuf qui le révèle, pas ce lot qui le cause. Laissé
-                // volontairement : lui donner son propre `bloc_y` est le travail de la
-                // maquette Surimpression, pas de ce catalogue. Pour le lever : reprendre
-                // le calcul de ce test avec le cadre de Surimpression (marge 6,0,
-                // décroché 1,4, filets 0,25/0,15, écart 0,6) au lieu de celui de Filets,
-                // et écrire la valeur trouvée dans `surimpression.maquette`.
-                if cle == "surimpression" && pr.cle == "bod-210x150-broche" {
+                // DETTE, non corrigée — arbitrage utilisateur du 27/08, élargi au lot 5.
+                // Surimpression traverse son propre cadre sur les formats **à
+                // l'italienne**, et sur eux seuls : son cadre s'épaissit en pourcentage
+                // de la **largeur** quand `bloc_y` descend en pourcentage de la
+                // **hauteur**, si bien qu'une page plus large que haute rapproche les
+                // deux jusqu'au contact — de 0,35 mm de déficit sur le 19 × 15 de
+                // TheBookEdition à 1,36 mm sur le 21 × 15 de BoD, ce dernier confirmé à
+                // l'image (`surimpression-une.png`). Le défaut est antérieur à ce lot,
+                // et ce sont les formats neufs qui le révèlent, pas eux qui le causent.
+                // Laissé volontairement : donner à Surimpression son propre `bloc_y` est
+                // le travail de cette maquette, pas de ce catalogue. Pour le lever :
+                // reprendre le calcul de ce test avec le cadre de Surimpression
+                // (marge 6,0, décroché 1,4, filets 0,25/0,15, écart 0,6) au lieu de
+                // celui de Filets, et écrire la valeur trouvée dans
+                // `surimpression.maquette`.
+                //
+                // L'exception porte sur le **cas** et non sur une liste de clés : un
+                // format à l'italienne de plus la rejoindrait sans qu'on y pense, et
+                // c'est ce qui vient d'arriver à cinq d'entre eux. Elle ne couvre que
+                // Surimpression : Filets et Bandeau restent tenus sur toute la table, à
+                // l'italienne comprise.
+                let a_l_italienne = pr.format.0 > pr.format.1;
+                if cle == "surimpression" && a_l_italienne {
                     continue;
                 }
 

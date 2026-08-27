@@ -1787,16 +1787,19 @@ auteur = "Ivan Pjig"
                 Livrable {
                     dos_mm: Some(18.4),
                     fond_perdu_mm: Some(3.0),
-                    ..Livrable::pour(fab("coollibri", "148x210", "broche", "mesure"))
+                    ..Livrable::pour(fab("coollibri", "148x210", "broche", "standard-90"))
                 },
             ],
-            courant: "coollibri-148x210-broche-mesure".into(),
+            courant: "coollibri-148x210-broche-standard-90".into(),
             deja_compose: false,
             mesures: std::collections::BTreeMap::new(),
         };
 
         let r = aller_retour(&p);
-        assert_eq!(r.meta.livraison.courant, "coollibri-148x210-broche-mesure");
+        assert_eq!(
+            r.meta.livraison.courant,
+            "coollibri-148x210-broche-standard-90"
+        );
         let d = r.meta.livraison.courant().expect("courant perdu");
         assert_eq!(d.dos_mm, Some(18.4));
         assert_eq!(d.fond_perdu_mm, Some(3.0));

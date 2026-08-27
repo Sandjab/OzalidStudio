@@ -1,21 +1,36 @@
 # TheBookEdition — production française, contrôle manuel des fichiers.
 #
-# Ils ne publient aucune dimension : ni format de rognage en millimètres, ni fond perdu, ni
-# formule de dos. Toutes les valeurs ci-dessous sont mesurées sur ce que leur générateur
-# rend (POST sur /fr/module/bookscover/simulationcover, relevé le 20/08/2026), et non
-# reconstituées. Leur aide fait du gabarit généré une condition de recevabilité : le
-# vérifier contre la planche avant de déposer.
+# Ils ne publient aucune dimension de couverture : ni fond perdu, ni formule de dos. Tout
+# ce qui touche la planche est **mesuré** sur ce que leur générateur rend — un POST sans
+# authentification sur `/fr/module/bookscover/simulationcover`, qui renvoie un JPEG 300 dpi.
+# Le même module publie en JSON la table de ses formats (`action=GetFormat`) et de ses
+# papiers (`action=GetWeight`), reliure par reliure : les neuf formats ci-dessous et leurs
+# dimensions en viennent, relevés le 27/08/2026. Leur aide fait du gabarit généré une
+# condition de recevabilité : le vérifier contre la planche avant de déposer.
 #
-# Trois des neuf formats admis en dos carré collé, ceux qui servent au roman.
+# Les neuf formats admis en dos carré collé, cette fois au complet.
 
 cle = "tbe"
 nom = "TheBookEdition"
 # Mesuré : leur générateur rend une planche haute de la hauteur du livre + 10 mm, sur les
-# cinq formats mesurés.
+# neuf formats et à toutes les paginations mesurées (40, 100, 280, 500, 750 pages).
 fond_perdu = 5.0
 
-# Marges du guide de mise en page, page « Réussir la mise en page » : 12,5 mm sur les quatre
-# côtés pour les formats jusqu'à l'A5, plus 5 mm de reliure — d'où 17,5 mm de gouttière.
+# Deux provenances pour les marges, et elles ne s'accordent pas :
+#
+# — La page « Réussir la mise en page » conseille 12,5 mm sur les quatre côtés plus 5 mm de
+#   reliure — d'où 17,5 mm de gouttière — « pour un livre de poche au format 11×17 cm »,
+#   mesures qui « conviennent également pour un format A5 » ; et, « pour un grand format
+#   comme le A4 », 20 mm sur les quatre côtés plus 6 mm de reliure.
+# — Les gabarits Word de `/fr/content/24-gabarits-interieur`, un par format, qui donnent
+#   des marges symétriques sans marge de reliure : 20 mm partout, sauf 19 mm latéraux et
+#   25,4 mm en tête et en pied au 18 × 26, et 25 mm partout à l'A4.
+#
+# Chaque format prend la source qui le nomme : la page de conseils pour ceux qu'elle
+# traite, le gabarit Word pour les cinq autres. Une marge de reliure ne s'invente pas là
+# où l'imprimeur n'en publie pas — le gabarit Word n'en pose aucune, et sa gouttière vaut
+# donc sa marge intérieure.
+#
 # Aucune variation selon la pagination n'est publiée : tranche unique, bornée par les 40 à
 # 750 pages que leur dos carré collé admet.
 
@@ -26,6 +41,14 @@ mm = { largeur = 110.0, hauteur = 170.0 }
 marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
 gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
 source = "leur table des formats ; marges de la page « Réussir la mise en page »"
+
+[[format]]
+cle = "110x200"
+nom = "Romantique 11 × 20"
+mm = { largeur = 110.0, hauteur = 200.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 40, a = 750, mm = 20.0 } ]
+source = "leur table des formats ; marges du gabarit Word 11x20cm.doc"
 
 [[format]]
 cle = "120x180"
@@ -45,6 +68,46 @@ marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
 gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
 source = "leur table des formats — 148,5 et non 148"
 
+[[format]]
+cle = "150x150"
+nom = "Carré 15 × 15"
+mm = { largeur = 150.0, hauteur = 150.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 40, a = 750, mm = 20.0 } ]
+source = "leur table des formats ; marges du gabarit Word 15x15cm.doc"
+
+[[format]]
+cle = "190x150"
+nom = "Panoramique 19 × 15"
+mm = { largeur = 190.0, hauteur = 150.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 40, a = 750, mm = 20.0 } ]
+source = "leur table des formats ; marges du gabarit Word 19x15cm.doc"
+
+[[format]]
+cle = "180x260"
+nom = "MDO 18 × 26"
+mm = { largeur = 180.0, hauteur = 260.0 }
+marges = { haut = 25.4, bas = 25.4, exterieur = 19.0 }
+gouttieres = [ { de = 40, a = 750, mm = 19.0 } ]
+source = "leur table des formats ; marges du gabarit Word 18x26cm.doc"
+
+[[format]]
+cle = "210x210"
+nom = "Grand carré 21 × 21"
+mm = { largeur = 210.0, hauteur = 210.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 40, a = 750, mm = 20.0 } ]
+source = "leur table des formats ; marges du gabarit Word 21x21cm.doc"
+
+[[format]]
+cle = "210x297"
+nom = "A4 21 × 29,7"
+mm = { largeur = 210.0, hauteur = 297.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 40, a = 750, mm = 26.0 } ]
+source = "leur table des formats ; marges de la page « Réussir la mise en page », grand format"
+
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
@@ -53,23 +116,52 @@ pages = { min = 40, max = 750 }
 parite = "paire"
 source = "leur aide : 40 à 750 pages en dos carré collé, nombre pair"
 
+# TheBookEdition relie aussi en rigide — cinq formats, 24 à 300 pages, et un gabarit
+# explicatif à part. La géométrie est relevable, mais `planche` ne sait pas la composer.
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+
+# Trois pelliculages sur la couverture 300 g du dos carré collé. Aucun n'a d'effet sur la
+# composition : la finition nomme une option de commande, et le livrable en garde la trace.
+[[finition]]
+cle = "brillant"
+nom = "Pelliculage brillant"
+
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
+
+[[finition]]
+cle = "soft-touch"
+nom = "Pelliculage soft touch"
+
 # Le dos ne dépend que de la pagination : 0,060 mm par page, quel que soit le papier et
 # quel que soit le format. Ce n'est pas une simplification de notre part — c'est ce que
 # produit leur générateur de gabarit. Mesuré sur la largeur des gabarits JPEG 300 dpi qu'il
-# renvoie : 40 p → 232,41 mm, 100 p → 235,97, 280 p → 246,80, 500 p → 260,01,
-# 750 p → 275,00, soit 2 × 110 + 2 × 5 de fond perdu + pages × 0,060 au format Poche. Les
-# mêmes paginations sur le papier 120 g, et sur les formats 12x18, 14,8x21 et 21x29,7,
-# donnent le même dos à moins de 0,04 mm — l'écart résiduel est l'arrondi au pixel.
+# renvoie, sur les neuf formats × trois papiers × cinq paginations : 40 p → 2,40 mm,
+# 100 p → 6,04, 280 p → 16,79, 500 p → 30,00, 750 p → 44,99 — identiques d'un format et
+# d'un papier à l'autre à moins de 0,05 mm, l'écart résiduel étant l'arrondi au pixel.
 [[papier]]
 cle = "munken-80"
 nom = "Munken 80 g"
 teinte = "#ffffff"
 dos = { forme = "multiplie", par = 0.060, plus = 0.0 }
-source = "mesuré sur les gabarits JPEG 300 dpi du 20/08/2026"
+source = "mesuré sur les gabarits JPEG 300 dpi du 27/08/2026"
 
 [[papier]]
 cle = "120"
 nom = "Papier 120 g"
 teinte = "#ffffff"
 dos = { forme = "multiplie", par = 0.060, plus = 0.0 }
-source = "mesuré sur les gabarits JPEG 300 dpi du 20/08/2026 — même dos que le Munken 80 g"
+source = "mesuré sur les gabarits JPEG 300 dpi du 27/08/2026 — même dos que le Munken 80 g"
+
+# Le papier de l'intérieur en couleur : leur module ne le propose qu'avec `id_color=couleur`,
+# où il est le seul. Même dos que les deux autres, mesuré de la même façon.
+[[papier]]
+cle = "135"
+nom = "Papier 135 g couleur"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.060, plus = 0.0 }
+source = "mesuré sur les gabarits JPEG 300 dpi du 27/08/2026 — intérieur couleur"

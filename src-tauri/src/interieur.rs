@@ -705,7 +705,10 @@ mod tests {
     /// coûte une passe de mise en page sur tout le livre.
     #[test]
     fn une_composition_stable_converge_du_premier_coup() {
-        let pr = provider("lulu").unwrap();
+        // Un gabarit à tranche unique : chez Lulu, cinq tranches se succèdent, et 272
+        // pages ne tombent pas dans celle où la convergence commence — ce serait alors la
+        // recomposition qu'on mesurerait, pas la stabilité.
+        let pr = provider("bod").unwrap();
         let appels = RefCell::new(0);
         let r = converge(pr, |_| {
             *appels.borrow_mut() += 1;
@@ -713,7 +716,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(r.pages, 272);
-        assert_eq!(r.gouttiere, 25.0);
+        assert_eq!(r.gouttiere, 20.0);
         assert!(!r.blanche);
         assert_eq!(*appels.borrow(), 1);
     }
@@ -722,7 +725,9 @@ mod tests {
     /// celui de la composition **avec** la blanche — pas celui d'avant.
     #[test]
     fn un_compte_impair_ajoute_la_blanche_et_repart_du_nouveau_compte() {
-        let pr = provider("lulu").unwrap();
+        // Tranche unique, pour la même raison : c'est la blanche qu'on compte ici, pas un
+        // changement de gouttière.
+        let pr = provider("bod").unwrap();
         let n = RefCell::new(0);
         let r = converge(pr, |reglage| {
             *n.borrow_mut() += 1;
@@ -755,8 +760,10 @@ mod tests {
     #[test]
     fn une_pagination_hors_tranche_interrompt_la_convergence() {
         let pr = provider("lulu").unwrap();
-        let err = converge(pr, |_| Ok(100)).unwrap_err();
-        assert!(err.contains("100 pages"), "{err}");
+        // Vingt pages : sous les 32 que le broché de Lulu admet, donc sous sa première
+        // tranche de gouttière.
+        let err = converge(pr, |_| Ok(20)).unwrap_err();
+        assert!(err.contains("20 pages"), "{err}");
     }
 
     /// Une oscillation doit finir par échouer plutôt que tourner sans fin — sans quoi

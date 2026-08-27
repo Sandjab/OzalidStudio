@@ -45,15 +45,15 @@ Vaut chez tous les imprimeurs :
 
 ---
 
-## Lulu — poche 108 × 175 mm
+## Lulu — seize formats, du poche 108 × 175 à l'A4 à l'italienne
 
 ### Téléverser
 
 | Réglage | Valeur |
 |---|---|
-| Format | Pocketbook — 4,25 × 6,875 in / 108 × 175 mm |
+| Format | celui du livrable — Pocketbook 4,25 × 6,875 in, US Trade 6 × 9 in, A5… |
 | Reliure | Paperback (dos carré collé) |
-| Encre et papier | Standard Black & White, 60# crème non couché — le classique pour un roman |
+| Encre et papier | Standard Black & White, et l'un des trois papiers de la table |
 
 Puis les deux fichiers : l'intérieur PDF, la planche PDF comme couverture.
 
@@ -61,22 +61,45 @@ Puis les deux fichiers : l'intérieur PDF, la planche PDF comme couverture.
 
 | Grandeur | Valeur | Source |
 |---|---|---|
-| Format de rognage | 108 × 175 mm | guide Lulu |
-| Fond perdu | 3,175 mm (0,125 po) | idem |
-| Dos | pages / 17,48 + 1,524 mm | idem — vérifié sur un livre réel de 244 p. → 15,48 mm |
-| Gouttière | 25 mm, **pour 151 à 400 pages seulement** | idem |
-| Marge extérieure | 13 mm | sécurité |
-| Marges haut / bas | 14 / 15 mm | |
-| Pagination | 32 à 800 pages | reprise de la table historique du dépôt, sans relevé au guide |
+| Formats | seize, de 108 × 175 à 297 × 210 mm | guide Lulu et feuille de spécifications officielle |
+| Fond perdu | 3,175 mm (0,125 po) | guide, chapitre « Bleed Margin » |
+| Dos | pages / 17,48 + 1,524 mm, **quel que soit le papier** | guide ; vérifié au générateur de gabarit — 32 p → 3,35 mm, 244 p → 15,48, 800 p → 47,29 |
+| Papiers | blanc 60 lb, crème 60 lb, couché 80 lb | tous publiés à 444 pages par pouce, donc même dos |
+| Marges haut / bas / extérieur | 12,7 mm (0,5 po) | marge de sécurité du guide, identique sur les seize formats |
+| Gouttière | 12,7 mm jusqu'à 59 p ; 15,875 jusqu'à 150 ; 25,4 jusqu'à 399 ; 28,575 jusqu'à 600 ; 31,75 au-delà | table « Gutter Additions », marge de sécurité comprise |
+| Pagination | 32 à 800 pages — **32 à 250 sur les trois formats à l'italienne** | guide ; feuille de spécifications pour le plafond des paysages |
 
 Corps 9,5 pt, interligne 1,42 : ce ne sont plus des faits d'imprimeur mais des constantes de
 la composition (`interieur.rs`), identiques partout. La police, elle, est un réglage du
 projet — et elle repagine.
 
+### Relever soi-même
+
+Le générateur de gabarit de Lulu répond **sans compte**, et son PDF écrit son dos, son fond
+perdu et sa marge de sécurité en toutes lettres :
+
+```
+https://api.lulu.com/cover/api/v1/template/?binding_type=PB&mode=full
+  &interior_width=4.25&interior_height=6.875&num_pages=244&pages_per_inch=444
+  &target=print&theme=lulu2
+```
+
+C'est de là que viennent les ancrages du catalogue. La feuille de spécifications
+(`assets.lulu.com/media/specs/lulu-print-api-spec-sheet.xlsx`) donne le reste : dimensions,
+paginations admises et papiers, produit par produit.
+
 ### Pièges
 
-- **Hors de la tranche 151-400 pages**, la génération refuse plutôt que d'inventer une
-  gouttière. La compléter dans `src-tauri/pods/lulu.toml`, depuis le guide de l'imprimeur.
+- **Deux frontières ambiguës dans la table des gouttières** publiée par Lulu : la page 60
+  n'appartient à aucune tranche (« moins de 60 », puis « 61 à 150 »), et la page 400
+  appartient aux deux (« 151 à 400 » et « 400 à 600 »). Le catalogue les donne à la tranche
+  la **plus large** — une gouttière trop grande coûte des pages, une trop petite fait relier
+  dans le texte.
+- **Le Comic Book 16,8 × 26** n'est proposé qu'en couché 80 lb chez Lulu ; le catalogue ne
+  sait pas restreindre un papier à un format, et laissera choisir les trois.
+- **Les millimètres sont ceux que Lulu publie**, pas la conversion exacte de ses pouces :
+  108 × 175 là où son gabarit rend 107,95 × 174,62. L'écart va jusqu'à 0,5 mm sur le
+  19 × 19, en deçà de la tolérance de rognage.
 - **Le massicot mange jusqu'à 3 mm.** Une image à fond perdu s'étend bien jusqu'aux bords
   de la planche, mais ce qui compte y sera peut-être coupé.
 - **Distribution commerciale** : une maquette qui imite une charte de collection existante
@@ -202,32 +225,29 @@ sur les plats.
 
 ---
 
-## CoolLibri — 11 × 17, A5 ou 16 × 24 cm
+## CoolLibri — sept formats, du poche 11 × 17 à l'A4 à l'italienne
 
-Imprimeur toulousain. Son intérieur est outillé ; **son dos se relève, il ne se calcule
-pas** : CoolLibri publie sa formule, `(grammage / 1000) × main × (pages / 2)`, mais pas la
-« main » de ses papiers. Ses gabarits de couverture publiés ne couvrent que le dos carré
-rigide, en 21 × 21 et A4.
+Imprimeur toulousain. Rien n'est à saisir : depuis le lot 5, son dos se calcule comme
+partout ailleurs.
 
-Trois formats en table, les seuls destinés au roman : **11 × 17**, **A5 14,8 × 21**,
-**16 × 24 cm**.
+CoolLibri publie sa formule — `(grammage / 1000) × main × (pages / 2)` — sans la « main »
+de ses papiers. Mais son configurateur, sur `/imprimer-un-livre`, affiche « Taille du dos »
+sans compte ni dépôt de manuscrit, et le tient d'un endpoint public. Les quatre
+coefficients de la table en viennent : ils reproduisent, une fois arrondis au millimètre,
+les 1 284 valeurs relevées sur les 321 paginations paires de 60 à 700 pages, sans un écart.
 
-### Relever le dos
-
-1. Monter le projet dans le parcours en ligne de CoolLibri jusqu'à l'étape « couverture et
-   dos » — c'est là qu'il s'affiche, pour le papier et la pagination retenus.
-2. À la Livraison, saisir le **dos relevé** et le **fond perdu** (3 mm chez CoolLibri).
-
-**Au-delà de 180 pages**, CoolLibri prévient lui-même que l'épaisseur peut changer :
-reprendre le dos affiché à cette étape avant de générer le package.
+Sept formats en table : **11 × 17**, **A5 14,8 × 21**, **16 × 24**, **21 × 21**,
+**A4 21 × 29,7**, et les deux à l'italienne, **21 × 14,8** et **29,7 × 21 cm**.
 
 ### Gabarit, pour mémoire
 
 | Grandeur | Valeur | Source |
 |---|---|---|
+| Formats | sept, de 110 × 170 à 297 × 210 mm ; **A5 = 148,5** et non 148 | gabarits Word officiels |
 | Marges | 20 mm sur les quatre côtés | gabarits Word officiels, FAQ « 2 cm de marges tout autour » |
-| Fond perdu | 3 mm, à saisir | relevé sur leur gabarit |
-| Dos | non calculable — à relever | formule publiée sans la « main » des papiers |
+| Fond perdu | 3 mm | FAQ : « Il faut prévoir 3 mm de fonds perdus tournant » |
+| Dos | pages × 0,054 mm (standard 90 g) ; × 0,07143 (bouffant et crème 80 g) ; × 0,0505 (satin 115 g) | leur calculateur, balayé sur toute la pagination |
+| Papiers | standard 90 g blanc, bouffant 80 g blanc, crème 80 g beige, couché satin 115 g blanc | leur configurateur |
 | Pagination | 60 à 700 pages en dos carré collé | selon le papier |
 
 CoolLibri ne module pas la reliure selon l'épaisseur et ne distingue pas la marge intérieure
@@ -235,40 +255,70 @@ de l'extérieure : 20 mm sur les quatre côtés, et la composition est donc **sy
 C'est le seul imprimeur du catalogue dont tous les formats le soient — l'A5 de Bookvault,
 qui reprend ses marges de celui-ci faute de valeur publiée, l'est par héritage.
 
+### Relever soi-même
+
+L'endpoint ne demande ni compte ni jeton, et ne prend ni le format ni la quantité — le dos
+ne dépend que de la reliure, du papier et de la pagination :
+
+```
+POST https://www.coollibri.com/Panier/ReturnSizeTranche
+     ArticleId=1&OptionId=9&NumberPage=280        →  {"tranche":15}
+```
+
+`ArticleId = 1` est le dos carré collé ; `OptionId` vaut 9, 10, 11 ou 12 pour les quatre
+papiers, dans l'ordre du fichier `coollibri.toml`.
+
+### Pièges
+
+- **Leur affichage est arrondi au millimètre**, et le nôtre ne l'est pas. L'incertitude qui
+  reste sur le coefficient vaut moins de 0,07 mm sur un livre de 700 pages — mais c'est
+  bien un encadrement, pas une valeur publiée par eux.
+- **Au-delà de 180 pages**, CoolLibri prévient lui-même que l'épaisseur peut varier d'une
+  commande à l'autre. Le dos calculé est celui qu'ils annoncent, pas une promesse de
+  fabrication : vérifier celui qu'affiche l'étape « couverture et dos » avant de valider.
+- **Les clés de papier ont changé au lot 5.** L'entrée unique `mesure`, qui nommait
+  l'absence de formule plutôt qu'un papier, a laissé la place aux quatre papiers réels. Un
+  projet CoolLibri enregistré avant ce lot voit son papier élagué au chargement, et
+  redemandé à la Livraison.
+
 ---
 
-## TheBookEdition — 11 × 17, 12 × 18 ou 14,8 × 21 cm
+## TheBookEdition — neuf formats, du poche 11 × 17 à l'A4
 
 Production française, contrôle manuel des fichiers. TheBookEdition **ne publie aucune
-dimension** : ni format de rognage en millimètres, ni fond perdu, ni formule de dos. Le
-gabarit de couverture est généré par leur simulateur, et leur aide en fait une condition de
-recevabilité.
+dimension de couverture** : ni fond perdu, ni formule de dos. Le gabarit de couverture est
+généré par leur simulateur, et leur aide en fait une condition de recevabilité.
 
-Les valeurs en table sont donc **mesurées sur ce que leur générateur rend** (POST sur
-`/fr/module/bookscover/simulationcover`, relevé le 20/08/2026), et non reconstituées :
-40 p → 232,41 mm de large, 100 → 235,97, 280 → 246,80, 500 → 260,01, 750 → 275,00 au format
-Poche, soit 2 × 110 + 2 × 5 de fond perdu + pages × 0,060. Les mêmes paginations sur le
-papier 120 g et sur les autres formats donnent le même dos à moins de 0,04 mm — l'écart
-résiduel est l'arrondi au pixel.
+Les valeurs en table sont donc **mesurées sur ce que leur générateur rend** — un POST sans
+authentification sur `/fr/module/bookscover/simulationcover`, qui renvoie un JPEG 300 dpi.
+Le même module publie en JSON la table de ses formats (`action=GetFormat`) et de ses papiers
+(`action=GetWeight`), reliure par reliure : les neuf formats et leurs dimensions en
+viennent, relevés le 27/08/2026. Neuf formats × trois papiers × cinq paginations donnent le
+même dos à moins de 0,05 mm — l'écart résiduel est l'arrondi au pixel.
 
 ### Gabarit, pour mémoire
 
 | Grandeur | Valeur | Source |
 |---|---|---|
-| Formats | 110 × 170, 120 × 180, **148,5** × 210 mm | leur table des formats — 148,5 et non 148, et c'est elle qui dimensionne le gabarit |
-| Fond perdu | 5 mm | mesuré : planche haute de la hauteur du livre + 10 mm, sur cinq formats |
+| Formats | neuf, de 110 × 170 à 210 × 297 mm ; **A5 = 148,5** et non 148 | leur table des formats, et c'est elle qui dimensionne le gabarit |
+| Fond perdu | 5 mm | mesuré : planche haute de la hauteur du livre + 10 mm, sur les neuf formats |
 | Dos | pages × 0,060 mm, **quel que soit le papier et le format** | mesuré sur les gabarits JPEG 300 dpi |
-| Papiers | Munken 80 g, 120 g | mêmes dos |
-| Gouttière | 17,5 mm (12,5 de marge + 5 de reliure) | page « Réussir la mise en page » |
-| Marges haut / bas / extérieur | 12,5 mm | idem |
+| Papiers | Munken 80 g, 120 g, 135 g couleur | mêmes dos |
+| Marges et gouttière | 12,5 mm et 17,5 mm au poche, au manga et à l'A5 ; 20 mm et 26 à l'A4 | page « Réussir la mise en page » |
+| | 20 mm sur les quatre côtés aux cinq autres formats ; 19 et 25,4 au 18 × 26 | gabarits Word officiels, un par format |
 | Pagination | 40 à 750 pages en dos carré collé, nombre pair | leur aide |
 
-### Piège
+### Pièges
 
+- **Deux sources de marges qui ne s'accordent pas.** La page de conseils donne une marge de
+  reliure (12,5 + 5 mm) pour le poche et l'A5, et 20 + 6 pour l'A4 ; les gabarits Word,
+  eux, posent des marges symétriques sans reliure — 20 mm partout. Chaque format prend la
+  source qui le nomme, et une marge de reliure ne s'invente pas là où l'imprimeur n'en
+  publie pas.
 - **Le gabarit fourni fait foi chez eux**, et un fichier qui s'en écarte est rejeté par
-  leur système. Télécharger le gabarit depuis le compte auteur pour la reliure, le format,
+  leur système. Télécharger le gabarit depuis leur générateur pour la reliure, le format,
   le papier et la pagination retenus, et vérifier la planche générée contre lui avant de
-  déposer — le dos mesuré ici tient sur cinq paginations, pas sur toutes.
+  déposer.
 
 ---
 

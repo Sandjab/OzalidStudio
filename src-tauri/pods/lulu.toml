@@ -1,24 +1,280 @@
-# Lulu — le poche 108 × 175, seul format outillé chez eux.
+# Lulu — Raleigh (Caroline du Nord), impression Europe pour les commandes européennes.
+#
+# Tout ce qui suit est public et sans compte. Quatre sources, toutes rejouables :
+#
+# 1. Le « Book Creation Guide », `assets.lulu.com/media/guides/en/lulu-book-creation-guide.pdf` :
+#    les formats de rognage, la marge de sécurité (0,5 po), la table des ajouts de
+#    gouttière, le fond perdu (0,125 po) et la formule de dos du broché.
+# 2. La feuille de spécifications officielle, `assets.lulu.com/media/specs/lulu-print-api-spec-sheet.xlsx`
+#    (3 277 produits, révision du 21/07/2026) : les dimensions en millimètres, les
+#    paginations admises et les papiers, produit par produit.
+# 3. Le calculateur du portail développeurs, qui publie en clair l'épaisseur des papiers
+#    en pages par pouce : 060UW → 444, 060UC → 444, 080CW → 444, 070CW → 460, 100CW → 200.
+# 4. Le générateur de gabarit de couverture, `api.lulu.com/cover/api/v1/template/`, sans
+#    authentification : il rend un PDF qui écrit son dos, son fond perdu et sa marge de
+#    sécurité en toutes lettres. C'est lui qui ancre les tests, relevé le 27/08/2026.
+#
+# Lulu rogne en **pouces** : les millimètres de ce fichier sont ceux que Lulu publie
+# lui-même (108 × 175), et non la conversion exacte que rend son gabarit (107,95 × 174,62).
+# L'écart va jusqu'à 0,5 mm sur le Small Square, en deçà de la tolérance de rognage.
 #
 # Réserve du COOKBOOK : une maquette qui imite une charte de collection existante reste un
 # usage privé — ne pas activer la Retail Distribution avec une couverture de ce genre.
 
 cle = "lulu"
 nom = "Lulu"
-# Guide Lulu : 0,125 po.
+# Guide, chapitre « Bleed Margin » : 0,125 po sur tous les côtés, tous formats. Le gabarit
+# de couverture l'écrit « 0.125” (3.17mm) » ; 3,175 est la valeur exacte du pouce.
 fond_perdu = 3.175
+
+# Les marges des seize formats sont **les mêmes** : Lulu ne les module pas par format,
+# il publie une marge de sécurité unique de 0,5 po = 12,7 mm, que son gabarit de couverture
+# répète à l'identique sur les seize. La gouttière est cette marge plus l'ajout que le
+# guide donne par tranche de pagination (chapitre « Gutter Additions ») :
+#
+#     moins de 60 pages   + 0 po      → 0,5 po    = 12,7 mm
+#     61 à 150            + 0,125 po  → 0,625 po  = 15,875 mm
+#     151 à 400           + 0,5 po    → 1 po      = 25,4 mm
+#     400 à 600           + 0,625 po  → 1,125 po  = 28,575 mm
+#     plus de 600         + 0,75 po   → 1,25 po   = 31,75 mm
+#
+# Deux accidents dans cette table publiée, tranchés ici du côté le plus large — une
+# gouttière trop grande coûte des pages, une trop petite fait relier dans le texte :
+# la page 60 n'appartient à aucune tranche (« moins de 60 », puis « 61 à 150 ») et lui est
+# donnée à la seconde ; la page 400 appartient aux deux (« 151 à 400 » et « 400 à 600 »)
+# et lui est donnée à la seconde également.
+#
+# Les millimètres sont ceux des pouces, pas les arrondis du guide (13, 16, 25, 29, 32) :
+# c'est en pouces que Lulu imprime, et son gabarit rend 12,7 et non 13.
 
 [[format]]
 cle = "108x175"
-nom = "poche 108 × 175"
+nom = "Poche 10,8 × 17,5"
 mm = { largeur = 108.0, hauteur = 175.0 }
-# La marge extérieure de 13 mm est une sécurité, non une valeur publiée ; le guide ne donne
-# que la gouttière.
-marges = { haut = 14.0, bas = 15.0, exterieur = 13.0 }
-# Une seule tranche publiée, et elle ne couvre pas toute la pagination admise : hors de
-# 151–400 pages la composition refuse plutôt que d'inventer une gouttière.
-gouttieres = [ { de = 151, a = 400, mm = 25.0 } ]
-source = "guide Lulu — Pocketbook 4,25 × 6,875 po"
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Pocketbook » 4,25 × 6,875 po ; marges du chapitre « Gutter Additions »"
+
+[[format]]
+cle = "127x203"
+nom = "Novella 12,7 × 20,3"
+mm = { largeur = 127.0, hauteur = 203.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Novella » 5 × 8 po"
+
+[[format]]
+cle = "140x216"
+nom = "Digest 14 × 21,6"
+mm = { largeur = 140.0, hauteur = 216.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Digest » 5,5 × 8,5 po"
+
+[[format]]
+cle = "148x210"
+nom = "A5 14,8 × 21"
+mm = { largeur = 148.0, hauteur = 210.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « A5 » 5,83 × 8,27 po"
+
+[[format]]
+cle = "152x229"
+nom = "US Trade 15,2 × 22,9"
+mm = { largeur = 152.0, hauteur = 229.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « US Trade » 6 × 9 po"
+
+[[format]]
+cle = "156x234"
+nom = "Royal 15,6 × 23,4"
+mm = { largeur = 156.0, hauteur = 234.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Royal » 6,14 × 9,21 po"
+
+[[format]]
+cle = "168x260"
+nom = "Comic Book 16,8 × 26"
+mm = { largeur = 168.0, hauteur = 260.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+# Le seul format que la feuille de spécifications ne donne qu'en 80 g couché blanc — les
+# deux papiers non couchés n'y figurent pas en broché. Le catalogue ne sait pas dire
+# « ce papier-là seulement sur ce format-là » ; la réserve est au COOKBOOK.
+source = "guide, « Comic Book » 6,63 × 10,25 po"
+
+[[format]]
+cle = "178x254"
+nom = "Executive 17,8 × 25,4"
+mm = { largeur = 178.0, hauteur = 254.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Executive » 7 × 10 po"
+
+[[format]]
+cle = "189x246"
+nom = "Crown Quarto 18,9 × 24,6"
+mm = { largeur = 189.0, hauteur = 246.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Crown Quarto » 7,44 × 9,68 po"
+
+[[format]]
+cle = "190x190"
+nom = "Petit carré 19 × 19"
+mm = { largeur = 190.0, hauteur = 190.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+# 190 et non 191 : la feuille de spécifications donne 190, le guide 191, pour le même
+# 7,5 po (190,5 mm exactement). La feuille est la source machine, et la plus récente.
+source = "feuille de spécifications, « Small Square » 7,5 × 7,5 po ; le guide écrit 191"
+
+[[format]]
+cle = "210x297"
+nom = "A4 21 × 29,7"
+mm = { largeur = 210.0, hauteur = 297.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « A4 » 8,27 × 11,69 po"
+
+[[format]]
+cle = "216x216"
+nom = "Carré 21,6 × 21,6"
+mm = { largeur = 216.0, hauteur = 216.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « Square » 8,5 × 8,5 po"
+
+[[format]]
+cle = "216x279"
+nom = "US Letter 21,6 × 27,9"
+mm = { largeur = 216.0, hauteur = 279.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 399, mm = 25.4 },
+  { de = 400, a = 600, mm = 28.575 },
+  { de = 601, a = 800, mm = 31.75 },
+]
+source = "guide, « US Letter » 8,5 × 11 po"
+
+# Les trois formats à l'italienne plafonnent à 250 pages là où les treize autres vont à
+# 800 : la feuille de spécifications le donne sur chacun de leurs produits brochés, sans
+# exception et sans raison publiée.
+[[format]]
+cle = "229x178"
+nom = "Paysage 22,9 × 17,8"
+mm = { largeur = 229.0, hauteur = 178.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 250, mm = 25.4 },
+]
+pages = { min = 32, max = 250 }
+source = "feuille de spécifications, « Landscape » 9 × 7 po — 32 à 250 pages en broché"
+
+[[format]]
+cle = "279x216"
+nom = "US Letter à l'italienne 27,9 × 21,6"
+mm = { largeur = 279.0, hauteur = 216.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 250, mm = 25.4 },
+]
+pages = { min = 32, max = 250 }
+source = "feuille de spécifications, « US Letter Landscape » 11 × 8,5 po — 32 à 250 pages"
+
+[[format]]
+cle = "297x210"
+nom = "A4 à l'italienne 29,7 × 21"
+mm = { largeur = 297.0, hauteur = 210.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [
+  { de = 32, a = 59, mm = 12.7 },
+  { de = 60, a = 150, mm = 15.875 },
+  { de = 151, a = 250, mm = 25.4 },
+]
+pages = { min = 32, max = 250 }
+source = "feuille de spécifications, « A4 Landscape » 11,69 × 8,27 po — 32 à 250 pages"
 
 [[reliure]]
 cle = "broche"
@@ -28,13 +284,56 @@ pages = { min = 32, max = 800 }
 # Aucune règle de parité relevée chez Lulu ; « paire » est ce que la composition fait
 # partout.
 parite = "paire"
-source = "bornes reprises de la table historique du dépôt, sans relevé au guide"
+source = "guide : « Paperback books require a minimum of 32 interior pages » ; 800 au maximum, feuille de spécifications"
+
+# Lulu relie en dur de trois façons — pleine toile, pelliculée, jaquette — et publie une
+# table de dos pour chacune. La géométrie est donc relevable, mais `planche` ne sait pas
+# la composer : une couverture rigide déborde du livre, se replie à l'intérieur des plats
+# et se monte sur des cartons. La spec range ce chantier hors périmètre.
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+
+# Deux pelliculages, sur toutes les couvertures brochées. Aucun n'a d'effet sur la
+# composition : la finition nomme une option de commande, et le livrable en garde la trace.
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
+
+[[finition]]
+cle = "brillant"
+nom = "Pelliculage brillant"
+
+# Les trois papiers du broché ont la **même** épaisseur publiée — 444 pages par pouce —,
+# donc le même dos : pages / 17,48 + 1,524 mm, où 17,48 = 444 / 25,4 et 1,524 mm = 0,06 po
+# de carton de couverture. Ce n'est pas une simplification : c'est ce que le générateur de
+# gabarit rend, papier par papier, et ce que la table du calculateur officiel publie.
+# La division est gardée telle que le guide l'écrit — la convertir en facteur décimal
+# introduirait une dérive.
+#
+# Deux autres épaisseurs existent chez Lulu — 460 pour le couché 70 lb des magazines, 200
+# pour le couché 100 lb — mais aucun produit broché ne les porte : hors table.
+#
+# La clé `standard` est historique : c'est celle que portent les projets déjà enregistrés.
 
 [[papier]]
 cle = "standard"
-nom = "Papier standard"
+nom = "Blanc non couché 60 lb"
 teinte = "#ffffff"
-# Gardée sous forme de division, comme le guide l'écrit — la convertir en facteur décimal
-# introduirait une dérive.
 dos = { forme = "divise", par = 17.48, plus = 1.524 }
-source = "guide Lulu, vérifié sur un livre réel de 244 pages → 15,48 mm"
+source = "guide, formule du broché ; 444 pages/pouce ; vérifié au gabarit — 244 p → 15,48 mm"
+
+[[papier]]
+cle = "creme-60"
+nom = "Crème non couché 60 lb"
+teinte = "#f7f0e0"
+dos = { forme = "divise", par = 17.48, plus = 1.524 }
+source = "feuille de spécifications, 060UC444 — même épaisseur que le blanc"
+
+[[papier]]
+cle = "couche-80"
+nom = "Blanc couché 80 lb"
+teinte = "#ffffff"
+dos = { forme = "divise", par = 17.48, plus = 1.524 }
+source = "feuille de spécifications, 080CW444 — même épaisseur que les non couchés"

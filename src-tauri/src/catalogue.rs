@@ -142,8 +142,29 @@ pub struct Format {
     /// Surcharge du fond perdu du POD, quand un format s'en écarte.
     #[serde(default)]
     pub fond_perdu: Option<f64>,
+    /// Pagination que **ce format** admet, quand il est plus restrictif que la reliure.
+    ///
+    /// Absent chez le cas courant : c'est la reliure qui borne, et un format n'a rien à
+    /// redire. Présent chez Lulu, dont le broché va à 800 pages sur quinze formats et à
+    /// 250 sur les trois à l'italienne — la presse ne plie pas un paysage aussi épais.
+    ///
+    /// Le pendant de `Papier.pages`, et il se croise de la même façon : le livrable admet
+    /// ce que la reliure, le format et le papier admettent tous trois.
+    #[serde(default)]
+    pub pages: Option<Pagination>,
     #[serde(default)]
     pub source: Option<String>,
+}
+
+impl Format {
+    /// Les bornes de pagination d'un livrable de ce format, à l'intérieur de celles que
+    /// la reliure impose. Sans plafond propre, le format ne resserre rien.
+    pub fn bornes_dans(&self, min: u32, max: u32) -> (u32, u32) {
+        match self.pages {
+            Some(p) => (min.max(p.min), max.min(p.max)),
+            None => (min, max),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -460,6 +481,43 @@ impl Pod {
             }
         }
 
+        if let Some(pg) = &f.pages {
+            if pg.min == 0 {
+                return Err(format!(
+                    "{ou} : pagination de format à partir de zéro page. Un livre de zéro \
+                     page n'existe pas."
+                ));
+            }
+            if pg.min > pg.max {
+                return Err(format!(
+                    "{ou} : pagination de format à l'envers ({}–{} pages).",
+                    pg.min, pg.max
+                ));
+            }
+            // Même raison que pour le papier : un format s'apparie à chaque reliure
+            // composable, et un intervalle qui n'en croise aucune donne un format que
+            // l'interface propose et que la composition refuse toujours.
+            if let Some(r) = self
+                .reliures
+                .iter()
+                .filter(|r| r.geometrie.is_some())
+                .find(|r| {
+                    let rp = r.pages.expect(
+                        "une reliure composable porte sa pagination : `verifie_reliure` la \
+                         réclame",
+                    );
+                    pg.min > rp.max || rp.min > pg.max
+                })
+            {
+                return Err(format!(
+                    "{ou} : pagination de format ({}–{} pages) sans recouvrement avec la \
+                     reliure {}. Ce format ne composera jamais rien avec elle — élargir \
+                     l'un des deux intervalles, ou retirer cette reliure du POD.",
+                    pg.min, pg.max, r.cle
+                ));
+            }
+        }
+
         // Les relations. Des marges qui débordent la page laissent un bloc de texte nul
         // ou négatif, et l'intérieur composerait sans broncher une page fausse.
         if f.marges.haut + f.marges.bas >= f.mm.hauteur {
@@ -710,6 +768,7 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                 "une reliure composable porte sa pagination : `verifie_reliure` la réclame",
             );
             for f in &pod.formats {
+                let bornes = f.bornes_dans(pagination.min, pagination.max);
                 let fabrication = Fabrication {
                     pod: pod.cle.clone(),
                     format: f.cle.clone(),
@@ -736,9 +795,11 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                     exterieur: f.marges.exterieur,
                     gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
                     fond_perdu: f.fond_perdu.or(pod.fond_perdu),
-                    // La pagination de **cette** reliure, pas celle de la première.
-                    pages_min: pagination.min,
-                    pages_max: pagination.max,
+                    // La pagination de **cette** reliure, resserrée par ce que le
+                    // format admet — un paysage de Lulu plafonne 550 pages plus bas que
+                    // son broché.
+                    pages_min: bornes.0,
+                    pages_max: bornes.1,
                     papiers: pod.papiers.clone(),
                     fabrication,
                 });
@@ -927,6 +988,7 @@ impl Resolu {
             .reliure
             .pages
             .expect("une reliure composable porte sa pagination : `verifie_reliure` la réclame");
+        let bornes = self.format.bornes_dans(pagination.min, pagination.max);
         let fabrication = self.fabrication();
         Provider {
             cle: fabrication.cle_gabarit(),
@@ -942,8 +1004,8 @@ impl Resolu {
                 .map(|t| (t.de, t.a, t.mm))
                 .collect(),
             fond_perdu: self.fond_perdu(),
-            pages_min: pagination.min,
-            pages_max: pagination.max,
+            pages_min: bornes.0,
+            pages_max: bornes.1,
             papiers: self.pod.papiers.clone(),
             fabrication,
         }
@@ -1731,10 +1793,10 @@ gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
     fn les_six_fichiers_fournis_se_lisent() {
         let pods = fournis().expect("un fichier fourni est illisible");
         assert_eq!(pods.len(), 6, "six POD attendus");
-        // Les quatorze formats de la table historique, plus les neuf que le lot 4 ajoute
-        // à BoD, tous présents.
+        // Seize chez Lulu, dix chez BoD, trois chez KDP, sept chez CoolLibri, neuf chez
+        // TheBookEdition, trois chez Bookvault.
         let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
-        assert_eq!(formats, 23, "vingt-trois formats attendus");
+        assert_eq!(formats, 48, "quarante-huit formats attendus");
     }
 
     /// Le squelette de POD que le COOKBOOK donne en exemple se lit vraiment.
@@ -2018,7 +2080,74 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         assert_eq!(
             vue,
             [
-                ("lulu-108x175-broche", "Lulu — poche 108 × 175", "standard"),
+                (
+                    "lulu-108x175-broche",
+                    "Lulu — Poche 10,8 × 17,5",
+                    "standard"
+                ),
+                (
+                    "lulu-127x203-broche",
+                    "Lulu — Novella 12,7 × 20,3",
+                    "standard"
+                ),
+                ("lulu-140x216-broche", "Lulu — Digest 14 × 21,6", "standard"),
+                ("lulu-148x210-broche", "Lulu — A5 14,8 × 21", "standard"),
+                (
+                    "lulu-152x229-broche",
+                    "Lulu — US Trade 15,2 × 22,9",
+                    "standard"
+                ),
+                (
+                    "lulu-156x234-broche",
+                    "Lulu — Royal 15,6 × 23,4",
+                    "standard"
+                ),
+                (
+                    "lulu-168x260-broche",
+                    "Lulu — Comic Book 16,8 × 26",
+                    "standard"
+                ),
+                (
+                    "lulu-178x254-broche",
+                    "Lulu — Executive 17,8 × 25,4",
+                    "standard"
+                ),
+                (
+                    "lulu-189x246-broche",
+                    "Lulu — Crown Quarto 18,9 × 24,6",
+                    "standard"
+                ),
+                (
+                    "lulu-190x190-broche",
+                    "Lulu — Petit carré 19 × 19",
+                    "standard"
+                ),
+                ("lulu-210x297-broche", "Lulu — A4 21 × 29,7", "standard"),
+                (
+                    "lulu-216x216-broche",
+                    "Lulu — Carré 21,6 × 21,6",
+                    "standard"
+                ),
+                (
+                    "lulu-216x279-broche",
+                    "Lulu — US Letter 21,6 × 27,9",
+                    "standard"
+                ),
+                (
+                    "lulu-229x178-broche",
+                    "Lulu — Paysage 22,9 × 17,8",
+                    "standard"
+                ),
+                (
+                    "lulu-279x216-broche",
+                    "Lulu — US Letter à l'italienne 27,9 × 21,6",
+                    "standard"
+                ),
+                (
+                    "lulu-297x210-broche",
+                    "Lulu — A4 à l'italienne 29,7 × 21",
+                    "standard"
+                ),
                 ("bod-135x215-broche", "BoD — 13,5 × 21,5 cm", "creme-90"),
                 ("bod-120x190-broche", "BoD — 12 × 19 cm", "creme-90"),
                 ("bod-148x210-broche", "BoD — 14,8 × 21 cm", "creme-90"),
@@ -2034,18 +2163,47 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
                 ("kdp-6x9-broche", "Amazon KDP — 6 × 9 po", "creme"),
                 (
                     "coollibri-110x170-broche",
-                    "CoolLibri — 11 × 17 cm",
-                    "mesure"
+                    "CoolLibri — Poche 11 × 17",
+                    "standard-90"
                 ),
-                ("coollibri-148x210-broche", "CoolLibri — A5", "mesure"),
+                (
+                    "coollibri-148x210-broche",
+                    "CoolLibri — A5 14,8 × 21",
+                    "standard-90"
+                ),
                 (
                     "coollibri-160x240-broche",
                     "CoolLibri — 16 × 24 cm",
-                    "mesure"
+                    "standard-90"
+                ),
+                (
+                    "coollibri-210x148-broche",
+                    "CoolLibri — A5 à l'italienne 21 × 14,8",
+                    "standard-90"
+                ),
+                (
+                    "coollibri-210x210-broche",
+                    "CoolLibri — Carré 21 × 21",
+                    "standard-90"
+                ),
+                (
+                    "coollibri-210x297-broche",
+                    "CoolLibri — A4 21 × 29,7",
+                    "standard-90"
+                ),
+                (
+                    "coollibri-297x210-broche",
+                    "CoolLibri — A4 à l'italienne 29,7 × 21",
+                    "standard-90"
                 ),
                 (
                     "tbe-110x170-broche",
                     "TheBookEdition — Poche 11 × 17",
+                    "munken-80"
+                ),
+                (
+                    "tbe-110x200-broche",
+                    "TheBookEdition — Romantique 11 × 20",
                     "munken-80"
                 ),
                 (
@@ -2056,6 +2214,31 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
                 (
                     "tbe-1485x210-broche",
                     "TheBookEdition — A5 14,8 × 21",
+                    "munken-80"
+                ),
+                (
+                    "tbe-150x150-broche",
+                    "TheBookEdition — Carré 15 × 15",
+                    "munken-80"
+                ),
+                (
+                    "tbe-190x150-broche",
+                    "TheBookEdition — Panoramique 19 × 15",
+                    "munken-80"
+                ),
+                (
+                    "tbe-180x260-broche",
+                    "TheBookEdition — MDO 18 × 26",
+                    "munken-80"
+                ),
+                (
+                    "tbe-210x210-broche",
+                    "TheBookEdition — Grand carré 21 × 21",
+                    "munken-80"
+                ),
+                (
+                    "tbe-210x297-broche",
+                    "TheBookEdition — A4 21 × 29,7",
                     "munken-80"
                 ),
                 (
@@ -2149,6 +2332,93 @@ parite = "paire"
         assert_eq!(plats[0].fabrication, lu.fabrication_defaut().unwrap());
     }
 
+    /// Un format peut plafonner la pagination plus bas que sa reliure, et le livrable
+    /// le dit.
+    ///
+    /// Chez Lulu, le broché va de 32 à 800 pages sur quinze formats et de 32 à **250** sur
+    /// les trois à l'italienne : la contrainte appartient au format, pas à la reliure, et
+    /// `Reliure.pages` ne sait pas la dire. Sans ce resserrement, l'application composerait
+    /// un paysage de 600 pages que l'imprimeur refusera à la commande — et le dos, lui,
+    /// serait juste, ce qui rend l'erreur invisible à l'écran.
+    ///
+    /// Les deux chemins qui fabriquent un `Provider` sont éprouvés ici : `aplatit`, qui
+    /// remplit la table plate, et `Resolu::provider`, que les commandes appellent. Le
+    /// second oublié, la liste dirait 250 et la composition en accepterait 800.
+    #[test]
+    fn le_plafond_du_format_resserre_celui_de_la_reliure() {
+        const PAYSAGE: &str = r#"
+[[format]]
+cle = "297x210"
+nom = "A4 à l'italienne"
+mm = { largeur = 297.0, hauteur = 210.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [{ de = 24, a = 900, mm = 20.0 }]
+pages = { min = 24, max = 250 }
+"#;
+        let lu = Pod::depuis_toml(&pod(&[FORMAT, PAYSAGE, RELIURE, PAPIER])).unwrap();
+        let plats = aplatit(std::slice::from_ref(&lu));
+        let vue: Vec<(&str, u32, u32)> = plats
+            .iter()
+            .map(|p| (p.cle.as_str(), p.pages_min, p.pages_max))
+            .collect();
+        assert_eq!(
+            vue,
+            [
+                ("essai-135x215-broche", 24, 900),
+                ("essai-297x210-broche", 24, 250),
+            ]
+        );
+
+        // `Resolu` ne tient que des `&'static` — c'est ce que `resout` rend depuis le
+        // catalogue chargé. Le POD d'essai est donc fuité, le temps du test.
+        let fixe: &'static Pod = Box::leak(Box::new(lu));
+        let pr = Resolu {
+            pod: fixe,
+            format: &fixe.formats[1],
+            reliure: &fixe.reliures[0],
+            papier: &fixe.papiers[0],
+        }
+        .provider();
+        assert_eq!(pr.cle, "essai-297x210-broche");
+        assert_eq!(
+            (pr.pages_min, pr.pages_max),
+            (24, 250),
+            "`Resolu::provider` doit resserrer comme `aplatit`"
+        );
+    }
+
+    /// Une pagination de format qui ne croise aucune reliure composable est refusée : le
+    /// format serait mort-né, et l'interface le proposerait quand même.
+    #[test]
+    fn une_pagination_de_format_sans_recouvrement_avec_la_reliure_est_refusee() {
+        let err = Pod::depuis_toml(&pod(&[
+            sauf(
+                FORMAT,
+                "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]",
+                "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]\npages = { min = 1000, max = 1200 }",
+            )
+            .as_str(),
+            RELIURE,
+            PAPIER,
+        ]))
+        .unwrap_err();
+        assert!(err.contains("1000"), "{err}");
+        assert!(err.contains("broche"), "{err}");
+
+        let envers = Pod::depuis_toml(&pod(&[
+            sauf(
+                FORMAT,
+                "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]",
+                "gouttieres = [{ de = 24, a = 900, mm = 20.0 }]\npages = { min = 400, max = 40 }",
+            )
+            .as_str(),
+            RELIURE,
+            PAPIER,
+        ]))
+        .unwrap_err();
+        assert!(envers.contains("à l'envers"), "{envers}");
+    }
+
     /// Le même invariant sur le catalogue livré, et sur un POD dont la première reliure
     /// du fichier n'est **pas** composable : c'est « la première composable » qui fait la
     /// tête, jamais « la première ». Aucun fichier fourni n'écrit sa non outillée en
@@ -2201,6 +2471,76 @@ non_outille = "géométrie du casewrap non relevée"
         );
     }
 
+    /// Chez Lulu, le dos ne dépend **pas** du papier : ses trois papiers de broché sont
+    /// publiés à la même épaisseur, 444 pages par pouce. Trois entrées de papier, une
+    /// seule formule — et c'est le générateur de gabarit qui l'ancre, pas notre
+    /// arithmétique.
+    #[test]
+    fn dos_lulu_ne_depend_pas_du_papier_et_suit_le_gabarit() {
+        let lulu = p("lulu");
+        // Relevé sur `api.lulu.com/cover/api/v1/template/`, format Poche, 444 pages/pouce.
+        for (pages, attendu) in [(32, 3.35), (244, 15.48), (800, 47.29)] {
+            let dos = lulu.papier_defaut().dos.mm(pages).unwrap();
+            assert!((dos - attendu).abs() < 0.01, "{pages} p → {dos} mm");
+        }
+        for papier in &lulu.papiers {
+            assert_eq!(
+                papier.dos.mm(244),
+                lulu.papier_defaut().dos.mm(244),
+                "papier {}",
+                papier.cle
+            );
+        }
+        // Et le même dos sur les seize formats : le gabarit ne le fait pas varier.
+        for pr in providers().iter().filter(|p| p.fabrication.pod == "lulu") {
+            assert_eq!(
+                pr.papier_defaut().dos.mm(244),
+                lulu.papier_defaut().dos.mm(244)
+            );
+        }
+    }
+
+    /// Les trois formats à l'italienne de Lulu plafonnent 550 pages plus bas que les
+    /// treize autres. La contrainte appartient au format : elle doit se lire sur le
+    /// gabarit, pas seulement dans un commentaire du fichier.
+    #[test]
+    fn les_paysages_de_lulu_plafonnent_a_250_pages() {
+        // Par la clé de gabarit, et non par `provider` : ces formats sont neufs, ils
+        // n'ont donc pas de clé plate historique.
+        let bornes = |cle: &str| {
+            let pr = providers()
+                .iter()
+                .find(|p| p.cle == cle)
+                .unwrap_or_else(|| panic!("gabarit inconnu : {cle}"));
+            (pr.pages_min, pr.pages_max)
+        };
+        for cle in [
+            "lulu-229x178-broche",
+            "lulu-279x216-broche",
+            "lulu-297x210-broche",
+        ] {
+            assert_eq!(bornes(cle), (32, 250), "{cle}");
+        }
+        for cle in ["lulu-108x175-broche", "lulu-210x297-broche"] {
+            assert_eq!(bornes(cle), (32, 800), "{cle}");
+        }
+    }
+
+    /// La gouttière de Lulu est la marge de sécurité plus l'ajout de sa tranche. Les deux
+    /// frontières que le guide laisse ambiguës — la page 60, qu'aucune tranche ne nomme,
+    /// et la page 400, que deux tranches se disputent — sont tranchées du côté le plus
+    /// large, et c'est un choix qu'un test doit tenir : le relire dans le fichier ne dirait
+    /// pas s'il est encore appliqué.
+    #[test]
+    fn les_deux_frontieres_ambigues_de_lulu_vont_au_plus_large() {
+        let lulu = p("lulu");
+        assert_eq!(lulu.gouttiere(59).unwrap(), 12.7);
+        assert_eq!(lulu.gouttiere(60).unwrap(), 15.875);
+        assert_eq!(lulu.gouttiere(399).unwrap(), 25.4);
+        assert_eq!(lulu.gouttiere(400).unwrap(), 28.575);
+        assert_eq!(lulu.gouttiere(601).unwrap(), 31.75);
+    }
+
     #[test]
     fn dos_bod_ancre_sur_le_calculateur_officiel() {
         let d = p("bod").papier_defaut().dos;
@@ -2235,11 +2575,14 @@ non_outille = "géométrie du casewrap non relevée"
         for papier in &poche.papiers {
             assert_eq!(papier.dos.mm(280), poche.papier_defaut().dos.mm(280));
         }
-        for cle in ["tbe-120x180", "tbe-1485x210"] {
+        for pr in providers().iter().filter(|p| p.fabrication.pod == "tbe") {
             assert_eq!(
-                p(cle).papier_defaut().dos.mm(280),
-                poche.papier_defaut().dos.mm(280)
+                pr.papier_defaut().dos.mm(280),
+                poche.papier_defaut().dos.mm(280),
+                "{}",
+                pr.cle
             );
+            assert_eq!(pr.fond_perdu, Some(5.0), "{}", pr.cle);
         }
     }
 
@@ -2259,13 +2602,40 @@ non_outille = "géométrie du casewrap non relevée"
         }
     }
 
+    /// CoolLibri arrondit son dos au millimètre, et c'est cet arrondi que les ancrages
+    /// reprennent : le catalogue doit rendre, une fois arrondi comme eux, exactement ce
+    /// que leur calculateur affiche. Les valeurs viennent du balayage des 321 paginations
+    /// paires de 60 à 700, papier par papier.
+    #[test]
+    fn dos_coollibri_ancre_sur_son_calculateur_papier_par_papier() {
+        let cl = p("coollibri-148x210");
+        for (cle, releves) in [
+            ("standard-90", [(60, 3), (280, 15), (500, 27), (700, 38)]),
+            ("bouffant-80", [(60, 4), (280, 20), (500, 36), (700, 50)]),
+            ("creme-80", [(60, 4), (280, 20), (500, 36), (700, 50)]),
+            ("satin-115", [(60, 3), (280, 14), (500, 25), (700, 35)]),
+        ] {
+            let papier = cl.papier(cle).unwrap_or_else(|| panic!("papier {cle}"));
+            for (pages, affiche) in releves {
+                let dos = papier.dos.mm(pages).unwrap();
+                assert_eq!(
+                    dos.round() as i32,
+                    affiche,
+                    "{cle} à {pages} p → {dos} mm, calculateur : {affiche} mm"
+                );
+            }
+        }
+    }
+
     /// Le fond perdu est ce qui sépare une planche imprimable d'une planche rejetée.
     /// Chaque valeur vient du gabarit de l'imprimeur, aucune n'est un défaut commun.
     #[test]
     fn le_fond_perdu_est_celui_du_gabarit_de_chaque_imprimeur() {
         assert_eq!(p("tbe-110x170").fond_perdu, Some(5.0));
         assert_eq!(p("bookvault-127x203").fond_perdu, Some(3.0));
-        assert_eq!(p("coollibri-110x170").fond_perdu, None);
+        // CoolLibri ne publie pas son dos, mais il publie son fond perdu : « 3 mm de
+        // fonds perdus tournant », dans sa FAQ. Les deux questions sont distinctes.
+        assert_eq!(p("coollibri-110x170").fond_perdu, Some(3.0));
     }
 
     /// La gouttière se lit dans la tranche, elle ne s'interpole pas : une page de plus
@@ -2281,19 +2651,41 @@ non_outille = "géométrie du casewrap non relevée"
     /// que l'imprimeur rejetterait sans que rien ne l'ait signalé.
     #[test]
     fn hors_tranche_le_gabarit_refuse_au_lieu_d_inventer() {
-        let err = p("lulu").gouttiere(100).unwrap_err();
-        assert!(err.contains("100 pages"), "message peu explicite : {err}");
+        // Vingt pages : sous les 32 que le broché de Lulu admet, donc sous sa première
+        // tranche de gouttière.
+        let err = p("lulu").gouttiere(20).unwrap_err();
+        assert!(err.contains("20 pages"), "message peu explicite : {err}");
         assert!(err.contains("lulu"));
     }
 
-    /// Les imprimeurs à gabarit ne publient pas de formule : l'app ne doit pas
-    /// pouvoir en fabriquer une, quelle que soit la pagination.
+    /// Un imprimeur à gabarit ne publie pas de formule : l'app ne doit pas pouvoir en
+    /// fabriquer une, quelle que soit la pagination.
+    ///
+    /// Plus aucun POD **fourni** n'est dans ce cas depuis le lot 5 — le calculateur de
+    /// CoolLibri, le dernier à manquer, a été relevé. La forme reste au schéma pour les
+    /// fichiers du poste, et c'est sur un tel fichier qu'elle se teste désormais.
     #[test]
     fn un_imprimeur_a_gabarit_ne_calcule_jamais_de_dos() {
-        let cl = p("coollibri-148x210");
-        assert_eq!(cl.papier_defaut().dos.mm(280), None);
-        assert_eq!(cl.papier_defaut().dos.mm(9999), None);
-        assert_eq!(cl.fond_perdu, None, "le fond perdu se relève aussi");
+        let releve = sauf(
+            PAPIER,
+            "{ forme = \"multiplie\", par = 0.0675, plus = 0.6 }",
+            "{ forme = \"mesure\" }",
+        );
+        let lu = Pod::depuis_toml(&pod(&[FORMAT, RELIURE, &releve])).unwrap();
+        let papier = &lu.papiers[0];
+        assert_eq!(papier.dos.mm(280), None);
+        assert_eq!(papier.dos.mm(9999), None);
+        assert!(!papier.dos.publie());
+
+        // Et le catalogue livré, lui, n'en porte plus aucun : le dire ici, c'est aussi
+        // dire que ce test ne garde plus qu'une forme, pas un fichier fourni.
+        for pr in providers() {
+            assert!(
+                pr.papiers.iter().all(|pa| pa.dos.publie()),
+                "{} : un papier fourni sans formule de dos",
+                pr.cle
+            );
+        }
     }
 
     /// Ce que `verifie` contrôle sur la forme de n'importe quel fichier, celui-ci le

@@ -1,34 +1,55 @@
-# CoolLibri — imprimeur toulousain. Son intérieur est outillé ; son dos se relève, il ne
-# se calcule pas : CoolLibri publie sa formule, (grammage / 1000) × main × (pages / 2),
-# mais pas la « main » de ses papiers.
+# CoolLibri — imprimeur toulousain. Tout est relevé, rien n'est à saisir.
 #
-# Aucun fond perdu en table : il se relève lui aussi sur leur gabarit, et se saisit à la
-# Livraison (3 mm chez eux). Écrire la valeur ici la ferait passer pour un fait relevé
-# alors que c'est le parcours en ligne qui l'affiche, papier et pagination en main.
+# CoolLibri publie sa formule de dos — (grammage / 1000) × main × (pages / 2) — sans la
+# « main » de ses papiers. Mais son configurateur, sur `/imprimer-un-livre`, affiche
+# « Taille du dos » sans compte ni dépôt de manuscrit, et il le tient d'un endpoint public :
+#
+#     POST /Panier/ReturnSizeTranche   {ArticleId: 1, OptionId: <papier>, NumberPage: <n>}
+#     → {"tranche": <mm entiers>}
+#
+# `ArticleId = 1` est le dos carré collé ; `OptionId` vaut 9, 10, 11 ou 12 pour les quatre
+# papiers, dans l'ordre de ce fichier. Ni le format ni la quantité n'entrent dans l'appel :
+# le dos ne dépend que de la reliure, du papier et de la pagination.
+#
+# Balayé le 27/08/2026 sur les 321 paginations paires de 60 à 700, pour les quatre papiers
+# — 1 284 mesures. La réponse est arrondie au millimètre, mais l'encadrement de 321 paliers
+# resserre le coefficient à quatre décimales, et il n'y a **pas de terme constant** : la
+# couverture n'est pas comptée dans ce que CoolLibri affiche.
+#
+# Le reste est relevé de la même façon : les sept formats et leurs gabarits Word
+# (`/content/Gabarits/gabarit_word_<L>x<H>.doc`, marges lues dans les propriétés de
+# section), les quatre papiers d'intérieur et les trois pelliculages de la page
+# « J'imprime mon livre », le fond perdu et les paginations de la FAQ.
 
 cle = "coollibri"
 nom = "CoolLibri"
+# FAQ, « Quel fichier dois-je fournir pour la couverture » : « Il faut prévoir 3 mm de
+# fonds perdus tournant ».
+fond_perdu = 3.0
 
 # CoolLibri ne module pas la reliure selon l'épaisseur et ne distingue pas la marge
-# intérieure de l'extérieure : 20 mm sur les quatre côtés, sans variation selon la
-# pagination. La composition est donc symétrique, contrairement à tous les autres POD.
-# Tranche unique, bornée par les paginations admises en dos carré collé.
+# intérieure de l'extérieure : ses sept gabarits Word posent 20 mm sur les quatre côtés,
+# sans marge de reliure et sans variation selon la pagination. La composition est donc
+# symétrique, contrairement à tous les autres POD. Tranche unique, bornée par les
+# paginations admises en dos carré collé.
 
 [[format]]
 cle = "110x170"
-nom = "11 × 17 cm"
+nom = "Poche 11 × 17"
 mm = { largeur = 110.0, hauteur = 170.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
-source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+source = "gabarit Word officiel 110x170, FAQ « 2 cm de marges tout autour »"
 
 [[format]]
+# 148,5 et non 148 : c'est la largeur de leur gabarit Word, quand leur FAQ arrondit le
+# format à « A5 portrait 14,8 × 21 ». Le gabarit fait foi — c'est lui qu'on remplit.
 cle = "148x210"
-nom = "A5"
-mm = { largeur = 148.0, hauteur = 210.0 }
+nom = "A5 14,8 × 21"
+mm = { largeur = 148.5, hauteur = 210.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
-source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+source = "gabarit Word officiel 148x210 — 148,5 mm de large"
 
 [[format]]
 cle = "160x240"
@@ -36,7 +57,39 @@ nom = "16 × 24 cm"
 mm = { largeur = 160.0, hauteur = 240.0 }
 marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
 gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
-source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+source = "gabarit Word officiel 160x240"
+
+[[format]]
+cle = "210x148"
+nom = "A5 à l'italienne 21 × 14,8"
+mm = { largeur = 210.0, hauteur = 148.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarit Word officiel 210x148"
+
+[[format]]
+cle = "210x210"
+nom = "Carré 21 × 21"
+mm = { largeur = 210.0, hauteur = 210.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarit Word officiel 210x210"
+
+[[format]]
+cle = "210x297"
+nom = "A4 21 × 29,7"
+mm = { largeur = 210.0, hauteur = 297.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarit Word officiel 210x297"
+
+[[format]]
+cle = "297x210"
+nom = "A4 à l'italienne 29,7 × 21"
+mm = { largeur = 297.0, hauteur = 210.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarit Word officiel 297x210"
 
 [[reliure]]
 cle = "broche"
@@ -48,12 +101,72 @@ pages = { min = 60, max = 700 }
 parite = "paire"
 source = "pagination admise en dos carré collé, selon le papier"
 
-# Un seul « papier » en table, qui n'en est pas un : il porte l'absence de formule. Au-delà
-# de 180 pages, CoolLibri prévient lui-même que l'épaisseur peut changer — reprendre le dos
-# affiché à l'étape « couverture et dos » avant de générer le package.
+# Le rembordé — leur couverture cartonnée, trois formats seulement — a ses gabarits de
+# couverture publiés, par tranche d'épaisseur de dos. La géométrie est donc relevable,
+# mais `planche` ne sait pas la composer.
+[[reliure]]
+cle = "remborde"
+nom = "Dos carré rembordé"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+
+# Trois pelliculages sur la couverture 300 g du dos carré collé. Aucun n'a d'effet sur la
+# composition : la finition nomme une option de commande, et le livrable en garde la trace.
+[[finition]]
+cle = "brillant"
+nom = "Pelliculage brillant"
+
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
+
+[[finition]]
+cle = "soft-touch"
+nom = "Pelliculage soft touch"
+
+# Les quatre papiers d'intérieur, et le coefficient de dos que le calculateur de CoolLibri
+# donne pour chacun. Encadrement à 1 284 mesures : le coefficient retenu reproduit **les
+# 321 paliers de chaque papier sans un écart**, arrondi au millimètre comme eux.
+#
+#   standard 90 g : a ∈ [0,054000 ; 0,054012] — retenu 0,0540, soit une main de 1,20
+#   bouffant 80 g : a ∈ [0,071326 ; 0,071532] — retenu 0,07143, main ≈ 1,786
+#   crème 80 g    : le même que le bouffant, au millimètre près sur toute la plage
+#   satin 115 g   : a ∈ [0,050497 ; 0,050514] — retenu 0,0505, main ≈ 0,878
+#
+# L'incertitude restante vaut moins de 0,07 mm sur un livre de 700 pages. Elle vient de
+# l'arrondi de leur affichage, pas d'une reconstitution de notre part.
+#
+# Réserve de CoolLibri, qu'aucune formule ne lève : au-delà de 180 pages, ils préviennent
+# eux-mêmes que l'épaisseur peut varier d'une commande à l'autre. Le dos calculé ici est
+# celui qu'ils annoncent, pas une promesse de fabrication.
+#
+# Les clés ont changé au lot 5 : l'entrée unique `mesure`, qui nommait l'absence de formule
+# plutôt qu'un papier, laisse la place aux quatre que CoolLibri propose. Un projet
+# CoolLibri enregistré avant ce lot voit son papier élagué et redemandé.
+
 [[papier]]
-cle = "mesure"
-nom = "Dos relevé sur le gabarit"
+cle = "standard-90"
+nom = "Standard 90 g blanc"
 teinte = "#ffffff"
-dos = { forme = "mesure" }
-source = "formule publiée sans la « main » des papiers : le dos se relève au parcours en ligne"
+dos = { forme = "multiplie", par = 0.054, plus = 0.0 }
+source = "calculateur CoolLibri, OptionId 9 — 280 p → 15 mm, 500 p → 27 mm, 700 p → 38 mm"
+
+[[papier]]
+cle = "bouffant-80"
+nom = "Bouffant 80 g blanc"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.07143, plus = 0.0 }
+source = "calculateur CoolLibri, OptionId 10 — 280 p → 20 mm, 500 p → 36 mm, 700 p → 50 mm"
+
+[[papier]]
+cle = "creme-80"
+nom = "Crème 80 g beige"
+teinte = "#f7f0e0"
+dos = { forme = "multiplie", par = 0.07143, plus = 0.0 }
+source = "calculateur CoolLibri, OptionId 11 — même dos que le bouffant sur toute la plage"
+
+[[papier]]
+cle = "satin-115"
+nom = "Couché satin 115 g blanc"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.0505, plus = 0.0 }
+source = "calculateur CoolLibri, OptionId 12 — 280 p → 14 mm, 500 p → 25 mm, 700 p → 35 mm"

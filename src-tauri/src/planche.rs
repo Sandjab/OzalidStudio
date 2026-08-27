@@ -742,17 +742,49 @@ mod tests {
         );
     }
 
-    /// Chez un imprimeur à gabarit, rien ne peut être calculé : l'application doit le
-    /// dire et réclamer le relevé, jamais improviser une épaisseur.
+    /// Chez un imprimeur à gabarit, ce qui n'est pas publié doit être réclamé —
+    /// l'application ne doit jamais improviser une épaisseur.
+    ///
+    /// Les deux valeurs se réclament **séparément**, et il faut désormais les fabriquer
+    /// pour les éprouver : depuis le lot 5, aucun POD fourni ne laisse ni son dos ni son
+    /// fond perdu au relevé — CoolLibri, le dernier, a vu son calculateur relevé. Un
+    /// fichier déposé sur le poste, lui, peut toujours être muet sur l'un, sur l'autre,
+    /// ou sur les deux. Un contrôle qui les traiterait ensemble redemanderait un fond
+    /// perdu que la table connaît, ou — bien pire — laisserait passer un dos qu'elle ne
+    /// connaît pas.
     #[test]
     fn un_imprimeur_a_gabarit_reclame_le_releve_au_lieu_d_inventer() {
-        let pr = provider("coollibri-148x210").unwrap();
-        let err = Gabarit::pour(pr, pr.papier_defaut(), 280, Releve::default()).unwrap_err();
+        let publie = provider("coollibri-148x210").unwrap();
+        let sans_dos = Papier {
+            dos: crate::catalogue::Dos::Mesure,
+            ..publie.papier_defaut().clone()
+        };
+
+        let err = Gabarit::pour(publie, &sans_dos, 280, Releve::default()).unwrap_err();
         assert!(err.contains("dos"), "{err}");
 
+        // Le fond perdu vient de la table, le dos du relevé : rien d'autre à saisir.
+        let g = Gabarit::pour(
+            publie,
+            &sans_dos,
+            280,
+            Releve {
+                dos: Some(17.0),
+                fond_perdu: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(g.dos, 17.0);
+        assert_eq!(g.fond_perdu, 3.0, "le fond perdu publié par CoolLibri");
+
+        // Et un POD muet sur les deux réclame bien les deux.
+        let muet = Provider {
+            fond_perdu: None,
+            ..publie.clone()
+        };
         let err = Gabarit::pour(
-            pr,
-            pr.papier_defaut(),
+            &muet,
+            &sans_dos,
             280,
             Releve {
                 dos: Some(17.0),
@@ -761,18 +793,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("fond perdu"), "{err}");
-
-        let g = Gabarit::pour(
-            pr,
-            pr.papier_defaut(),
-            280,
-            Releve {
-                dos: Some(17.0),
-                fond_perdu: Some(3.0),
-            },
-        )
-        .unwrap();
-        assert_eq!(g.dos, 17.0);
     }
 
     /// Le relevé ne doit jamais prendre le pas sur la formule de l'imprimeur : sinon une
