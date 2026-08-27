@@ -260,21 +260,30 @@ Ce qui reste vrai, c'est que **`planche.rs` ne sait pas composer une couverture 
 la spec le range explicitement hors périmètre. La raison doit donc être réécrite pour dire
 ce qui bloque vraiment — la composition, pas le relevé. Deux lignes, aucun code.
 
-## Verdict 6 — le test creux devient protecteur, sans qu'on ait à le forcer
+## Verdict 6 — la dette est déjà soldée, et ce verdict était faux
 
-`dos_publie_est_porte_par_chaque_papier` (`commands.rs:2633`) vérifie que KDP publie pour
-ses deux papiers et CoolLibri pour aucun. Aucun POD fourni ne **mélange** les deux, donc un
-bug qui porterait `dos_publie` sur le POD au lieu du papier passerait le test — c'est la
-dette que le lot 3 a consignée.
+**Corrigé le 27/08, en cours d'exécution du lot.** Ce verdict affirmait qu'il fallait écrire
+une fixture mêlant les deux formes de dos. Elle existe depuis le lot 3 :
+`la_conversion_d_un_papier_suit_sa_propre_formule_de_dos` (`commands.rs:2663`), dont le
+commentaire dit explicitement que `dos_publie_est_porte_par_chaque_papier` ne peut pas voir
+la règle, et qui passe par `PodVue::from` — le site d'appel réel — plutôt que par
+`PapierVue::from` en direct.
 
-Le lot 3 espérait la solder en donnant à BoD « un papier sans formule de dos ». **Le relevé
-dit que ce papier n'existe pas** : les quatre publient une formule, toutes linéaires. Forcer
-un `Dos::Mesure` sur l'un d'eux serait inscrire un mensonge pour faire rougir un test.
+**La cause de l'erreur mérite d'être écrite**, parce qu'elle se reproduira : la mémoire du
+lot 3 nommait ce test, et elle a été lue comme « il faudrait un tel test » au lieu de « ce
+test existe et porte seul la règle ». La reconnaissance a été menée sur la mémoire plutôt
+que sur la source. C'est exactement ce contre quoi la règle du dépôt met en garde — la
+mémoire vieillit, le code fait foi.
 
-La dette se solde autrement : un POD de test qui mélange les deux formes, comme
-`pod_a_finition()` le fait déjà pour la finition. Le lot 3 a établi le précédent — le cas
-qui n'existe pas sur le catalogue livré se teste sur une fixture, pas sur le catalogue.
-Voir la mémoire `tests-qui-ne-protegent-rien` : la cause est structurelle.
+Ce qui reste vrai du relevé : **BoD n'a aucun papier sans formule de dos.** Les quatre
+publient une formule linéaire. La piste que le lot 3 avait consignée — « donner à BoD un
+papier sans formule rendrait le test protecteur » — est donc morte, et c'est heureux : elle
+aurait inscrit un mensonge dans le catalogue pour faire rougir un test.
+
+Reste enfin une nuance sur le mot « creux ». `dos_publie_est_porte_par_chaque_papier` ancre
+ce que le catalogue **livré** porte — KDP publie pour ses deux papiers, CoolLibri pour aucun
+—, ce qui a sa valeur propre. Ce qu'il ne peut pas protéger, c'est la règle de portage. Les
+deux tests ont leur place, et aucun n'est à écrire.
 
 ## Verdict 7 — le COOKBOOK : quatre pointeurs, un chapitre, et une redite à supprimer
 

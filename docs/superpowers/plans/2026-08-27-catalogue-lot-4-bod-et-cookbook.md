@@ -650,108 +650,32 @@ git commit -m "BoD porte ses dix formats, ses quatre papiers et ses trois pellic
 
 ---
 
-### Tâche 3 : Le contrôle de `dos_publie` cesse d'être creux
+### Tâche 3 : sans objet — la dette était déjà soldée
 
-**Fichiers :**
-- Modifier : `src-tauri/src/commands.rs` (test `dos_publie_est_porte_par_chaque_papier`, ~l. 2633)
+**Constaté le 27/08, avant toute modification. Rien à faire, rien n'a été fait.**
 
-Le lot 3 espérait solder cette dette en donnant à BoD « un papier sans formule de dos ». Le
-relevé dit que ce papier n'existe pas : les quatre publient une formule linéaire. Forcer un
-`Dos::Mesure` sur l'un d'eux serait inscrire un mensonge pour faire rougir un test. La dette
-se solde sur une fixture, comme `pod_a_finition()` le fait déjà pour la finition.
+Cette tâche demandait d'écrire une fixture mêlant un papier à formule et un papier sans
+formule, pour rendre protecteur un test que le lot 3 disait creux. **Cette fixture existe
+depuis le lot 3** : `la_conversion_d_un_papier_suit_sa_propre_formule_de_dos`
+(`commands.rs:2663`), posée par le commit « Quatre corrections de revue sur l'arbre du
+catalogue ». Elle mêle les deux formes dans un même POD, et passe par `PodVue::from` — le
+site d'appel réel, celui qu'une régression toucherait — là où cette tâche prescrivait
+`PapierVue::from` en direct. Elle est donc au moins équivalente, et sur un point meilleure.
 
-- [ ] **Étape 1 : écrire le test de fixture**
+Deux erreurs, toutes deux dans la reconnaissance et le plan, aucune dans le code :
 
-À côté de `dos_publie_est_porte_par_chaque_papier`, qu'on **garde** — il dit ce que le
-catalogue livré porte, ce qui a sa valeur propre :
+1. **La reconnaissance a été menée sur la mémoire plutôt que sur la source.** La mémoire du
+   lot 3 nommait pourtant ce test ; elle a été lue comme « il faudrait un tel test » au lieu
+   de « ce test existe et porte seul la règle ». Le verdict 6 de la reconnaissance a été
+   corrigé en conséquence.
+2. **La mutation prescrite ici ne démontrait pas ce qu'elle prétendait.** Remplacer
+   `pa.dos.publie()` par `true` fait rougir **les deux** tests, puisque CoolLibri porte de
+   vrais papiers sans formule sur le catalogue livré. La mutation qui les distinguerait
+   devrait porter sur `PodVue::from`, seul à voir le POD.
 
-```rust
-    /// Un POD dont un papier publie sa formule et l'autre non : le seul cas qui distingue
-    /// « porté par le papier » de « porté par le POD ».
-    ///
-    /// Sur fixture et non sur le catalogue livré, parce qu'aucun des six POD ne mélange les
-    /// deux formes — KDP publie pour ses deux papiers, CoolLibri pour aucun. Le lot 4 a
-    /// vérifié qu'aucun papier de BoD n'y échappe : la fixture est le seul moyen d'exercer
-    /// la règle, et c'est le même arbitrage que `pod_a_finition`.
-    fn pod_a_deux_formes_de_dos() -> catalogue::Pod {
-        catalogue::Pod::depuis_toml(
-            r#"
-cle = "essai"
-nom = "Essai"
-fond_perdu = 3.0
-[[format]]
-cle = "a"
-nom = "A"
-mm = { largeur = 120.0, hauteur = 190.0 }
-marges = { haut = 12.0, bas = 12.0, exterieur = 12.0 }
-gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]
-[[reliure]]
-cle = "broche"
-nom = "Broché"
-geometrie = "dos-carre-colle"
-pages = { min = 24, max = 400 }
-parite = "paire"
-[[papier]]
-cle = "calcule"
-nom = "Papier à formule"
-teinte = "#ffffff"
-dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
-[[papier]]
-cle = "releve"
-nom = "Papier sans formule"
-teinte = "#f7f0e0"
-dos = { forme = "mesure" }
-"#,
-        )
-        .expect("la fixture est un POD valide")
-    }
-
-    /// `dos_publie` suit le papier retenu, et non le premier de la liste.
-    ///
-    /// Le test voisin, sur le catalogue livré, ne peut pas le prouver : il n'y interroge
-    /// que des POD dont tous les papiers s'accordent. Un `dos_publie` porté par le POD y
-    /// passerait sans broncher — et la ligne annoncerait un dos calculable sur un papier
-    /// qui se relève au gabarit.
-    #[test]
-    fn dos_publie_distingue_deux_papiers_du_meme_pod() {
-        let pod = pod_a_deux_formes_de_dos();
-        let vues: Vec<PapierVue> = pod.papiers.iter().map(PapierVue::from).collect();
-
-        let calcule = vues.iter().find(|v| v.cle == "calcule").expect("fixture");
-        let releve = vues.iter().find(|v| v.cle == "releve").expect("fixture");
-
-        assert!(calcule.dos_publie, "le papier à formule publie son dos");
-        assert!(
-            !releve.dos_publie,
-            "le papier sans formule ne publie rien, dans le même POD"
-        );
-    }
-```
-
-Si `PapierVue.cle` n'est pas lisible depuis le module de tests, comparer sur l'ordre de la
-liste (`vues[0]` et `vues[1]`, dans l'ordre du TOML) plutôt que d'élargir la visibilité d'un
-champ pour un test.
-
-- [ ] **Étape 2 : lancer le test et le voir échouer par mutation**
-
-```bash
-cd src-tauri && cargo test dos_publie_distingue_deux_papiers_du_meme_pod
-```
-
-Il passe du premier coup : l'implémentation est déjà juste. **Le rendre rouge** — dans
-`impl From<&catalogue::Papier> for PapierVue`, remplacer `pa.dos.publie()` par `true`,
-relancer, voir l'échec sur « le papier sans formule ne publie rien », puis rétablir. C'est
-cette mutation, et elle seule, qui prouve que le test protège la règle.
-
-- [ ] **Étape 3 : vérifications et commit**
-
-```bash
-cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-cargo run --example temoin
-cd .. && node --test tests/*.test.js
-git add src-tauri/src/commands.rs
-git commit -m "Deux papiers d'un même POD suffisent à prouver qui porte le dos"
-```
+Et une nuance sur le mot « creux » : `dos_publie_est_porte_par_chaque_papier` ancre ce que
+le catalogue **livré** porte, ce qui a sa valeur propre. Ce qu'il ne peut pas protéger, c'est
+la règle de portage — d'où l'autre test. Les deux restent.
 
 ---
 
