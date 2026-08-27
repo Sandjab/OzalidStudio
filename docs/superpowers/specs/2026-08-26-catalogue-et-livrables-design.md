@@ -71,17 +71,17 @@ fond_perdu = 5.0
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 # BoD ne module pas la reliure selon l'épaisseur : tranche unique.
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
 source = "modèle Word « Roman » 13,5 × 21,5"
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 source = "validation du calculateur officiel"
 
@@ -100,12 +100,30 @@ nom = "Crème 90 g"
 teinte = "#f7f0e0"
 dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 source = "calculateur officiel, relevé sur 4 points — 280 p → 19,5 mm"
+
+[[papier]]
+cle = "photo-brillant-130"
+nom = "Photo brillant 130 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.0505, plus = 0.6 }
+# Plafonne plus bas que la reliure : 868 pages contre les 900 admis en broché.
+pages = { min = 24, max = 868 }
+source = "calculateur officiel — plafond à 868 pages"
 ```
+
+Les tables sont **nommées et non positionnelles** — `largeur`/`hauteur`, `de`/`a`/`mm`,
+`min`/`max` — parce que ces fichiers s'éditent à la main : une largeur prise pour une
+hauteur donne un livre à l'italienne que rien ne rattrape avant l'aperçu de la planche.
 
 **La pagination admise vit sur la reliure, jamais sur le format** : c'est elle qui la
 détermine — TheBookEdition accepte 40 à 750 pages en dos carré collé et 24 à 300 en rigide,
 au même format. Les tranches de `gouttieres` du format ne sont que des tranches de marge
 intérieure ; hors tranche, on refuse plutôt qu'extrapoler, comme aujourd'hui.
+
+**Le papier peut la resserrer, jamais l'élargir.** `Papier.pages` est optionnel et ne sert
+que quand l'épaisseur du papier impose un plafond plus bas que celui de la reliure — BoD
+plafonne son photo brillant 130 g à 868 pages là où son broché va à 900. Les deux bornes se
+**croisent** : le livrable admet ce que la reliure et le papier admettent tous deux.
 
 Trois règles d'écriture, qui prolongent celle qui tient déjà la table :
 
@@ -335,9 +353,8 @@ le gabarit d'intérieur, les noms de packages, les commandes `livrable_*`.
 **Lot 3 — La cascade.** ✅ *Fait le 26/08/2026.* L'écran Livraison : POD puis format à l'ajout, reliure, finition et
 papier sur la ligne, et le grisé qui dit pourquoi.
 
-**Lot 4 — BoD complété.** Tous ses formats, papiers et reliures, chacun avec sa `source`
-relevée dans ses guides — le comparatif en annonce 10 formats et 4 papiers, à vérifier chez
-BoD même. Le COOKBOOK suit.
+**Lot 4 — BoD complété.** ✅ *Fait le 27/08/2026.* Tous ses formats, papiers et reliures,
+chacun avec sa `source` relevée dans ses guides. Le COOKBOOK suit.
 
 ## Hors périmètre
 

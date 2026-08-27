@@ -319,11 +319,8 @@ on ne saurait plus lesquels viennent du fichier déposé.
 
 **La forme** est décrite au § 2 de
 `docs/superpowers/specs/2026-08-26-catalogue-et-livrables-design.md` : les cinq axes, ce que
-chacun porte, et pourquoi ce sont quatre listes plutôt qu'un arbre. Attention, la spec est un
-document daté du brainstorming : elle écrit encore les couples en tableaux positionnels
-(`mm = [135.0, 215.0]`), là où les fichiers portent des tables nommées. Ce sont les six
-`src-tauri/pods/*.toml` qui font foi sur la syntaxe. Le minimum vital — un format, une
-reliure composable, un papier :
+chacun porte, et pourquoi ce sont quatre listes plutôt qu'un arbre. Le minimum vital — un
+format, une reliure composable, un papier :
 
 ```toml
 cle = "exemple"

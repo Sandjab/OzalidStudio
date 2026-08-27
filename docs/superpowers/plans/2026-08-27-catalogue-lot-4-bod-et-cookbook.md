@@ -115,7 +115,7 @@ inutile — voir la mémoire `tests-qui-ne-protegent-rien`.
 - Modifier : `src-tauri/src/package.rs:166-171`
 - Test : `src-tauri/src/catalogue.rs` (module `tests`), `src-tauri/src/package.rs` (module `tests`)
 
-- [ ] **Étape 1 : écrire le test du refus, dans `package.rs`, module `tests`**
+- [x] **Étape 1 : écrire le test du refus, dans `package.rs`, module `tests`**
 
 Le contrôle de pagination vit aujourd'hui inline dans `assemble`, qu'aucun test ne peut
 appeler sans Typst. On l'extrait, comme `verifie_pages` l'est déjà dans le même fichier.
@@ -182,7 +182,7 @@ Et les deux fabriques, dans le même module de tests :
 **l'étape 3 la casse**, il faut y ajouter `pages: None`. Le compilateur le dira ; ne pas en
 profiter pour lui donner un plafond, elle sert d'autres tests.
 
-- [ ] **Étape 2 : lancer le test et le voir échouer**
+- [x] **Étape 2 : lancer le test et le voir échouer**
 
 ```bash
 cd src-tauri && cargo test le_plafond_du_papier_resserre_celui_de_la_reliure
@@ -192,7 +192,7 @@ Attendu : **échec de compilation** — `verifie_pagination` n'existe pas, et `P
 de champ `pages`. C'est le rouge qui compte : il dit que ni la fonction ni le champ n'étaient
 là.
 
-- [ ] **Étape 3 : ajouter le champ au schéma**
+- [x] **Étape 3 : ajouter le champ au schéma**
 
 Dans `catalogue.rs`, structure `Papier` — après `dos`, avant `source` :
 
@@ -209,7 +209,7 @@ Dans `catalogue.rs`, structure `Papier` — après `dos`, avant `source` :
     pub pages: Option<Pagination>,
 ```
 
-- [ ] **Étape 4 : valider le champ à la lecture**
+- [x] **Étape 4 : valider le champ à la lecture**
 
 Dans `verifie_papier`, après le contrôle du dos :
 
@@ -224,7 +224,7 @@ Dans `verifie_papier`, après le contrôle du dos :
         }
 ```
 
-- [ ] **Étape 5 : croiser les bornes, sur le papier**
+- [x] **Étape 5 : croiser les bornes, sur le papier**
 
 Dans `catalogue.rs`, après la structure `Papier` :
 
@@ -241,7 +241,7 @@ impl Papier {
 }
 ```
 
-- [ ] **Étape 6 : extraire le contrôle de `package.rs` en fonction pure**
+- [x] **Étape 6 : extraire le contrôle de `package.rs` en fonction pure**
 
 Remplacer `package.rs:166-171` par un appel, et poser la fonction juste avant `assemble` :
 
@@ -282,7 +282,7 @@ tombe après la composition :
     verifie_pagination(cle, interieur.pages, pr, papier)?;
 ```
 
-- [ ] **Étape 7 : lancer le test et le voir passer**
+- [x] **Étape 7 : lancer le test et le voir passer**
 
 ```bash
 cd src-tauri && cargo test le_plafond_du_papier_resserre_celui_de_la_reliure
@@ -290,7 +290,7 @@ cd src-tauri && cargo test le_plafond_du_papier_resserre_celui_de_la_reliure
 
 Attendu : **PASS**.
 
-- [ ] **Étape 8 : le test de validation du champ**
+- [x] **Étape 8 : le test de validation du champ**
 
 Dans le module de tests de `catalogue.rs`, à côté des autres refus de fichier :
 
@@ -326,7 +326,7 @@ pages = { min = 200, max = 100 }
     }
 ```
 
-- [ ] **Étape 9 : le voir échouer, puis passer**
+- [x] **Étape 9 : le voir échouer, puis passer**
 
 ```bash
 cd src-tauri && cargo test une_pagination_de_papier_inversee_est_refusee
@@ -336,7 +336,7 @@ Si l'étape 4 est déjà écrite, ce test passe du premier coup — **c'est un t
 été rouge**. Le rendre rouge par mutation ciblée : commenter le `return Err` de l'étape 4,
 relancer, voir l'échec, décommenter, relancer. Sans cette mutation, le test ne protège rien.
 
-- [ ] **Étape 10 : vérifications complètes et commit**
+- [x] **Étape 10 : vérifications complètes et commit**
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -354,7 +354,7 @@ git commit -m "Un papier peut dire jusqu'où il va, et le refus le nomme"
 - Modifier : `src-tauri/pods/bod.toml` (réécriture complète)
 - Test : `src-tauri/src/catalogue.rs` (module `tests`)
 
-- [ ] **Étape 1 : écrire le test qui ancre le format historique**
+- [x] **Étape 1 : écrire le test qui ancre le format historique**
 
 C'est le garde-fou du témoin. Dans le module de tests de `catalogue.rs` :
 
@@ -389,7 +389,7 @@ C'est le garde-fou du témoin. Dans le module de tests de `catalogue.rs` :
     }
 ```
 
-- [ ] **Étape 2 : lancer le test et le voir passer, puis le rendre rouge par mutation**
+- [x] **Étape 2 : lancer le test et le voir passer, puis le rendre rouge par mutation**
 
 ```bash
 cd src-tauri && cargo test le_format_historique_de_bod_ne_bouge_pas
@@ -399,7 +399,7 @@ Il passe sur le fichier actuel — c'est normal, il décrit l'existant. Le rendr
 fois : dans `bod.toml`, écrire `haut = 18.75`, relancer, voir l'échec nommer 18,8, puis
 remettre `18.8`. **Sans cette mutation, ce test n'a jamais rien prouvé.**
 
-- [ ] **Étape 3 : réécrire `src-tauri/pods/bod.toml`**
+- [x] **Étape 3 : réécrire `src-tauri/pods/bod.toml`**
 
 Contenu complet. Les valeurs viennent de la reconnaissance, §§ 6 à 8 — ne rien recalculer.
 
@@ -579,7 +579,7 @@ pages = { min = 24, max = 868 }
 source = "calculateur, 0,0101 cm/feuille — 24 p → 1,212 mm, 868 p → 43,834 mm ; plafond à 868"
 ```
 
-- [ ] **Étape 4 : le test qui ancre le plafond du brillant sur le catalogue livré**
+- [x] **Étape 4 : le test qui ancre le plafond du brillant sur le catalogue livré**
 
 ```rust
     /// Le seul papier du catalogue livré qui plafonne plus bas que sa reliure.
@@ -618,7 +618,7 @@ source = "calculateur, 0,0101 cm/feuille — 24 p → 1,212 mm, 868 p → 43,834
     }
 ```
 
-- [ ] **Étape 5 : lancer, voir échouer si le fichier n'est pas encore écrit, puis passer**
+- [x] **Étape 5 : lancer, voir échouer si le fichier n'est pas encore écrit, puis passer**
 
 ```bash
 cd src-tauri && cargo test bod
@@ -627,7 +627,7 @@ cd src-tauri && cargo test bod
 Attendu : les trois tests de BoD passent. Si `les_six_fichiers_fournis_se_lisent` échoue, le
 message nomme la ligne fautive du TOML — le corriger sur le fichier, jamais sur le test.
 
-- [ ] **Étape 6 : vérifications complètes**
+- [x] **Étape 6 : vérifications complètes**
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -641,7 +641,7 @@ de plus ne changent rien, et c'est exactement ce que cette étape prouve.
 cd .. && node --test tests/*.test.js
 ```
 
-- [ ] **Étape 7 : commit**
+- [x] **Étape 7 : commit**
 
 ```bash
 git add src-tauri/pods/bod.toml src-tauri/src/catalogue.rs
@@ -691,7 +691,7 @@ la règle de portage — d'où l'autre test. Les deux restent.
 porte déjà `papierCourant()`, qui lit l'arbre et que le scope global rend accessible :
 `envois.js` est chargé avant `app.js`, mais l'appel a lieu au clic, pas au chargement.
 
-- [ ] **Étape 1 : écrire le test**
+- [x] **Étape 1 : écrire le test**
 
 Dans `tests/coquille.test.js`, près des tests d'envois :
 
@@ -735,7 +735,7 @@ pas, composer le livrable à la main sur son modèle — clé `kdp-6x9-broche-bl
 `kdp-6x9-broche`, papier `blanc`. Ne pas appeler `teintePapier` directement : un test qui
 appelle la fonction privée ne prouve pas que l'écran l'utilise.
 
-- [ ] **Étape 2 : lancer et voir échouer**
+- [x] **Étape 2 : lancer et voir échouer**
 
 ```bash
 node --test tests/coquille.test.js
@@ -744,7 +744,7 @@ node --test tests/coquille.test.js
 Attendu : échec — le fixture `KDP` porte encore ses papiers dans la table plate, et la
 teinte lue est celle du premier (`#f7f0e0`).
 
-- [ ] **Étape 3 : basculer `envois.js` sur l'arbre**
+- [x] **Étape 3 : basculer `envois.js` sur l'arbre**
 
 ```js
 /**
@@ -760,27 +760,27 @@ function teintePapier() {
 }
 ```
 
-- [ ] **Étape 4 : retirer `papiers` de `ProviderVue`**
+- [x] **Étape 4 : retirer `papiers` de `ProviderVue`**
 
 Dans `commands.rs`, supprimer le champ `papiers: Vec<PapierVue>` de `ProviderVue` et son
 remplissage. `PapierVue` **reste** : `pods_liste` la sert dans l'arbre. Le compilateur nomme
 les sites à corriger.
 
-- [ ] **Étape 5 : mettre les fixtures d'accord**
+- [x] **Étape 5 : mettre les fixtures d'accord**
 
 Retirer `papiers` des providers plats de `tests/coquille.test.js` (`LULU`, `KDP`,
 `COOLLIBRI`), `tests/composition.test.js` et `tests/contrats.test.js`. Les papiers restent
 dans les constantes `PODS`, qui décrivent l'arbre. Un fixture qui garde un champ que la vue
 ne sert plus décrit un monde qui n'existe pas.
 
-- [ ] **Étape 6 : lancer et voir passer**
+- [x] **Étape 6 : lancer et voir passer**
 
 ```bash
 node --test tests/*.test.js
 cd src-tauri && cargo test
 ```
 
-- [ ] **Étape 7 : vérifications et commit**
+- [x] **Étape 7 : vérifications et commit**
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -805,7 +805,7 @@ autre papier, en silence. Éditer un fichier du poste fait donc disparaître un 
 réouverture, sans une ligne. Le précédent à suivre est dans le même écran : les fichiers de
 catalogue refusés au démarrage s'affichent dans `#refusCatalogue` (`livraison.js:21-50`).
 
-- [ ] **Étape 1 : écrire le test Rust**
+- [x] **Étape 1 : écrire le test Rust**
 
 Dans le module de tests de `projet.rs`, à côté des autres tests de `normalise` :
 
@@ -846,7 +846,7 @@ Dans le module de tests de `projet.rs`, à côté des autres tests de `normalise
     }
 ```
 
-- [ ] **Étape 2 : lancer et voir échouer**
+- [x] **Étape 2 : lancer et voir échouer**
 
 ```bash
 cd src-tauri && cargo test un_livrable_elague_est_nomme
@@ -854,7 +854,7 @@ cd src-tauri && cargo test un_livrable_elague_est_nomme
 
 Attendu : échec de compilation — `normalise` ne rend rien.
 
-- [ ] **Étape 3 : faire rendre `normalise`**
+- [x] **Étape 3 : faire rendre `normalise`**
 
 Changer sa signature en `fn normalise(&mut self) -> Vec<String>`, accumuler dans le
 `retain_mut` la clé de chaque livrable écarté, et la rendre :
@@ -881,7 +881,7 @@ Dans les deux `return false` du `retain_mut`, pousser avant de sortir :
 
 et terminer la fonction par `elagues`.
 
-- [ ] **Étape 4 : porter la liste jusqu'à l'écran**
+- [x] **Étape 4 : porter la liste jusqu'à l'écran**
 
 Dans `projet.rs::lire`, remplacer `meta.livraison.normalise();` par la capture, et poser le
 résultat sur `Projet` — un champ public non sérialisé, comme `Ouvert::candidat` vit hors du
@@ -899,7 +899,7 @@ projet :
 Dans `commands.rs`, exposer le champ sur `ProjetVue` et le remplir depuis `Ouvert`. Le
 compilateur nomme les sites de construction à compléter.
 
-- [ ] **Étape 5 : l'afficher**
+- [x] **Étape 5 : l'afficher**
 
 Dans `index.html`, à côté de `#refusCatalogue`, une boîte `#livrablesElagues` (masquée par
 défaut, `hidden`). Dans `livraison.js`, la remplir sur le même modèle que les refus :
@@ -921,7 +921,7 @@ function majElagues(vue) {
 
 et l'appeler là où la vue du projet est affichée.
 
-- [ ] **Étape 6 : le test front**
+- [x] **Étape 6 : le test front**
 
 Dans `tests/coquille.test.js` :
 
@@ -945,14 +945,14 @@ test("les livrables retirés à l'ouverture sont nommés à l'écran", async () 
 Le harnais `atelier` doit propager `sur.elagues` dans la vue qu'il rend ; l'ajouter là où il
 compose déjà `livraison`.
 
-- [ ] **Étape 7 : lancer les deux suites**
+- [x] **Étape 7 : lancer les deux suites**
 
 ```bash
 cd src-tauri && cargo test un_livrable_elague_est_nomme && cargo test
 cd .. && node --test tests/coquille.test.js && node --test tests/*.test.js
 ```
 
-- [ ] **Étape 8 : vérifications et commit**
+- [x] **Étape 8 : vérifications et commit**
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -973,7 +973,7 @@ Le lot 3 a fait le même travail pour « destinataire » : mécanique mais large
 commentaires Rust et 7 passages de README. Celui-ci porte en plus le titre du cookbook et
 un chapitre entier.
 
-- [ ] **Étape 1 : relever l'ampleur avant de toucher quoi que ce soit**
+- [x] **Étape 1 : relever l'ampleur avant de toucher quoi que ce soit**
 
 ```bash
 grep -rn "prestataire" --include="*.rs" --include="*.js" --include="*.html" --include="*.md" \
@@ -985,7 +985,7 @@ grep -rln "prestataire" --include="*.rs" --include="*.js" --include="*.html" --i
 Noter le compte dans le message de commit : c'est ce qui permettra de vérifier que rien
 n'est resté.
 
-- [ ] **Étape 2 : choisir le remplaçant selon le contexte**
+- [x] **Étape 2 : choisir le remplaçant selon le contexte**
 
 Le mot ne se remplace pas mécaniquement par un seul terme :
 
@@ -997,7 +997,7 @@ Le mot ne se remplace pas mécaniquement par un seul terme :
 
 Ne pas traduire ce qui cite une valeur de données ou un nom de fichier historique.
 
-- [ ] **Étape 3 : appliquer, fichier par fichier**
+- [x] **Étape 3 : appliquer, fichier par fichier**
 
 Ne pas lancer un `sed` global : chaque occurrence se lit avant d'être remplacée, parce que
 le choix entre « imprimeur » et « POD » dépend de la phrase. Traiter dans l'ordre :
@@ -1005,7 +1005,7 @@ le choix entre « imprimeur » et « POD » dépend de la phrase. Traiter dans l
 à la tâche 7**, qui le réécrit largement — le renommer ici ferait deux passes sur les mêmes
 lignes.
 
-- [ ] **Étape 4 : vérifier qu'il ne reste rien hors du cookbook**
+- [x] **Étape 4 : vérifier qu'il ne reste rien hors du cookbook**
 
 ```bash
 grep -rn "prestataire" --include="*.rs" --include="*.js" --include="*.html" --include="*.md" \
@@ -1014,7 +1014,7 @@ grep -rn "prestataire" --include="*.rs" --include="*.js" --include="*.html" --in
 
 Attendu : **aucune ligne**.
 
-- [ ] **Étape 5 : vérifications et commit**
+- [x] **Étape 5 : vérifications et commit**
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
@@ -1034,7 +1034,7 @@ git commit -m "Le mot prestataire quitte le code, l'écran et le README"
 **Fichiers :**
 - Modifier : `docs/COOKBOOK.md` — l. 1-16 (cadre), 85-127 (chapitre BoD), 288-316 (ajouter)
 
-- [ ] **Étape 1 : les quatre pointeurs morts**
+- [x] **Étape 1 : les quatre pointeurs morts**
 
 `src-tauri/src/providers.rs` n'existe plus. Corriger :
 
@@ -1046,7 +1046,7 @@ git commit -m "Le mot prestataire quitte le code, l'écran et le README"
   `pods/<clé>.toml`, depuis le guide de l'imprimeur. »
 - **l. 290** : voir l'étape 3, le paragraphe entier est réécrit.
 
-- [ ] **Étape 2 : le chapitre BoD**
+- [x] **Étape 2 : le chapitre BoD**
 
 Son tableau « Gabarit, pour mémoire » redit ce que `bod.toml` porte désormais. Le réduire à
 ce que le catalogue **ne peut pas** porter :
@@ -1062,7 +1062,7 @@ ce que le catalogue **ne peut pas** porter :
 - Ajouter ce que le pelliculage change à la composition : **rien**. Trois finitions au
   catalogue, aucune géométrie ; le livrable en garde la trace pour la commande.
 
-- [ ] **Étape 3 : réécrire « Ajouter un prestataire »**
+- [x] **Étape 3 : réécrire « Ajouter un prestataire »**
 
 Le chapitre décrit une table Rust à compléter et la fusion de deux tables historiques. Le
 remplacer par « Ajouter un imprimeur », qui décrit un fichier :
@@ -1083,7 +1083,7 @@ remplacer par « Ajouter un imprimeur », qui décrit un fichier :
   mieux vaut saisir une valeur lue qu'inscrire une formule devinée. C'est déjà écrit, mais
   en syntaxe Rust : le passer en TOML.
 
-- [ ] **Étape 4 : achever le renommage laissé par la tâche 6**
+- [x] **Étape 4 : achever le renommage laissé par la tâche 6**
 
 Titre compris. Puis :
 
@@ -1093,12 +1093,12 @@ grep -rn "prestataire" docs/COOKBOOK.md
 
 Attendu : **aucune ligne**.
 
-- [ ] **Étape 5 : relire le cookbook contre le catalogue**
+- [x] **Étape 5 : relire le cookbook contre le catalogue**
 
 Pour chacun des six imprimeurs, vérifier qu'aucune valeur du cookbook ne contredit son
 `.toml`. Le cookbook cite des sources ; il ne doit plus faire foi sur un chiffre.
 
-- [ ] **Étape 6 : commit**
+- [x] **Étape 6 : commit**
 
 ```bash
 git add docs/COOKBOOK.md
@@ -1113,7 +1113,7 @@ git commit -m "Le cookbook parle de fichiers déposés, et cesse de redire la ta
 - Modifier : `docs/superpowers/specs/2026-08-26-catalogue-et-livrables-design.md` (§ 2, § 10)
 - Modifier : `docs/superpowers/plans/2026-08-27-catalogue-lot-4-bod-et-cookbook.md` (ce fichier)
 
-- [ ] **Étape 1 : cocher le lot 4**
+- [x] **Étape 1 : cocher le lot 4**
 
 Dans le § 10, sur le modèle du lot 3 :
 
@@ -1122,19 +1122,19 @@ Dans le § 10, sur le modèle du lot 3 :
 chacun avec sa `source` relevée dans ses guides. Le COOKBOOK suit.
 ```
 
-- [ ] **Étape 2 : porter au § 2 le champ que le lot a ajouté**
+- [x] **Étape 2 : porter au § 2 le champ que le lot a ajouté**
 
 La spec § 2 décrit le fichier d'un POD et n'y montre pas `pages` sur le papier. L'ajouter à
 l'exemple, avec la phrase qui le justifie : la pagination admise vit sur la reliure, **et le
 papier peut la resserrer** quand son épaisseur l'impose — BoD plafonne le photo brillant
 130 g à 868 pages là où son broché va à 900. Les deux bornes se croisent.
 
-- [ ] **Étape 3 : cocher les cases de ce plan**
+- [x] **Étape 3 : cocher les cases de ce plan**
 
 Toutes les étapes réellement faites, et **seulement** celles-là. Une case cochée pour une
 étape sautée est un mensonge que la prochaine session lira comme un fait.
 
-- [ ] **Étape 4 : commit**
+- [x] **Étape 4 : commit**
 
 ```bash
 git add docs/superpowers/
