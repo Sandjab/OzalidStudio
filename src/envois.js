@@ -358,10 +358,8 @@ function marquerVignette(n) {
 /**
  * La couleur du papier que le livrable visé imprimera.
  *
- * L'arbre et non la table plate : le papier fait partie de l'identité du livrable, jamais
- * du gabarit, et deux papiers d'un même gabarit partagent la ligne de table. Le blanc
- * final ne sert que le cas où l'on n'aurait pas encore le catalogue — mieux vaut un
- * canevas honnêtement blanc qu'un crème inventé.
+ * Le blanc final ne sert que le cas où l'on n'aurait pas encore le catalogue — mieux
+ * vaut un canevas honnêtement blanc qu'un crème inventé.
  */
 function teintePapier() {
   return papierCourant()?.teinte ?? '#ffffff';

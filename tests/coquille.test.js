@@ -2034,10 +2034,17 @@ test('un seuil se commet au relâchement, pas à chaque cran', async () => {
  * gris pâle ne se distingue pas du blanc de l'écran, et c'est précisément ce qu'on
  * cherche à voir. La teinte suit le papier du livrable visé — c'est lui qu'on tire,
  * et changer de papier doit changer ce que le canevas montre.
+ *
+ * Deux papiers, et non un seul : viser le crème (le premier papier de KDP) ne
+ * distinguerait pas « le papier du livrable » de « le premier papier du POD », et viser
+ * seul le blanc (second papier) ne distinguerait pas « le papier du livrable » du blanc
+ * que rend le repli final de `teintePapier`. Les deux assertions prises ensemble ferment
+ * les deux chemins : le crème écarte le repli, le blanc écarte le premier papier du POD.
  */
 test('le canevas prend la couleur du papier visé', async () => {
   const a = atelier({
     providers: [KDP],
+    livrables: [dest(KDP), { ...dest(KDP), cle: 'kdp-6x9-broche-blanc', papier: 'blanc' }],
     sur: {
       envois: {
         gabarit: '',
@@ -2056,6 +2063,12 @@ test('le canevas prend la couleur du papier visé', async () => {
   // posé plus haut.
   assert.equal(els.get('canevas').style.getPropertyValue('--papier-canevas'), '#f7f0e0',
     'le canevas ne prend pas le crème du livrable visé');
+
+  els.get('inLivrable').value = 'kdp-6x9-broche-blanc';
+  await els.get('inLivrable').declenche('change');
+
+  assert.equal(els.get('canevas').style.getPropertyValue('--papier-canevas'), '#ffffff',
+    'le canevas prend le crème du premier papier du POD au lieu du blanc du livrable');
 });
 
 /**

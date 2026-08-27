@@ -50,7 +50,13 @@ struct Ouvert {
     candidat: Option<(usize, Vec<u8>)>,
 }
 
-/// Vue d'un prestataire pour l'interface.
+/// Vue d'un prestataire pour l'interface : un gabarit d'intérieur, POD × format ×
+/// reliure.
+///
+/// Le papier n'y a pas sa place, et ce n'est pas un oubli : il appartient à l'identité
+/// du livrable, jamais du gabarit, et deux livrables qui ne diffèrent que par lui
+/// partagent cette même entrée. Qui veut l'offre complète d'un POD, papiers compris, la
+/// lit dans l'arbre — `PodVue`, servie par `pods_liste`.
 #[derive(Serialize)]
 pub struct ProviderVue {
     cle: String,

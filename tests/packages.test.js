@@ -11,13 +11,11 @@ const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
   cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
   libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
-  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 // Le même imprimeur dans son autre format. La cascade offre les deux, la table plate
 // doit donc savoir les dire tous les deux : sans lui, un 5 × 8 ajouté partait au Rust
@@ -27,13 +25,11 @@ const KDP_5X8 = {
   cle: 'kdp-5x8-broche', pod: 'kdp', format: '5x8', reliure: 'broche',
   libelle: 'Amazon KDP — 5 × 8 po',
   largeur: 127, hauteur: 203.2, fond_perdu: 3.175,
-  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null,
-  papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
 // L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
@@ -87,11 +83,16 @@ const face = (els, libelle) =>
  * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
  * à plat, et la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
  * jamais.
+ *
+ * Le papier d'office vient de l'arbre, pas de la table plate : c'est elle qui porte
+ * l'offre, la table ne décrivant plus qu'un gabarit depuis le retrait de son champ
+ * `papiers`. `PODS` sert de défaut pour LULU, KDP et COOLLIBRI ; un POD tenu à part
+ * (`DEUX_RELIURES`, `mixte`…) passe son papier en second argument.
  */
-const chez = (p) => ({
-  cle: `${p.pod}-${p.format}-${p.reliure}-${p.papiers[0].cle}`,
+const chez = (p, papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle) => ({
+  cle: `${p.pod}-${p.format}-${p.reliure}-${papier}`,
   gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
-  papier: p.papiers[0].cle, finition: null, dos_mm: null, fond_perdu_mm: null,
+  papier, finition: null, dos_mm: null, fond_perdu_mm: null,
   compose: null,
 });
 
@@ -541,7 +542,6 @@ const DEUX_RELIURES = {
 const TBE_BROCHE = {
   cle: 'tbe-148x210-broche', pod: 'tbe', format: '148x210', reliure: 'broche',
   libelle: 'TheBookEdition — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
-  papiers: DEUX_RELIURES.papiers,
 };
 const TBE_SPIRALE = { ...TBE_BROCHE, cle: 'tbe-148x210-spirale', reliure: 'spirale' };
 
@@ -549,7 +549,7 @@ test('régler la reliure renvoie les quatre axes au Rust', async () => {
   const { els, appels } = await ouvre(
     [TBE_BROCHE, TBE_SPIRALE],
     {},
-    { pods: [DEUX_RELIURES], livrables: [chez(TBE_BROCHE)] }
+    { pods: [DEUX_RELIURES], livrables: [chez(TBE_BROCHE, 'munken-80')] }
   );
 
   const reliures = els.get('liv-reliure-tbe-148x210-broche-munken-80');
@@ -567,9 +567,9 @@ test('deux livrables du même papier se distinguent par leur reliure au pied', a
   // Le pointeur du pied et les comptes rendus de package ne portent aucun contrôle : ce
   // qui distingue deux livrables doit s'y lire dans le libellé, ou ne s'y lit pas. Depuis
   // que la reliure se règle, elle peut être ce qui les distingue à elle seule.
-  const broche = chez(TBE_BROCHE);
+  const broche = chez(TBE_BROCHE, 'munken-80');
   const spirale = {
-    ...chez(TBE_SPIRALE),
+    ...chez(TBE_SPIRALE, 'munken-80'),
     cle: 'tbe-148x210-spirale-munken-80',
     gabarit: 'tbe-148x210-spirale',
   };
@@ -615,9 +615,8 @@ test('le relevé de dos suit le papier, pas le POD', async () => {
   const plat = {
     cle: 'mixte-a5-broche', pod: 'mixte', format: 'a5', reliure: 'broche',
     libelle: 'Mixte — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
-    papiers: mixte.papiers,
   };
-  const { els } = await ouvre([plat], {}, { pods: [mixte] });
+  const { els } = await ouvre([plat], {}, { pods: [mixte], livrables: [chez(plat, 'formule')] });
 
   assert.ok(
     !els.get('liv-dos-mixte-a5-broche-formule'),

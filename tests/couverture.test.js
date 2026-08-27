@@ -8,7 +8,6 @@ const { groupes, lire, ecrire, placeImage } = require('../src/couverture.js');
 const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 
 const style = (police, taille, couleur) => ({
