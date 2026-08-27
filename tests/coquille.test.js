@@ -17,7 +17,6 @@ const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff' }],
 };
 
 // L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
@@ -62,13 +61,20 @@ const PODS = [
  * Un livrable neuf chez un prestataire, comme le Rust en fabrique un : les quatre axes
  * à plat, la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
  * jamais, et un test qui la rebâtirait à chaque ligne finirait par diverger d'elle.
+ *
+ * Le papier d'office vient de l'arbre (`PODS`), pas de la table plate : c'est elle qui
+ * porte l'offre, la table ne décrivant plus qu'un gabarit depuis le retrait de son champ
+ * `papiers`.
  */
-const dest = (p) => ({
-  cle: `${p.pod}-${p.format}-${p.reliure}-${p.papiers[0].cle}`,
-  gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
-  papier: p.papiers[0].cle, finition: null, dos_mm: null, fond_perdu_mm: null,
-  compose: null,
-});
+const dest = (p) => {
+  const papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle;
+  return {
+    cle: `${p.pod}-${p.format}-${p.reliure}-${papier}`,
+    gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
+    papier, finition: null, dos_mm: null, fond_perdu_mm: null,
+    compose: null,
+  };
+};
 
 function projet(sur = {}) {
   return {
@@ -781,8 +787,6 @@ const KDP = {
   cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
   libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
-  papiers: [{ cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0' },
-    { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff' }],
 };
 
 /** Un prestataire à gabarit : le dos ne s'y calcule pas, il se relève. */
@@ -790,7 +794,6 @@ const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null,
-  papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff' }],
 };
 
 /**

@@ -10,19 +10,16 @@ const LULU = {
   cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
   libelle: 'Lulu — poche 108 × 175',
   largeur: 108, hauteur: 175, fond_perdu: 3.175,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
 };
 const KDP = {
   cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
   libelle: 'Amazon KDP — 6 × 9 po',
   largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
-  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
 };
 const COOLLIBRI = {
   cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
   libelle: 'CoolLibri — A5',
   largeur: 148, hauteur: 210, fond_perdu: null,
-  papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
 };
 
 // L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
@@ -67,12 +64,17 @@ const PODS = [
  * La livraison d'un livre qui n'a qu'un livrable, comme un projet neuf en a un. La clé
  * à quatre axes est fabriquée **une fois** ici : le front la reçoit du Rust, il ne la
  * recompose jamais.
+ *
+ * Le papier d'office vient de l'arbre (`PODS`), pas de la table plate : c'est elle qui
+ * porte l'offre, la table ne décrivant plus qu'un gabarit depuis le retrait de son champ
+ * `papiers`.
  */
 const livraison = (p) => {
+  const papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle;
   const d = {
-    cle: `${p.pod}-${p.format}-${p.reliure}-${p.papiers[0].cle}`,
+    cle: `${p.pod}-${p.format}-${p.reliure}-${papier}`,
     gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
-    papier: p.papiers[0].cle, finition: null, dos_mm: null, fond_perdu_mm: null,
+    papier, finition: null, dos_mm: null, fond_perdu_mm: null,
     compose: null,
   };
   return { livrables: [d], courant: d.cle };

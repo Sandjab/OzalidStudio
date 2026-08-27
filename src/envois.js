@@ -358,18 +358,13 @@ function marquerVignette(n) {
 /**
  * La couleur du papier que le livrable visé imprimera.
  *
- * Le papier est celui du livrable visé, et rien d'autre : le Rust l'a validé contre le
- * catalogue avant de le poser, il se retrouve donc toujours dans la table. Le repli sur
- * le premier de la liste ne sert que le cas où la table et le projet auraient divergé —
- * un gabarit chargé sans son papier —, et le blanc final le cas où l'on n'aurait même
- * pas le prestataire. Mieux vaut un canevas honnêtement blanc qu'un crème inventé.
+ * L'arbre et non la table plate : le papier fait partie de l'identité du livrable, jamais
+ * du gabarit, et deux papiers d'un même gabarit partagent la ligne de table. Le blanc
+ * final ne sert que le cas où l'on n'aurait pas encore le catalogue — mieux vaut un
+ * canevas honnêtement blanc qu'un crème inventé.
  */
 function teintePapier() {
-  const l = projet?.livraison;
-  const d = l?.livrables.find((x) => x.cle === l.courant);
-  const pr = providers.find((p) => p.cle === d?.gabarit);
-  const pa = pr?.papiers.find((x) => x.cle === d?.papier) ?? pr?.papiers[0];
-  return pa?.teinte ?? '#ffffff';
+  return papierCourant()?.teinte ?? '#ffffff';
 }
 
 /**

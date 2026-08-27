@@ -64,7 +64,6 @@ pub struct ProviderVue {
     largeur: f64,
     hauteur: f64,
     fond_perdu: Option<f64>,
-    papiers: Vec<PapierVue>,
 }
 
 #[derive(Serialize)]
@@ -103,7 +102,6 @@ impl From<&Provider> for ProviderVue {
             largeur: p.format.0,
             hauteur: p.format.1,
             fond_perdu: p.fond_perdu,
-            papiers: p.papiers.iter().map(PapierVue::from).collect(),
         }
     }
 }
