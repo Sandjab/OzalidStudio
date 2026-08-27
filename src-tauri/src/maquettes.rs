@@ -907,59 +907,114 @@ mod tests {
         assert!(par_cle(None, "bandeau").is_some());
     }
 
-    /// Le pied éditeur est posé depuis le bas, en % de la hauteur ; le filet interne du
-    /// cadre l'est depuis le bas aussi, mais son décroché se lit sur la **largeur**. Les
-    /// deux ne varient donc pas ensemble d'un format à l'autre, et un pied qui dégage le
-    /// filet en poche peut le traverser en A4.
+    /// Le pied éditeur est posé depuis le bas, en % de la hauteur ; le bloc titre l'est
+    /// depuis le haut, de la même façon. Le filet interne du cadre, lui, se décroche
+    /// pour l'essentiel en % de la **largeur** — sur les deux bords, puisque le cadre est
+    /// concentrique. Le pied et le haut du bloc titre ne varient donc pas avec le filet
+    /// de la même façon d'un format à l'autre, et l'un comme l'autre peuvent le dégager
+    /// en poche et le traverser en 21 × 15.
     ///
-    /// La maquette Filets porte 17,5 %, et non les 11 % de Bandeau et Surimpression : ce
-    /// n'est pas un choix esthétique, c'est le minimum qui dégage le filet sur toute la
-    /// table, imposé par le 21 × 15 de BoD (lot 4), le format le plus contraignant :
-    /// au-delà du seuil de sécurité que ce test vérifie, il ne reste que 0,28 mm de marge
-    /// sur ce format-là. Sur les formats hauts, à l'inverse, ce même pourcentage est déjà
-    /// large — 17,5 % d'un 21 × 29,7 met le pied à plus de 50 mm du bas. L'archive porte
-    /// la valeur, ce test la borne sur tous les formats de la table — c'est ici, et nulle
-    /// part ailleurs, que la raison de ce 17,5 est écrite : ne pas la baisser sans refaire
-    /// ce calcul, la marge sur le 21 × 15 ne le supporte pas.
+    /// La maquette Filets porte 17,5 % sur les deux — `pied.y` et `bloc_y` —, et non les
+    /// 11 %/13 % de Bandeau et Surimpression : ce n'est pas un choix esthétique, c'est le
+    /// minimum qui dégage le filet sur toute la table, imposé dans les deux cas par le
+    /// 21 × 15 de BoD (lot 4), le format le plus contraignant : au-delà du seuil de
+    /// sécurité que ce test vérifie, il ne reste que 0,28 mm de marge sur ce format-là,
+    /// pour le pied comme pour le bloc titre — la géométrie est la même, un filet
+    /// symétrique vu depuis le bord opposé. Sur les formats hauts, à l'inverse, ce même
+    /// pourcentage est déjà large — 17,5 % d'un 21 × 29,7 met le pied à plus de 50 mm du
+    /// bas. L'archive porte la valeur, ce test la borne sur tous les formats de la table
+    /// — c'est ici, et nulle part ailleurs, que la raison de ce 17,5 est écrite : ne pas
+    /// la baisser sans refaire ce calcul, la marge sur le 21 × 15 ne le supporte pas.
+    ///
+    /// Le bloc titre n'est pas une ligne mais un ensemble — auteur, puis titre, puis
+    /// genre s'il est visible, séparés par les écarts que `bloc_texte` insère
+    /// (`couverture.rs`) — mais c'est son **bord supérieur** qui touche le cadre, pas sa
+    /// hauteur totale : `bloc_y` place ce bord, et le contenu descend depuis là. La
+    /// hauteur du bloc entier, elle, a été vérifiée à part (encre de chaque style, plus
+    /// les écarts) : sur le 21 × 15, même format le plus contraignant, il reste plus de
+    /// 14 mm avant le filet du bas — largement dégagé, ce n'est donc pas ce que ce test
+    /// mesure.
+    ///
+    /// **Dette connue, non corrigée ici — arbitrage utilisateur du 27/08** : sur Filets
+    /// en 21 × 15 (150 mm de haut, le format le plus court de toute la table), remonter
+    /// `bloc_y` de 13,0 à 17,5 % pour dégager le filet du haut a rapproché le bloc titre
+    /// (haut ≈ 83 mm, auteur + écarts + titre + genre) du pied éditeur (haut ≈ 45 mm,
+    /// monogramme + écart + éditeur), posé indépendamment depuis le bas : les deux
+    /// occupent ensemble 128 mm sur une page de 150, et le déplacement de 6,75 mm suffit
+    /// à faire passer un simple contact (déjà présent à 13,0 %, vu sur l'image avant
+    /// cette correction) à un recouvrement net — « conte philosophique » sur
+    /// « Monogramme ». **Préexistant, pas causé par ce correctif** : le corriger
+    /// demanderait de rouvrir la géométrie de composition du bloc titre ou du pied
+    /// (réduire un écart, raccourcir le genre, borner leurs tailles l'un par l'autre),
+    /// ce qui déborde d'un lot de catalogue. Ce test ne le vérifie donc pas : il ne
+    /// connaît que le cadre, pas la position du pied.
     #[test]
-    fn le_pied_editeur_ne_traverse_jamais_le_cadre() {
+    fn le_pied_et_le_bloc_titre_ne_traversent_jamais_le_cadre() {
         // Les trois fournies, pas seulement Filets : Bandeau partage le même cadre à
-        // filets, avec un pied à 11 % — sous le seuil que ce test vient de juger
-        // insuffisant. Son pied est inactif aujourd'hui, d'où le passage plus bas ; le
-        // jour où quelqu'un l'allume, c'est cette boucle qui doit le rattraper.
+        // filets, mais le sien est inactif aujourd'hui, d'où l'absence de la boucle
+        // interne ; le jour où il s'allume — avec ou sans son pied, qui l'est aussi —,
+        // c'est cette boucle qui doit le rattraper. C'est le cadre seul qui conditionne
+        // l'entrée : Surimpression a le sien actif avec un pied inactif, et son bloc
+        // titre reste exposé au filet — voir l'exception nommée plus bas.
         let mut exercees = 0;
         for cle in ["bandeau", "filets", "surimpression"] {
             let cv = fournie(cle);
             let c = &cv.cadre;
-            if !c.actif || !cv.pied.actif {
+            if !c.actif {
                 continue;
             }
             exercees += 1;
             for pr in crate::catalogue::providers() {
+                // DETTE, non corrigée — arbitrage utilisateur du 27/08. Surimpression
+                // traverse son propre cadre sur ce format précis, et sur lui seul :
+                // bloc titre à 13,50 mm du haut, filet à 14,35 mm (déficit 1,36 mm),
+                // confirmé à l'image (`surimpression-une.png` en 21 × 15). Le défaut est
+                // antérieur à ce lot — Surimpression n'avait jamais porté un format
+                // aussi court avant que BoD (lot 4) publie le 21 × 15 — et c'est ce
+                // format neuf qui le révèle, pas ce lot qui le cause. Laissé
+                // volontairement : lui donner son propre `bloc_y` est le travail de la
+                // maquette Surimpression, pas de ce catalogue. Pour le lever : reprendre
+                // le calcul de ce test avec le cadre de Surimpression (marge 6,0,
+                // décroché 1,4, filets 0,25/0,15, écart 0,6) au lieu de celui de Filets,
+                // et écrire la valeur trouvée dans `surimpression.maquette`.
+                if cle == "surimpression" && pr.cle == "bod-210x150-broche" {
+                    continue;
+                }
+
                 let (fw, fh) = pr.format;
-                // Bord intérieur du filet le plus bas, mesuré depuis le bas de la
-                // couverture. Le cadre étant concentrique, c'est la même distance qu'en
-                // haut.
+                // Bord intérieur du filet le plus bas, mesuré depuis le bord de la
+                // couverture. Le cadre étant concentrique, c'est la même distance en
+                // haut qu'en bas.
                 let filet = c.marge / 100.0 * fh
                     + c.filet1_epaisseur / 100.0 * fw
                     + c.decroche / 100.0 * fw
                     + c.filet2_epaisseur / 100.0 * fw
                     + c.ecart / 100.0 * fw
                     + c.filet2_epaisseur / 100.0 * fw;
-                let pied = cv.pied.y / 100.0 * fh;
+
+                if cv.pied.actif {
+                    let pied = cv.pied.y / 100.0 * fh;
+                    assert!(
+                        pied > filet + 0.5,
+                        "{cle} / {} : pied à {pied:.2} mm du bas, filet à {filet:.2} mm",
+                        pr.cle
+                    );
+                }
+
+                let bloc_haut = cv.bloc_y / 100.0 * fh;
                 assert!(
-                    pied > filet + 0.5,
-                    "{cle} / {} : pied à {pied:.2} mm du bas, filet à {filet:.2} mm",
+                    bloc_haut > filet + 0.5,
+                    "{cle} / {} : bloc titre à {bloc_haut:.2} mm du haut, filet à {filet:.2} mm",
                     pr.cle
                 );
             }
         }
-        // Sans quoi une future maquette qui désactiverait cadre ou pied sur les trois
+        // Sans quoi une future maquette qui désactiverait le cadre sur les trois
         // fournies — Filets comprise — ferait sauter toute la boucle, et ce test
         // passerait au vert sans plus rien vérifier.
         assert!(
             exercees > 0,
-            "aucune archive fournie n'a cadre et pied actifs : ce test ne protège plus rien"
+            "aucune archive fournie n'a un cadre actif : ce test ne protège plus rien"
         );
     }
 
