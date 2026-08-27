@@ -954,8 +954,14 @@ mod tests {
         // filets, mais le sien est inactif aujourd'hui, d'où l'absence de la boucle
         // interne ; le jour où il s'allume — avec ou sans son pied, qui l'est aussi —,
         // c'est cette boucle qui doit le rattraper. C'est le cadre seul qui conditionne
-        // l'entrée : Surimpression a le sien actif avec un pied inactif, et son bloc
-        // titre reste exposé au filet — voir l'exception nommée plus bas.
+        // l'entrée : Surimpression a le sien actif avec un pied inactif, et c'est son
+        // bloc titre seul qui répond du filet.
+        //
+        // Toute la table, sans exception de format. Les sept formats à l'italienne y
+        // sont entrés en déficit — de 0,34 mm sur le 190 × 150 de TheBookEdition à
+        // 1,27 mm sur les deux A4 à l'italienne —, et une exception les a couverts le
+        // temps d'un lot ; c'est la géométrie du cadre qui a été corrigée depuis, pas le
+        // contrôle qui a été assoupli.
         let mut exercees = 0;
         for cle in ["bandeau", "filets", "surimpression"] {
             let cv = fournie(cle);
@@ -965,42 +971,12 @@ mod tests {
             }
             exercees += 1;
             for pr in crate::catalogue::providers() {
-                // DETTE, non corrigée — arbitrage utilisateur du 27/08, élargi au lot 5.
-                // Surimpression traverse son propre cadre sur les formats **à
-                // l'italienne**, et sur eux seuls : son cadre s'épaissit en pourcentage
-                // de la **largeur** quand `bloc_y` descend en pourcentage de la
-                // **hauteur**, si bien qu'une page plus large que haute rapproche les
-                // deux jusqu'au contact — de 0,35 mm de déficit sur le 19 × 15 de
-                // TheBookEdition à 1,36 mm sur le 21 × 15 de BoD, ce dernier confirmé à
-                // l'image (`surimpression-une.png`). Le défaut est antérieur à ce lot,
-                // et ce sont les formats neufs qui le révèlent, pas eux qui le causent.
-                // Laissé volontairement : donner à Surimpression son propre `bloc_y` est
-                // le travail de cette maquette, pas de ce catalogue. Pour le lever :
-                // reprendre le calcul de ce test avec le cadre de Surimpression
-                // (marge 6,0, décroché 1,4, filets 0,25/0,15, écart 0,6) au lieu de
-                // celui de Filets, et écrire la valeur trouvée dans
-                // `surimpression.maquette`.
-                //
-                // L'exception porte sur le **cas** et non sur une liste de clés : un
-                // format à l'italienne de plus la rejoindrait sans qu'on y pense, et
-                // c'est ce qui vient d'arriver à cinq d'entre eux. Elle ne couvre que
-                // Surimpression : Filets et Bandeau restent tenus sur toute la table, à
-                // l'italienne comprise.
-                let a_l_italienne = pr.format.0 > pr.format.1;
-                if cle == "surimpression" && a_l_italienne {
-                    continue;
-                }
-
-                let (fw, fh) = pr.format;
-                // Bord intérieur du filet le plus bas, mesuré depuis le bord de la
-                // couverture. Le cadre étant concentrique, c'est la même distance en
-                // haut qu'en bas.
-                let filet = c.marge / 100.0 * fh
-                    + c.filet1_epaisseur / 100.0 * fw
-                    + c.decroche / 100.0 * fw
-                    + c.filet2_epaisseur / 100.0 * fw
-                    + c.ecart / 100.0 * fw
-                    + c.filet2_epaisseur / 100.0 * fw;
+                let fh = pr.format.1;
+                // Bord intérieur du filet le plus bas, demandé au cadre plutôt que
+                // recopié ici : une copie ne suit pas le dessin, et c'est par là que le
+                // défaut à l'italienne a vécu — le contrôle mesurait une géométrie que
+                // la composition n'employait plus tout à fait.
+                let filet = c.profondeur(pr.format);
 
                 if cv.pied.actif {
                     let pied = cv.pied.y / 100.0 * fh;

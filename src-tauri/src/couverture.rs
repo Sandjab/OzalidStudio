@@ -170,6 +170,9 @@ fn casse_telle() -> Casse {
 
 /// Cadre à filets. Trois niveaux imbriqués, comme le triple filet Gallimard :
 /// un filet externe, puis deux filets rapprochés à l'intérieur.
+///
+/// Épaisseurs, décroché et écart s'expriment en % de la **petite** dimension du format,
+/// et non de la largeur — voir [`Cadre::niveaux`]. Seule `marge` a un axe.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cadre {
     pub actif: bool,
@@ -184,6 +187,59 @@ pub struct Cadre {
     pub filet2_epaisseur: f64,
     /// Écart entre les deux filets internes.
     pub ecart: f64,
+}
+
+impl Cadre {
+    /// Les trois niveaux du cadre, du plus externe au plus interne : épaisseur du trait
+    /// et décroché depuis le niveau précédent, en millimètres.
+    ///
+    /// Ces grandeurs n'ont pas d'axe : elles s'ajoutent aux quatre côtés, donc en `x`
+    /// comme en `y`. Les indexer sur la largeur — ce que ce cadre a longtemps fait —
+    /// épaississait le cadre vers l'intérieur à mesure que la page s'élargissait,
+    /// pendant que le bloc titre et le pied descendaient, eux, en pourcentage de la
+    /// hauteur : sur un format à l'italienne les deux se rejoignaient jusqu'au contact.
+    /// La petite dimension du format les rend au contraire invariants à l'orientation,
+    /// et elle vaut la largeur sur tout portrait ou carré — le dessin n'y bouge pas d'un
+    /// centième.
+    ///
+    /// `marge` ne suit pas cette règle : elle a un axe, et reste résolue
+    /// horizontalement sur la largeur, verticalement sur la hauteur.
+    fn niveaux(&self, (fw, fh): (f64, f64)) -> [(f64, f64); 3] {
+        let e = fw.min(fh) / 100.0;
+        [
+            (self.filet1_epaisseur * e, 0.0),
+            (self.filet2_epaisseur * e, self.decroche * e),
+            (self.filet2_epaisseur * e, self.ecart * e),
+        ]
+    }
+
+    /// Distance du bord de la face au bord intérieur du filet le plus interne.
+    ///
+    /// Le cadre étant concentrique, c'est la même en haut qu'en bas : c'est elle qu'un
+    /// élément posé depuis le bord — le bloc titre, le pied — ne doit pas franchir.
+    /// Elle suit [`Cadre::niveaux`] pas à pas, et c'est tout l'intérêt : le contrôle qui
+    /// la recopiait divergeait déjà du dessin sur un cadre sans décroché, où le second
+    /// filet se retrace sur le premier au lieu de s'en écarter.
+    ///
+    /// Le cas dégénéré d'un cadre plus large que sa page n'est pas repris ici — le
+    /// dessin s'y arrête, cette mesure continue. Elle le surestime alors, ce qui rend le
+    /// contrôle plus strict et jamais plus permissif.
+    ///
+    /// Rien ne la compose : elle n'existe que pour le contrôle, et vit ici plutôt que
+    /// dans le module de test parce que c'est son adjacence à [`Cadre::niveaux`] qui
+    /// fait sa valeur — la mesure et le dessin doivent se relire ensemble.
+    #[cfg(test)]
+    pub(crate) fn profondeur(&self, format: (f64, f64)) -> f64 {
+        let mut y = self.marge / 100.0 * format.1;
+        let mut precedent = 0.0;
+        for (ep, decroche) in self.niveaux(format) {
+            if decroche > 0.0 {
+                y += precedent + decroche;
+            }
+            precedent = ep;
+        }
+        y + precedent
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -834,16 +890,14 @@ fn bloc_cadre(c: &Cadre, (fw, fh): (f64, f64)) -> String {
     }
     let (mut x, mut y) = (c.marge / 100.0 * fw, c.marge / 100.0 * fh);
     let (mut w, mut h) = (fw - 2.0 * x, fh - 2.0 * y);
-    let e1 = c.filet1_epaisseur / 100.0 * fw;
-    let e2 = c.filet2_epaisseur / 100.0 * fw;
-    let niveaux = [
-        (e1, c.filet1_couleur.as_str(), 0.0),
-        (e2, c.filet2_couleur.as_str(), c.decroche / 100.0 * fw),
-        (e2, c.filet2_couleur.as_str(), c.ecart / 100.0 * fw),
+    let couleurs = [
+        c.filet1_couleur.as_str(),
+        c.filet2_couleur.as_str(),
+        c.filet2_couleur.as_str(),
     ];
     let mut precedent = 0.0;
     let mut out = String::new();
-    for (ep, col, decroche) in niveaux {
+    for ((ep, decroche), col) in c.niveaux((fw, fh)).into_iter().zip(couleurs) {
         if decroche > 0.0 {
             let d = precedent + decroche;
             x += d;
