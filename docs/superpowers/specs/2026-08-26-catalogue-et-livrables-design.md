@@ -64,7 +64,7 @@ s'écrit pas ; seules les exceptions se déclarent.
 ```toml
 # pods/bod.toml
 cle = "bod"
-nom = "BoD (Books on Demand)"
+nom = "BoD"
 # Publié dans le guide de maquette, commun à tous ses formats.
 fond_perdu = 5.0
 
@@ -73,9 +73,9 @@ cle = "135x215"
 nom = "13,5 × 21,5 cm"
 mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-# BoD ne module pas la reliure selon l'épaisseur : tranche unique.
+# BoD ne module pas la marge de reliure selon l'épaisseur : tranche unique.
 gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
-source = "modèle Word « Roman » 13,5 × 21,5"
+source = "modèle Word « Roman A » 13,5 × 21,5"
 
 [[reliure]]
 cle = "broche"
@@ -88,7 +88,7 @@ source = "validation du calculateur officiel"
 [[reliure]]
 cle = "rigide"
 nom = "Couverture rigide"
-non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur des cartons"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
 
 [[finition]]
 cle = "mat"
@@ -99,7 +99,7 @@ cle = "creme-90"
 nom = "Crème 90 g"
 teinte = "#f7f0e0"
 dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
-source = "calculateur officiel, relevé sur 4 points — 280 p → 19,5 mm"
+source = "calculateur officiel, relevé sur 3 points — 280 p → 19,5 mm"
 
 [[papier]]
 cle = "photo-brillant-130"
@@ -129,10 +129,10 @@ Trois règles d'écriture, qui prolongent celle qui tient déjà la table :
 
 - **`source` dit d'où vient le chiffre.** Les commentaires de provenance de `providers.rs`
   descendent ici ; ils ne doivent pas rester derrière.
-- **`non_outille` décrit notre état, pas celui du POD.** « géométrie non relevée » se
-  vérifie ; « BoD ne publie pas son rempli » serait une affirmation sur autrui qu'on n'a pas
-  faite. La nuance compte : la première phrase vieillit bien, la seconde devient un mensonge
-  le jour où on regarde vraiment.
+- **`non_outille` décrit notre état, pas celui du POD.** « planche ne sait pas composer une
+  couverture rigide » se vérifie ; « BoD ne publie pas son rempli » serait une affirmation
+  sur autrui qu'on n'a pas faite. La nuance compte : la première phrase vieillit bien, la
+  seconde devient un mensonge le jour où on regarde vraiment.
 - **Une valeur d'énumération inconnue est refusée**, jamais ignorée. `geometrie` n'admet
   aujourd'hui que `dos-carre-colle`, `parite` que `paire` — les seules que le code sache
   appliquer. Un fichier qui annoncerait `parite = "multiple-12-moins-1"` serait refusé
