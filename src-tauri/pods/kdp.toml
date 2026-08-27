@@ -9,10 +9,29 @@ nom = "Amazon KDP"
 # Page d'aide « Create a Paperback Cover » : 0,125 po. Commun à ses formats.
 fond_perdu = 3.175
 
-# Les trois formats partagent marges et gouttières : les modèles Word officiels gardent
-# 12,7 mm quel que soit le format de rognage. La gouttière est le plus grand des deux
-# gabarits publiés — les 19,05 mm du modèle de manuscrit, sauf au-delà de 700 pages où le
-# minimum de la tranche (0,875 po) passe devant.
+# Les seize formats partagent marges et gouttières, et ce n'est pas une extrapolation
+# depuis le 6 × 9 : les dix-sept modèles Word officiels portent les mêmes valeurs au
+# centième de millimètre près — 12,7 mm en haut, en bas et à l'extérieur, 19,05 mm en
+# gouttière. La gouttière est le plus grand des deux gabarits publiés : les 19,05 mm du
+# modèle de manuscrit, sauf au-delà de 700 pages où le minimum de la tranche (0,875 po)
+# passe devant.
+#
+# Les dimensions viennent des pouces, pas des centimètres arrondis que KDP affiche à côté
+# d'eux : le 8,27 × 11,69 po fait 210,06 × 296,93 mm et non l'A4 rond dont il s'approche.
+#
+# Cinq formats portent un plafond de pages propre, parce que KDP publie le sien par
+# couple format × papier là où nous croisons trois axes indépendants. Le plafond écrit
+# ici est celui du crème, le plus bas des deux : il tombe alors juste en crème, et le
+# blanc se sous-borne — de 50 pages sur le 8,25 × 6, de 40 sur les 8,5. Sous-borner
+# refuse un livre que l'imprimeur aurait pris ; sur-promettre ferait composer un dos pour
+# un livre qu'il refusera. Le test qui porte la table publiée de KDP, dans `package.rs`,
+# garde cet arbitrage — et un format ajouté ici sans son plafond l'y fait échouer.
+#
+# Deux absences volontaires. Le **8,25 × 11 po** a son modèle Word et figure au tableau du
+# fond perdu, mais le tableau des paginations du broché ne le porte pas — il n'y est qu'en
+# relié. Sans bornes publiées, on refuse plutôt que d'inventer. Et les neuf formats de
+# kdp.amazon.co.jp ne sont pas ici : c'est un autre marketplace, où la couleur standard
+# n'existe pas et où les paginations diffèrent — un POD à lui, pas des formats de plus.
 
 [[format]]
 cle = "5x8"
@@ -38,6 +57,115 @@ marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
 gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
 source = "modèles Word officiels et tableau des minimums"
 
+[[format]]
+cle = "506x781"
+nom = "5,06 × 7,81 po"
+mm = { largeur = 128.52, hauteur = 198.37 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "525x8"
+nom = "5,25 × 8 po"
+mm = { largeur = 133.35, hauteur = 203.2 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "614x921"
+nom = "6,14 × 9,21 po"
+mm = { largeur = 155.96, hauteur = 233.93 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "669x961"
+nom = "6,69 × 9,61 po"
+mm = { largeur = 169.93, hauteur = 244.09 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "7x10"
+nom = "7 × 10 po"
+mm = { largeur = 177.8, hauteur = 254.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "744x969"
+nom = "7,44 × 9,69 po"
+mm = { largeur = 188.98, hauteur = 246.13 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "75x925"
+nom = "7,5 × 9,25 po"
+mm = { largeur = 190.5, hauteur = 234.95 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "8x10"
+nom = "8 × 10 po"
+mm = { largeur = 203.2, hauteur = 254.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+source = "modèles Word officiels et tableau des minimums"
+
+[[format]]
+cle = "825x6"
+nom = "8,25 × 6 po"
+mm = { largeur = 209.55, hauteur = 152.4 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+pages = { min = 24, max = 750 }
+source = "modèles Word officiels ; plafond du tableau des paginations"
+
+[[format]]
+cle = "825x825"
+nom = "8,25 × 8,25 po"
+mm = { largeur = 209.55, hauteur = 209.55 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+pages = { min = 24, max = 750 }
+source = "modèles Word officiels ; plafond du tableau des paginations"
+
+[[format]]
+cle = "85x85"
+nom = "8,5 × 8,5 po"
+mm = { largeur = 215.9, hauteur = 215.9 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+pages = { min = 24, max = 550 }
+source = "modèles Word officiels ; plafond du tableau des paginations"
+
+[[format]]
+cle = "85x11"
+nom = "8,5 × 11 po"
+mm = { largeur = 215.9, hauteur = 279.4 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+pages = { min = 24, max = 550 }
+source = "modèles Word officiels ; plafond du tableau des paginations"
+
+[[format]]
+cle = "827x1169"
+nom = "8,27 × 11,69 po"
+mm = { largeur = 210.06, hauteur = 296.93 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 700, mm = 19.05 }, { de = 701, a = 828, mm = 22.23 } ]
+pages = { min = 24, max = 730 }
+source = "modèles Word officiels ; plafond du tableau des paginations"
+
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
@@ -56,7 +184,13 @@ cle = "creme"
 nom = "Crème"
 teinte = "#f7f0e0"
 dos = { forme = "multiplie", par = 0.0635, plus = 0.0 }
-source = "page d'aide « Create a Paperback Cover » — 0,0025 po, 280 p → 17,78 mm"
+# Le crème plafonne sous le blanc partout : 776 pages contre 828 sur la plupart des
+# formats, et il descend avec eux sur les cinq qui plafonnent plus bas. C'est ce
+# plafond-ci qui tombe juste format par format ; celui du blanc, lui, se sous-borne là où
+# le format le resserre — la table de KDP croise le format et le papier, nos trois axes
+# les tiennent pour indépendants. On sous-borne plutôt que de sur-promettre.
+pages = { min = 24, max = 776 }
+source = "« Create a Paperback Cover » — 0,0025 po, 280 p → 17,78 mm ; plafond 776 p"
 
 [[papier]]
 cle = "blanc"

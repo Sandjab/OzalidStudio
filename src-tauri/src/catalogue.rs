@@ -1793,10 +1793,10 @@ gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
     fn les_six_fichiers_fournis_se_lisent() {
         let pods = fournis().expect("un fichier fourni est illisible");
         assert_eq!(pods.len(), 6, "six POD attendus");
-        // Seize chez Lulu, dix chez BoD, trois chez KDP, sept chez CoolLibri, neuf chez
+        // Seize chez Lulu, dix chez BoD, seize chez KDP, sept chez CoolLibri, neuf chez
         // TheBookEdition, trois chez Bookvault.
         let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
-        assert_eq!(formats, 48, "quarante-huit formats attendus");
+        assert_eq!(formats, 61, "soixante-et-un formats attendus");
     }
 
     /// Le squelette de POD que le COOKBOOK donne en exemple se lit vraiment.
@@ -2161,6 +2161,23 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
                 ("kdp-5x8-broche", "Amazon KDP — 5 × 8 po", "creme"),
                 ("kdp-55x85-broche", "Amazon KDP — 5,5 × 8,5 po", "creme"),
                 ("kdp-6x9-broche", "Amazon KDP — 6 × 9 po", "creme"),
+                ("kdp-506x781-broche", "Amazon KDP — 5,06 × 7,81 po", "creme"),
+                ("kdp-525x8-broche", "Amazon KDP — 5,25 × 8 po", "creme"),
+                ("kdp-614x921-broche", "Amazon KDP — 6,14 × 9,21 po", "creme"),
+                ("kdp-669x961-broche", "Amazon KDP — 6,69 × 9,61 po", "creme"),
+                ("kdp-7x10-broche", "Amazon KDP — 7 × 10 po", "creme"),
+                ("kdp-744x969-broche", "Amazon KDP — 7,44 × 9,69 po", "creme"),
+                ("kdp-75x925-broche", "Amazon KDP — 7,5 × 9,25 po", "creme"),
+                ("kdp-8x10-broche", "Amazon KDP — 8 × 10 po", "creme"),
+                ("kdp-825x6-broche", "Amazon KDP — 8,25 × 6 po", "creme"),
+                ("kdp-825x825-broche", "Amazon KDP — 8,25 × 8,25 po", "creme"),
+                ("kdp-85x85-broche", "Amazon KDP — 8,5 × 8,5 po", "creme"),
+                ("kdp-85x11-broche", "Amazon KDP — 8,5 × 11 po", "creme"),
+                (
+                    "kdp-827x1169-broche",
+                    "Amazon KDP — 8,27 × 11,69 po",
+                    "creme"
+                ),
                 (
                     "coollibri-110x170-broche",
                     "CoolLibri — Poche 11 × 17",

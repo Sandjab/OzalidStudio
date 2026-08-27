@@ -163,24 +163,50 @@ en commentaire du fichier. Sa **couverture rigide** y figure aussi, grisée : Bo
 
 ---
 
-## Amazon KDP — 5 × 8, 5,5 × 8,5 ou 6 × 9 pouces
+## Amazon KDP — seize formats, du 5 × 8 au 8,27 × 11,69 pouces
 
 La documentation technique la plus complète du marché : gabarits de manuscrit officiels et
 formules de dos publiées. Sa contrepartie est commerciale — **imprimer oblige à publier**,
 et l'épreuve privée sort filigranée.
 
-### Les trois formats outillés
+### Les seize formats outillés
 
-| Format | Millimètres |
-|---|---|
-| 5 × 8 po | 127 × 203,2 |
-| 5,5 × 8,5 po | 139,7 × 215,9 |
-| 6 × 9 po | 152,4 × 228,6 |
+| Format | Millimètres | Plafond propre |
+|---|---|---|
+| 5 × 8 po | 127 × 203,2 | — |
+| 5,5 × 8,5 po | 139,7 × 215,9 | — |
+| 6 × 9 po | 152,4 × 228,6 | — |
+| 5,06 × 7,81 po | 128,52 × 198,37 | — |
+| 5,25 × 8 po | 133,35 × 203,2 | — |
+| 6,14 × 9,21 po | 155,96 × 233,93 | — |
+| 6,69 × 9,61 po | 169,93 × 244,09 | — |
+| 7 × 10 po | 177,8 × 254 | — |
+| 7,44 × 9,69 po | 188,98 × 246,13 | — |
+| 7,5 × 9,25 po | 190,5 × 234,95 | — |
+| 8 × 10 po | 203,2 × 254 | — |
+| 8,25 × 6 po | 209,55 × 152,4 | 750 |
+| 8,25 × 8,25 po | 209,55 × 209,55 | 750 |
+| 8,5 × 8,5 po | 215,9 × 215,9 | 550 |
+| 8,5 × 11 po | 215,9 × 279,4 | 550 |
+| 8,27 × 11,69 po | 210,06 × 296,93 | 730 |
 
-Ce sont les noms que la cascade de la Livraison affiche sous « Amazon KDP ».
+La colonne ne porte que ce que le **format** plafonne : partout ailleurs, c'est le papier
+qui borne — 776 pages en crème, 828 en blanc. Les deux se croisent, le plus bas l'emporte.
+
+Ce sont les noms que la cascade de la Livraison affiche sous « Amazon KDP », dans cet ordre.
+Les millimètres viennent des pouces et non des centimètres arrondis que KDP affiche à côté
+d'eux : le 8,27 × 11,69 fait 210,06 × 296,93 mm, et non l'A4 rond dont il s'approche.
 
 Le 5,5 × 8,5 est à 5 mm près le « Roman » 135 × 215 de BoD : une maquette faite pour l'un se
 transpose presque telle quelle sur l'autre. Le 5 × 8 est le plus proche d'un poche français.
+Le 8,25 × 6 est le seul format à l'italienne, et les 8,25 × 8,25 et 8,5 × 8,5 les seuls
+carrés.
+
+**Deux formats que KDP publie et que l'application n'offre pas.** Le 8,25 × 11 po a son
+modèle Word et figure au tableau du fond perdu, mais le tableau des paginations du broché ne
+le porte pas — il n'y est qu'en relié, et une pagination inventée vaudrait moins qu'une
+absence. Les neuf formats de `kdp.amazon.co.jp` relèvent d'un autre marketplace, où la
+couleur standard n'existe pas et où les paginations diffèrent.
 
 ### Téléverser
 
@@ -200,7 +226,7 @@ transpose presque telle quelle sur l'autre. Le 5 × 8 est le plus proche d'un po
 | Dos, blanc | pages × 0,0572 mm (0,002252 po) | idem — 280 p. → 16,02 mm |
 | Gouttière | 19,05 mm jusqu'à 700 p., puis 22,23 mm | modèles Word officiels et tableau des minimums |
 | Marges haut / bas / extérieur | 12,7 mm | modèles Word officiels |
-| Pagination | 24 à 828 pages | options d'impression |
+| Pagination | 24 à 828 pages en blanc, **776 en crème** — et moins sur cinq formats, jusqu'à 550 | tableau des paginations du broché |
 | Texte sur le dos | à partir de 80 pages | page d'aide couverture |
 
 Le dos KDP est un simple produit, **sans le terme additif** de Lulu et de BoD : l'épaisseur
@@ -214,10 +240,12 @@ sur les plats.
   Passer de crème à blanc impose un nouveau livre, et une couverture au dos refait.
 - **En deçà de 80 pages, KDP n'imprime pas le texte du dos.** L'application l'affiche quand
   même : la planche est juste, l'imprimeur ignorera simplement ce qui s'y trouve.
-- **La justification est longue sur les grands formats.** Les modèles gardent 12,7 mm de
-  marge extérieure quel que soit le format : en 6 × 9, la colonne fait 120,6 mm, soit
-  environ 90 signes par ligne au corps 9,5 pt de la composition, contre 53 en poche Lulu.
-  Élargir les marges ou grossir le corps se décide sur épreuve.
+- **La justification est longue sur les grands formats, et le piège grandit avec eux.** Les
+  modèles gardent 12,7 mm de marge extérieure et 19,05 mm de gouttière quel que soit le
+  format : en 6 × 9, la colonne fait 120,6 mm, soit environ 90 signes par ligne au corps
+  9,5 pt de la composition, contre 53 en poche Lulu. En 8,5 × 11 elle atteint 184,2 mm,
+  près de 140 signes — deux fois et demie le poche. Élargir les marges ou grossir le corps
+  se décide sur épreuve, et sur les grands formats cela ne se discute guère.
 - **La marge extérieure est parmi les plus étroites du catalogue** — 12,7 mm, contre 13 chez
   Lulu, 15 à 22,3 chez BoD selon le format et 20 chez CoolLibri. Seul TheBookEdition
   descend plus bas, à 12,5. L'aperçu en ligne signale toute composition qui déborde de la

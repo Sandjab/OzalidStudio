@@ -783,6 +783,95 @@ mod tests {
         );
     }
 
+    /// Le catalogue ne promet jamais plus de pages que KDP n'en imprime.
+    ///
+    /// KDP publie son plafond par **couple** format × papier ; le catalogue, lui, croise
+    /// trois axes qu'il tient pour indépendants — la reliure, le format, le papier. Les
+    /// deux ne se recouvrent pas : le crème plafonne 52 pages sous le blanc sur la
+    /// plupart des formats, mais 40 sous lui seulement en 8,5 × 8,5, et aucun jeu de
+    /// bornes séparées ne reproduit la table publiée exactement. L'arbitrage est de ne
+    /// jamais sur-promettre — le crème tombe juste sur les seize formats, et c'est le
+    /// blanc qui se sous-borne, sur les cinq dont le plafond descend.
+    ///
+    /// Ce que ce contrôle protège : sans lui, l'application compose une couverture et son
+    /// dos pour un livre que l'imprimeur refusera à la commande. L'erreur ne se voit sur
+    /// aucun aperçu — le dos est juste, l'intérieur est juste, seul le bon de commande
+    /// dira non.
+    ///
+    /// La table est indexée sur les formats **du pod** : un format ajouté sans son
+    /// plafond publié fait échouer ce test au lieu de passer inaperçu.
+    #[test]
+    fn aucun_livrable_kdp_ne_promet_plus_de_pages_que_kdp_n_en_imprime() {
+        // (format, plafond en blanc, plafond en crème) — page « Set Trim Size, Bleed, and
+        // Margins », tableau des paginations du broché de kdp.amazon.com.
+        const PUBLIE: [(&str, u32, u32); 16] = [
+            ("5x8", 828, 776),
+            ("506x781", 828, 776),
+            ("525x8", 828, 776),
+            ("55x85", 828, 776),
+            ("6x9", 828, 776),
+            ("614x921", 828, 776),
+            ("669x961", 828, 776),
+            ("7x10", 828, 776),
+            ("744x969", 828, 776),
+            ("75x925", 828, 776),
+            ("8x10", 828, 776),
+            ("825x6", 800, 750),
+            ("825x825", 800, 750),
+            ("85x85", 590, 550),
+            ("85x11", 590, 550),
+            ("827x1169", 780, 730),
+        ];
+
+        let kdp = crate::catalogue::pod("kdp").expect("le catalogue fournit KDP");
+        for f in &kdp.formats {
+            let (_, blanc, creme) = PUBLIE
+                .iter()
+                .find(|(cle, ..)| *cle == f.cle)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "kdp / {} : format absent de la table publiée de ce test — \
+                         y porter son plafond relevé chez KDP avant de l'ajouter au pod.",
+                        f.cle
+                    )
+                });
+
+            for (papier, publie) in [("blanc", blanc), ("creme", creme)] {
+                let fab = crate::catalogue::Fabrication {
+                    pod: "kdp".into(),
+                    format: f.cle.clone(),
+                    reliure: "broche".into(),
+                    papier: papier.into(),
+                };
+                let r = crate::catalogue::resout(&fab).expect("livrable KDP résolu");
+                let pr = r.provider();
+
+                assert!(
+                    verifie_pagination(&fab.cle(), publie + 2, &pr, r.papier).is_err(),
+                    "{} / {papier} : {} pages passent, alors que KDP n'en imprime que {publie}",
+                    f.cle,
+                    publie + 2
+                );
+            }
+
+            // Sans quoi un catalogue qui refuserait tout passerait ce test au vert. C'est
+            // le crème que la politique promet exact : lui seul est ancré par le bas.
+            let fab = crate::catalogue::Fabrication {
+                pod: "kdp".into(),
+                format: f.cle.clone(),
+                reliure: "broche".into(),
+                papier: "creme".into(),
+            };
+            let r = crate::catalogue::resout(&fab).expect("livrable KDP résolu");
+            let pr = r.provider();
+            assert!(
+                verifie_pagination(&fab.cle(), *creme, &pr, r.papier).is_ok(),
+                "{} / crème : {creme} pages refusées, alors que KDP les imprime",
+                f.cle
+            );
+        }
+    }
+
     /// Le `Livre` du témoin, réduit à ce qu'`assembler` et `composer_interieur` lisent.
     fn livre_d_essai() -> crate::projet::Livre {
         crate::projet::Livre {

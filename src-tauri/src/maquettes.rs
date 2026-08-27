@@ -948,6 +948,13 @@ mod tests {
     /// (réduire un écart, raccourcir le genre, borner leurs tailles l'un par l'autre),
     /// ce qui déborde d'un lot de catalogue. Ce test ne le vérifie donc pas : il ne
     /// connaît que le cadre, pas la position du pied.
+    ///
+    /// **Le même recouvrement s'étend au KDP 8,25 × 6 po** (209,55 × 152,4 mm), entré au
+    /// catalogue le 27/08/2026 : les 2,4 mm de hauteur qu'il a de plus que le 21 × 15 n'y
+    /// suffisent pas, et « conte philosophique » y couvre « Monogramme » de la même
+    /// façon — vu sur une couverture composée, pas déduit. Ce n'est pas une dette de
+    /// plus, c'est la même sur un format de plus : la lever une fois les lèvera tous les
+    /// deux.
     #[test]
     fn le_pied_et_le_bloc_titre_ne_traversent_jamais_le_cadre() {
         // Les trois fournies, pas seulement Filets : Bandeau partage le même cadre à
