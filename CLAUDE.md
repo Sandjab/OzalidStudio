@@ -1,6 +1,6 @@
 # Ozalid Studio — instructions
 
-Chaîne d'auto-édition, du manuscrit aux packages prestataires : intérieur composé,
+Chaîne d'auto-édition, du manuscrit aux packages pour l'imprimeur : intérieur composé,
 couverture, planche, dos qui découle de la pagination sans jamais être ressaisi.
 Tauri 2 + Rust, front vanilla sans bundler, Typst en sidecar. L'architecture, la
 mise en route et le plan du `.ozalid` sont dans `README.md` ; les specs et plans
