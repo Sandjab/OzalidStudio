@@ -45,3 +45,13 @@ anglais conservés tels quels (`fond perdu` reste `fond perdu`, mais `viewport`,
   la signature exacte d'une pagination qui aurait bougé. Devant un tel écart, relancer
   d'abord après un `touch` des deux répertoires et de `src-tauri/src/lib.rs`, avant de
   conclure à une régression du témoin.
+- **Les icônes sont le cas le plus retors des trois**, parce qu'aucune date ne peut le
+  sauver : `tauri-build` déclare ses `rerun-if-changed` sur `tauri.conf.json`, sur
+  `capabilities`, sur le sidecar et sur les 34 polices de `fonts/` — **jamais sur
+  `icons/`**. Toucher une icône ne donne donc à cargo aucune raison de régénérer le
+  contexte, et le binaire garde celle de sa dernière compilation aussi longtemps que rien
+  d'autre ne bouge. Le symptôme trompe : l'installeur montre la bonne icône, puisqu'il est
+  reconstruit, et `cargo tauri dev` l'ancienne — de quoi accuser le bundle macOS ou le
+  cache du Dock. La parade est `touch src-tauri/tauri.conf.json` avant `cargo build`, et la
+  preuve tient en une ligne — chercher les octets du PNG dans le binaire :
+  `python3 -c "print(open('icons/32x32.png','rb').read() in open('target/debug/ozalid-studio','rb').read())"`.
