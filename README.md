@@ -364,10 +364,25 @@ vérification qu'aucun test automatique ne peut faire :
 Les tests de l'interface exécutent le vrai `src/app.js` dans un faux DOM. Ils couvrent le
 câblage, jamais le rendu : tout ce qui se voit se vérifie dans l'application.
 
+### L'icône
+
+`src-tauri/icons/source-1024.png` est la source, en 1024 px. Les dix-sept autres fichiers
+du répertoire en dérivent :
+
+```
+cd src-tauri && cargo tauri icon icons/source-1024.png
+```
+
+La commande écrit aussi `icons/android/` et `icons/ios/`, que le `.gitignore` écarte : ce
+projet ne cible ni l'un ni l'autre. Elle ramène par ailleurs `icon.png` à 512 px — c'est
+son comportement, et c'est pourquoi la source est gardée à côté.
+
+Le contrôle qui compte sur une icône est sa **réduction** : à 32 px, tout doit encore se
+distinguer, et à 16 px la silhouette seule doit suffire.
+
 ### Limites connues
 
 - Sous macOS, le « Quitter » du menu contextuel du Dock et l'extinction de session ne
   passent pas par la garde qui protège le travail non enregistré. Les couvrir demande une
   API que Tauri n'expose pas.
 - L'installeur Windows n'est pas signé : SmartScreen avertit au premier lancement.
-- L'icône de l'application est provisoire.
