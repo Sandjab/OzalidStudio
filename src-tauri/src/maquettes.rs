@@ -927,12 +927,14 @@ mod tests {
         // filets, avec un pied à 11 % — sous le seuil que ce test vient de juger
         // insuffisant. Son pied est inactif aujourd'hui, d'où le passage plus bas ; le
         // jour où quelqu'un l'allume, c'est cette boucle qui doit le rattraper.
+        let mut exercees = 0;
         for cle in ["bandeau", "filets", "surimpression"] {
             let cv = fournie(cle);
             let c = &cv.cadre;
             if !c.actif || !cv.pied.actif {
                 continue;
             }
+            exercees += 1;
             for pr in crate::catalogue::providers() {
                 let (fw, fh) = pr.format;
                 // Bord intérieur du filet le plus bas, mesuré depuis le bas de la
@@ -952,6 +954,13 @@ mod tests {
                 );
             }
         }
+        // Sans quoi une future maquette qui désactiverait cadre ou pied sur les trois
+        // fournies — Filets comprise — ferait sauter toute la boucle, et ce test
+        // passerait au vert sans plus rien vérifier.
+        assert!(
+            exercees > 0,
+            "aucune archive fournie n'a cadre et pied actifs : ce test ne protège plus rien"
+        );
     }
 
     /// Le voile n'a de sens que sur une image : l'allumer sans image assombrirait

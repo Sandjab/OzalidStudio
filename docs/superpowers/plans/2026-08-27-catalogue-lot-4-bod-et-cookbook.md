@@ -568,7 +568,7 @@ source = "calculateur, 0,0126 cm/feuille — 24 p → 1,512 mm, 500 p → 31,5 m
 
 # Le seul papier qui plafonne plus bas que sa reliure : 868 pages contre 900. La valeur
 # vient d'une clé de configuration du calculateur (`[PhotoBrilliant]: 868`, relevé du lot 4,
-# § 8), sans raison publiée par BoD. Ce n'est pas une question d'épaisseur : à 0,0101
+# § 8), sans raison donnée avec la valeur. Ce n'est pas une question d'épaisseur : à 0,0101
 # cm/feuille, c'est au contraire le plus mince des quatre papiers de la table.
 [[papier]]
 cle = "photo-brillant-130"
