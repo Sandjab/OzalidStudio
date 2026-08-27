@@ -1228,10 +1228,28 @@ dix formats** pour regarder les images. Aucune n'était visible depuis une tâch
    reliure × papier : une finition disparue du catalogue survit en silence à l'ouverture,
    alors que `reglage_refuse` interdit de la **poser**. Contrôle à l'écriture, aucun à la
    lecture — l'asymétrie exacte que la tâche 5 est allée corriger sur les quatre autres axes.
+
+   **Réglée le 27/08/2026.** `normalise` retire la finition que le POD ne publie plus,
+   comme le papier se replie : le livrable reste, sans elle. Le retrait ne figure pas
+   dans la liste des élagués — celle-ci parle de livrables retirés, et une finition
+   partie se voit sur sa ligne, qui retombe sur « — ». Sans lui, le même livrable se
+   lisait de trois façons : sa clé dans le `.ozalid`, « — » sur sa ligne, et la clé brute
+   au compte rendu depuis que la dette 5 est close. Vérifié à l'écran sur un `.ozalid`
+   portant une finition inventée : elle ne survit pas à l'ouverture, et le fichier
+   réenregistré ne la porte plus.
 7. **Le témoin ne couvre qu'un axe** : 1 format sur 10, 1 papier sur 4, aucune finition, et
    il ne voit pas la maquette — il n'assertit que la pagination. Aucune composition Typst
    n'exerce les neuf formats ajoutés ; la revue finale les a composés à la main, ils passent.
    Un second témoin sur un format extrême coûterait une composition de plus en CI.
+
+   **Réglée le 27/08/2026.** Le témoin compose désormais deux fabrications : celle
+   d'origine, et `bod-120x190-broche-photo-brillant-130` — le plus petit format sur le
+   papier le plus épais, l'autre bout de la table, où la pagination monte et où la
+   gouttière change de tranche (18,0 mm contre 20,0). Pagination relevée : **118 pages**,
+   dos 6,56 mm. Les deux sont vérifiées jusqu'au bout à chaque passage : deux écarts d'un
+   coup disent « la version de Typst a bougé » là où un seul dit « ce gabarit-là ». La CI
+   ne change pas, la boucle est interne à l'exemple. Restent hors du témoin, et assumés :
+   la finition, qui ne compose rien, et la maquette, dont aucune assertion ne sort.
 8. **La justification à 9,5 pt sur les grands formats de BoD.** Le COOKBOOK avertit que la
    colonne du KDP 6 × 9 fait 120,6 mm, « environ 90 signes ». Les formats neufs vont à
    173 mm en 21 × 15 (~130 signes). Le piège documenté est deux fois plus sévère chez BoD

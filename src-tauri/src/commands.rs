@@ -1425,6 +1425,16 @@ fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<Str
     )
 }
 
+/// Ce que rend la génération : les packages, et le projet tel qu'elle l'a laissé.
+///
+/// La vue voyage avec, comme celle de `composer` : générer **compose**, et une commande
+/// qui écrit dans le projet en rend la vue — c'est la règle de toutes les autres.
+#[derive(Serialize)]
+pub struct Generation {
+    pub projet: ProjetVue,
+    pub packages: Vec<Resultat>,
+}
+
 /// Génère le package de chaque livrable du livre, chacun dans son répertoire.
 ///
 /// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun
@@ -1432,9 +1442,9 @@ fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<Str
 /// la promesse de l'étape Livraison, et la liste vient du projet — plus de cases à
 /// cocher qui désigneraient les livrables une seconde fois.
 #[tauri::command]
-pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
-    let garde = atelier.ouvert.lock().unwrap();
-    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
     let livrables = o.projet.meta.livraison.livrables.clone();
     if livrables.is_empty() {
         return Err("aucun livrable : en déclarer un.".into());
@@ -1489,7 +1499,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
     // ne voyage pas dans la `Cible` — elle ne fabrique rien, aucun octet du PDF ni aucun
     // nom de fichier n'en dépend. Elle se commande, et le récapitulatif est le seul
     // endroit où elle peut être lue.
-    let sorties = etapes
+    let sorties: Vec<Resultat> = etapes
         .into_iter()
         .zip(&livrables)
         .map(|(etape, d)| match etape {
@@ -1519,7 +1529,37 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
             }
         })
         .collect();
-    Ok(sorties)
+
+    // Ce que la génération vient de mesurer entre dans le projet, gabarit par gabarit,
+    // exactement comme la mesure de `composer` : c'est le même livre, composé par le
+    // même Typst, sous la même clé de rangement. Sans cela le pied restait sur « dos non
+    // composé » pendant que le compte rendu, deux centimètres plus haut, donnait le dos
+    // — deux mesures du même livre, une seule affichée, et c'était celle qui manquait.
+    //
+    // Le consentement ne s'y oppose pas : il gouverne le déclenchement d'une composition
+    // que personne n'a demandée, pas le droit de retenir celle qu'un clic vient de
+    // réclamer. `retenir_mesure` ignore de lui-même un gabarit que plus aucun livrable
+    // ne porte.
+    for (d, r) in livrables.iter().zip(&sorties) {
+        let (Some(p), Ok(resolu)) = (&r.package, catalogue::resout(&d.fabrication)) else {
+            continue;
+        };
+        o.projet.meta.livraison.retenir_mesure(
+            &d.fabrication.cle_gabarit(),
+            Mesure {
+                pages: p.pages,
+                gouttiere: p.gouttiere,
+                blanche: p.blanche,
+                empreinte: Some(resolu.empreinte()),
+                polices_introuvables: p.polices_introuvables.clone(),
+            },
+        );
+    }
+
+    Ok(Generation {
+        projet: vue_modifiee(o)?,
+        packages: sorties,
+    })
 }
 
 /// Génère les ebooks locaux dans `<projet>/ebook/`.

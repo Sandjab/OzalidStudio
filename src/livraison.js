@@ -397,7 +397,12 @@ async function packager() {
   $('etatPackages').className = 'etat';
   $('etatPackages').textContent = `composition de ${combien} package(s)…`;
   try {
-    afficherPackages(await invoke('packager'));
+    // Générer compose : le projet revient mesuré, et le pied le relit là où il est
+    // enregistré — sans quoi il dirait « dos non composé » sous un compte rendu qui
+    // vient de donner le dos.
+    const r = await invoke('packager');
+    afficherProjet(r.projet);
+    afficherPackages(r.packages);
     $('etatPackages').textContent = '';
   } catch (e) {
     $('etatPackages').textContent = String(e);

@@ -205,6 +205,30 @@ async function ouvre(
         : d
     )),
   });
+  // La même règle pour la génération, depuis qu'elle écrit ce qu'elle mesure : chaque
+  // package composé renseigne son gabarit, et c'est ce qui met le pied d'accord avec le
+  // compte rendu qu'on vient de lire.
+  const retenirPackages = (resultats) => {
+    for (const r of resultats) {
+      const cible = r.package && projet.livraison.livrables.find((d) => d.cle === r.cle);
+      if (!cible) continue;
+      maj({
+        deja_compose: true,
+        livrables: projet.livraison.livrables.map((d) => (d.gabarit === cible.gabarit
+          ? {
+            ...d,
+            compose: {
+              pages: r.package.pages,
+              gouttiere: r.package.gouttiere,
+              blanche: r.package.blanche,
+              dos: r.package.dos,
+            },
+          }
+          : d)),
+      });
+    }
+    return projet;
+  };
   const invoke = async (cmd, args) => {
     appels.push([cmd, args]);
     if (cmd in sur) {
@@ -212,7 +236,10 @@ async function ouvre(
       const r = typeof v === 'function' ? await v(args) : v;
       // Une composition surchargée par un test reste soumise aux règles : c'est le
       // projet qui porte la mesure, et le front la relit là.
-      return cmd === 'composer' ? { ...r, projet: retenir(r) } : r;
+      if (cmd === 'composer') return { ...r, projet: retenir(r) };
+      // Le mock décrit les packages ; l'enveloppe est la règle du Rust, pas la sienne.
+      if (cmd === 'packager') return { packages: r, projet: retenirPackages(r) };
+      return r;
     }
     if (cmd === 'providers_liste') return providers;
     if (cmd === 'pods_liste') return pods;
@@ -1145,6 +1172,40 @@ test('un premier échec n\'empêche pas la reprise quand on corrige la cause', a
 
   assert.strictEqual(combien(appels, 'composer'), 2,
     'la correction n\'a rien relancé : le livre est dans une impasse');
+});
+
+/**
+ * Générer les packages compose pour de vrai : chaque livrable y mesure son intérieur, et
+ * le compte rendu donne le dos qui en découle. Le pied lisait pourtant « dos non
+ * composé » juste en dessous, parce que seule une composition partie du geste qui
+ * consent écrivait la mesure dans le projet. Deux mesures du même livre coexistaient,
+ * une seule s'affichait, et c'était la mauvaise : celle qui manquait.
+ *
+ * Le consentement n'y change rien, et c'est ce qui tranche : il gouverne le
+ * déclenchement d'une composition que personne n'a demandée, pas le droit de retenir le
+ * résultat d'une composition qu'on vient de réclamer d'un clic.
+ */
+test('générer les packages met le pied d\'accord avec ce qu\'il vient de mesurer', async () => {
+  const { els } = await ouvre([LULU], {
+    packager: () => [{
+      cle: 'lulu-108x175-broche-standard',
+      libelle: 'Lulu',
+      finition: null,
+      package: paquet(),
+      vignette: null,
+      erreur: null,
+    }],
+  });
+
+  assert.strictEqual(
+    els.get('piedDos').textContent, '· dos non composé',
+    'fixture : le livre ne doit pas être mesuré avant la génération',
+  );
+
+  await els.get('btPackager').declenche('click');
+
+  assert.strictEqual(els.get('piedDos').textContent, '· dos 16,5 mm');
+  assert.match(els.get('piedMesure').textContent, /262 pages/);
 });
 
 /**

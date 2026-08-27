@@ -420,8 +420,9 @@ impl Livraison {
     /// donc jusqu'à l'écran, qui la montre comme il montre les fichiers de catalogue
     /// refusés.
     ///
-    /// Deux choses n'y figurent pas, et ce n'est pas un oubli. Le repli de papier n'est
-    /// pas un élagage : le livrable reste, sous un autre papier. Le doublon non plus :
+    /// Trois choses n'y figurent pas, et ce n'est pas un oubli. Le repli de papier n'est
+    /// pas un élagage : le livrable reste, sous un autre papier. La finition retirée non
+    /// plus, pour la même raison, et parce que sa ligne le montre. Le doublon non plus :
     /// c'est le même livrable, il est toujours dans la liste.
     fn normalise(&mut self) -> Vec<String> {
         let mut vus = std::collections::BTreeSet::new();
@@ -454,6 +455,22 @@ impl Livraison {
                     rebaptise = Some(l.cle());
                 }
                 // La mesure du gabarit survit : le papier ne pagine pas.
+            }
+            // La finition, elle, n'est pas un axe de fabrication : `resout` ne la voit
+            // pas, et elle était donc refusée à la pose sans jamais être contrôlée à la
+            // lecture. Elle se retire comme le papier se replie — le livrable reste,
+            // sans elle : ce n'est pas un livrable perdu, c'est un réglage qui ne
+            // désigne plus rien, et sa ligne le montre déjà en retombant sur « — ».
+            // Sans ce retrait, le `.ozalid` porterait « relief » pendant que sa ligne
+            // montre « — » et que le compte rendu du package nomme la clé brute : trois
+            // lectures du même livrable, deux fausses, et c'est la commande passée chez
+            // l'imprimeur qui tranchait.
+            if let Some(f) = &l.finition {
+                if !crate::catalogue::pod(&l.fabrication.pod)
+                    .is_some_and(|p| p.finitions.iter().any(|x| &x.cle == f))
+                {
+                    l.finition = None;
+                }
             }
             vus.insert(l.cle())
         });
@@ -2031,6 +2048,57 @@ blanche = true
         assert_eq!(
             l.courant, "lulu-108x175-broche-standard",
             "le pointeur désigne un absent"
+        );
+    }
+
+    /// La finition n'est pas un axe de fabrication : `resout` ne la voit pas, et rien ne
+    /// la contrôlait à la lecture — refusée à la pose par `reglage_refuse`, admise à
+    /// l'ouverture. Une finition que le catalogue ne porte plus survivait donc en
+    /// silence, et le même livrable se lisait alors de trois façons : « relief » dans le
+    /// `.ozalid`, « — » sur sa ligne faute d'option à sélectionner, et la clé brute au
+    /// compte rendu du package. Deux de ces trois lectures étaient fausses, et c'est la
+    /// commande passée chez l'imprimeur qui en décidait.
+    ///
+    /// Elle se retire comme un papier se replie — le livrable reste, sans elle — et pour
+    /// la même raison : ce n'est pas un livrable perdu, c'est un réglage qui ne désigne
+    /// plus rien, et sa ligne le montre. Le retrait ne se dit donc pas dans la liste des
+    /// élagués, qui parle de livrables retirés.
+    ///
+    /// Le cas qui passe s'ancre sur le catalogue livré : `mat` est une finition que BoD
+    /// publie. Le jour où il la perd, ce test tombe, et il aura raison de tomber.
+    #[test]
+    fn une_finition_que_le_catalogue_ne_porte_plus_se_retire() {
+        let mut publiee = Livrable::pour(fab("bod", "135x215", "broche", "creme-90"));
+        publiee.finition = Some("mat".into());
+        let mut disparue = Livrable::pour(fab("bod", "135x215", "broche", "photo-brillant-130"));
+        disparue.finition = Some("velours".into());
+
+        let mut l = Livraison {
+            livrables: vec![publiee, disparue],
+            courant: "bod-135x215-broche-creme-90".into(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+
+        let elagues = l.normalise();
+
+        assert_eq!(
+            l.livrables.len(),
+            2,
+            "aucun livrable ne se perd pour une finition"
+        );
+        assert_eq!(
+            l.livrables[0].finition.as_deref(),
+            Some("mat"),
+            "une finition que le POD publie reste"
+        );
+        assert_eq!(
+            l.livrables[1].finition, None,
+            "une finition que le catalogue ne porte plus a survécu à l'ouverture"
+        );
+        assert!(
+            elagues.is_empty(),
+            "retirer une finition n'est pas élaguer un livrable : {elagues:?}"
         );
     }
 
