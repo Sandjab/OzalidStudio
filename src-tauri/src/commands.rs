@@ -2443,8 +2443,15 @@ mod tests {
         assert!(!refuse_doublon(std::slice::from_ref(&un), &blanc.cle()));
     }
 
-    /// Un POD qui publie une finition — aucun de ceux qui sont fournis n'en déclare, et
-    /// le cas « finition connue » n'aurait donc rien pour s'ancrer sur le catalogue réel.
+    /// Un POD qui publie une finition. Synthétique **par choix** et non par nécessité :
+    /// depuis le lot 4, BoD en déclare trois et le cas « finition connue » pourrait
+    /// s'ancrer sur le catalogue réel. Mais `reglage_refuse` est une règle d'application,
+    /// pas un fait d'imprimeur — l'ancrer sur `bod.toml` ferait tomber ce test le jour où
+    /// BoD gagne ou perd un pelliculage, pour une raison qui ne le regarde pas. Le nom
+    /// « Essai » sert d'ailleurs l'assertion : c'est lui que le refus doit nommer.
+    ///
+    /// Sans format, reliure ni papier : `Pod::verifie` le refuserait, mais `reglage_refuse`
+    /// ne lit que `nom` et `finitions`, et la fixture passe par `toml::from_str` seul.
     fn pod_a_finition() -> catalogue::Pod {
         toml::from_str(
             r#"

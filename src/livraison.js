@@ -151,8 +151,9 @@ function afficherLivrables() {
       }
 
       // La finition ne paraît que là où il y en a : un contrôle vide se lit comme un
-      // choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Aucun POD
-      // fourni n'en déclare aujourd'hui ; c'est le lot 4 du chantier qui les relèvera.
+      // choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Le contrôle
+      // s'allume donc chez BoD, seul POD fourni à en déclarer — trois pelliculages —, et
+      // reste absent chez les cinq autres.
       if (pod.finitions.length) {
         const finition = h('select');
         finition.id = `liv-finition-${d.cle}`;

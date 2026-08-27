@@ -247,9 +247,8 @@ fn fini_non_negatif(v: f64) -> bool {
     v.is_finite() && v >= 0.0
 }
 
-/// Une clé du catalogue — POD, format, reliure, finition ou papier, la clé héritée
-/// comprise — nomme un répertoire de package ou un identifiant : elle doit être un nom de
-/// fichier et rien d'autre. Une clé vide ne se choisit pas dans l'interface et ne se
+/// Une clé du catalogue — POD, format, reliure, finition ou papier — nomme un répertoire
+/// de package ou un identifiant : elle doit être un nom de fichier et rien d'autre. Une clé vide ne se choisit pas dans l'interface et ne se
 /// retrouve pas dans un `.ozalid` : elle ne désigne rien, et n'est donc pas davantage un
 /// nom. `../../ailleurs` ou `C:nul*` s'écrivent sans peine dans un TOML, et `package` en
 /// ferait un chemin.
@@ -993,8 +992,13 @@ fn repertoire(config: &Path) -> PathBuf {
 ///
 /// Deux fichiers du poste pour un même POD ne sont pas une faute — c'est le même
 /// imprimeur — mais le dernier par nom de fichier l'emporte, et il vaut mieux le savoir
-/// que le découvrir. Un fichier dont une clé héritée est déjà portée par un autre POD est
-/// en revanche refusé : c'est elle qui nomme le POD dans le projet enregistré.
+/// que le découvrir.
+///
+/// Aucun contrôle de collision entre POD n'est nécessaire ici : la clé qu'un projet
+/// enregistre est celle de la `Fabrication`, qui commence par la clé du POD, et deux POD
+/// de même clé ne coexistent pas — le second remplace le premier. Un contrôle a existé,
+/// du temps où chaque format portait une `cle_heritee` que deux fichiers pouvaient se
+/// disputer ; il est parti avec le champ, et non avant lui.
 ///
 /// Rend aussi ce qui a été refusé, pour que l'interface puisse le dire. Un journal que
 /// personne n'ouvre laisserait l'utilisateur devant un catalogue amputé.
