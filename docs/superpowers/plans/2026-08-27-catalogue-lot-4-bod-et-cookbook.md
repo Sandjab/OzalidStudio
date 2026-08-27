@@ -410,9 +410,11 @@ Contenu complet. Les valeurs viennent de la reconnaissance, §§ 6 à 8 — ne r
 # référencer le titre. C'est ce qui en fait le défaut du comparatif POD du 19/08/2026.
 #
 # Formats et marges relevés dans les modèles Word « Roman A » du 11/12/2024, épaisseurs et
-# bornes au calculateur de couverture officiel, le 26/08/2026. Les quatre modèles de BoD
-# ne s'accordent pas partout — Roman A fait foi, c'est celui dont le format historique est
-# tiré. Le détail des divergences est dans la reconnaissance du lot 4, verdict 3.
+# bornes au calculateur de couverture officiel
+# (https://www.bod.fr/aide/calcul-de-la-couverture.html), le 26/08/2026. Les quatre modèles
+# de BoD ne s'accordent pas partout — Roman A fait foi, c'est celui dont le format
+# historique est tiré. Le détail des divergences est dans la reconnaissance du lot 4,
+# verdict 3.
 
 cle = "bod"
 nom = "BoD"
@@ -432,7 +434,7 @@ marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 # BoD ne module pas la marge de reliure selon l'épaisseur — tranche unique, couvrant les
 # 24 à 900 pages que sa couverture souple admet.
 gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
-source = "modèle Word « Roman » 13,5 × 21,5"
+source = "modèle Word « Roman A » 13,5 × 21,5"
 
 [[format]]
 cle = "120x190"
