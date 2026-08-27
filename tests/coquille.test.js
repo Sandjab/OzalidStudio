@@ -1159,8 +1159,8 @@ test('les livrables retirés à l\'ouverture sont nommés à l\'écran', async (
   assert.match(dit, /rajouter/, `la conséquence manque : ${dit}`);
 });
 
-/** Deux élagués : la phrase s'accorde, et rien d'autre ne le vérifie. */
-test('la phrase des élagués s\'accorde au pluriel', async () => {
+/** Deux élagués : la phrase et le témoin s'accordent, et rien d'autre ne le vérifie. */
+test('la phrase et le sous-libellé des élagués s\'accordent au pluriel', async () => {
   const a = atelier({
     sur: { elagues: ['bod-135x215-broche-papier-parti', 'kdp-6x9-rigide-creme'] },
   });
@@ -1172,6 +1172,7 @@ test('la phrase des élagués s\'accorde au pluriel', async () => {
   assert.match(dit, /Livrables retirés/, `accord au pluriel : ${dit}`);
   assert.match(dit, /qui les porte/, `accord au pluriel : ${dit}`);
   assert.match(dit, /les rajouter/, `accord au pluriel : ${dit}`);
+  assert.equal(sous(els, 'livraison'), '2 livrables retirés');
 });
 
 /**
@@ -1206,6 +1207,10 @@ test('un livrable élagué allume l\'onglet Livraison depuis le Livre', async ()
   // n'aurait plus rien à apprendre à personne.
   assert.deepEqual(montree(els), ['livre']);
   assert.equal(alerte(els, 'livraison'), true);
+  // Le point dit où aller, jamais quoi : les deux autres onglets qui s'allument pairent
+  // toujours le témoin avec un mot, et la Livraison serait la seule à montrer un point
+  // nu. Le compte est la chose vraie qu'elle a à dire.
+  assert.equal(sous(els, 'livraison'), '1 livrable retiré');
 });
 
 /**

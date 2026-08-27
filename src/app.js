@@ -251,6 +251,7 @@ function dosPerime(p) {
 function etatEtapes(p) {
   const attendu = p.livre.chapitres;
   const ecart = attendu !== null && attendu !== undefined && attendu !== p.chapitres_trouves;
+  const elagues = (p.elagues ?? []).length;
   return {
     livre: {
       sous: ecart
@@ -263,11 +264,20 @@ function etatEtapes(p) {
       alerte: !p.couverture,
     },
     // Rien de vrai à dire avant qu'un package n'ait été généré, et le pied porte déjà
-    // le dos : mieux vaut se taire que meubler. Le témoin, lui, a une chose vraie à
-    // dire — et une seule : l'ouverture a retiré un livrable. La boîte qui le nomme vit
-    // dans la Livraison, l'application ouvre sur le Livre, et personne ne va vérifier
-    // une liste qu'il ne sait pas amputée. Le témoin est le seul signe qui y mène.
-    livraison: { sous: '', alerte: (p.elagues ?? []).length > 0 },
+    // le dos : mieux vaut se taire que meubler. Reste une chose vraie, et une seule :
+    // l'ouverture a retiré un livrable. La boîte qui le nomme vit dans la Livraison,
+    // l'application ouvre sur le Livre, et personne ne va vérifier une liste qu'il ne
+    // sait pas amputée — le témoin est le seul signe qui y mène.
+    //
+    // Le compte avec lui, jamais le point seul : les deux autres onglets qui s'allument
+    // pairent toujours le témoin avec un mot — « 12 chapitres, 14 attendus », « aucune
+    // maquette » —, et un point nu dirait où aller sans dire quoi. Rien à élaguer, rien
+    // à dire : la chaîne vide reprend la main, et l'objection d'origine tient toujours.
+    livraison: {
+      sous: elagues ? `${elagues} livrable${elagues > 1 ? 's' : ''} `
+        + `retiré${elagues > 1 ? 's' : ''}` : '',
+      alerte: elagues > 0,
+    },
     // Le compte des envois est la seule chose vraie que le projet porte ici ; zéro
     // n'est pas une anomalie, donc pas un mot et jamais de témoin.
     envois: {
