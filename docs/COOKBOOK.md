@@ -121,10 +121,9 @@ en commentaire du fichier. Sa **couverture rigide** y figure aussi, grisée : Bo
 
 ### Pièges
 
-- **Le dos dépend du papier**, et de lui seul : d'un papier à l'autre, le même livre de
-  280 pages donne 19,5 mm en crème 90 g, 17,4 en blanc 90 g, 18,24 en photo mat 120 g,
-  14,74 en photo brillant 130 g. Changer de papier à la commande sans refaire la couverture
-  donne un dos faux.
+- **Le dos dépend du papier**, et l'écart entre les quatre est large — du simple au tiers
+  en plus, à pagination égale. Changer de papier à la commande sans refaire la couverture
+  donne un dos faux. Les quatre formules sont en table, chacune avec sa source.
 - **Le pelliculage ne change rien à la composition** : ni géométrie, ni dos, ni marge. Les
   trois finitions sont au catalogue pour que le livrable en garde la trace — c'est une
   donnée de commande, à reporter sur le site, et deux livrables qui n'en différeraient que
@@ -195,8 +194,10 @@ sur les plats.
   marge extérieure quel que soit le format : en 6 × 9, la colonne fait 120,6 mm, soit
   environ 90 signes par ligne au corps 9,5 pt de la composition, contre 53 en poche Lulu.
   Élargir les marges ou grossir le corps se décide sur épreuve.
-- **La marge extérieure est la plus étroite du lot** — 12,7 mm contre 13 chez Lulu et 15
-  chez BoD. L'aperçu en ligne signale toute composition qui déborde de la zone sûre.
+- **La marge extérieure est parmi les plus étroites du catalogue** — 12,7 mm, contre 13 chez
+  Lulu, 15 à 22,3 chez BoD selon le format et 20 chez CoolLibri. Seul TheBookEdition
+  descend plus bas, à 12,5. L'aperçu en ligne signale toute composition qui déborde de la
+  zone sûre.
 
 ---
 
