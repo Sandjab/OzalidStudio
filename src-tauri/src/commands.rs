@@ -2621,7 +2621,7 @@ nom = "Pelliculage mat"
             .non_outille
             .as_deref()
             .expect("une reliure non outillée dit pourquoi");
-        assert!(raison.contains("casewrap"), "{raison}");
+        assert!(raison.contains("couverture rigide"), "{raison}");
     }
 
     /// Le drapeau voyage jusqu'à l'arbre et y suit le fichier, POD par POD : KDP publie

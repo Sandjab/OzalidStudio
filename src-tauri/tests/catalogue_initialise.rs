@@ -62,8 +62,8 @@ fn le_demarrage_charge_les_fichiers_du_poste_et_refuse_un_second_chargement() {
     assert_eq!(essai.format, (100.0, 150.0));
     assert_eq!(
         catalogue::providers().len(),
-        15,
-        "quatorze fournis, plus le déposé"
+        24,
+        "vingt-trois fournis, plus le déposé"
     );
 
     // `providers()` n'est qu'une projection : la preuve que le poste a vraiment atteint

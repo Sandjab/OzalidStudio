@@ -1725,9 +1725,10 @@ gouttieres = [{{ de = 1, a = 900, mm = 10.0 }}]
     fn les_six_fichiers_fournis_se_lisent() {
         let pods = fournis().expect("un fichier fourni est illisible");
         assert_eq!(pods.len(), 6, "six POD attendus");
-        // Les quatorze formats de la table historique, tous présents.
+        // Les quatorze formats de la table historique, plus les neuf que le lot 4 ajoute
+        // à BoD, tous présents.
         let formats: usize = pods.iter().map(|p| p.formats.len()).sum();
-        assert_eq!(formats, 14, "quatorze formats attendus");
+        assert_eq!(formats, 23, "vingt-trois formats attendus");
     }
 
     /// Chaque POD outillé porte au moins un papier et une reliure composable : sans quoi il
@@ -1959,20 +1960,19 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
         assert!(provider("imprimeur-imaginaire").is_none());
     }
 
-    /// La liste que la Livraison donne à lire, telle qu'elle s'y lit : quatorze entrées,
-    /// chacune sa clé de gabarit, son libellé, son papier par défaut — le triplet du
-    /// livrable qu'on obtient en l'ajoutant depuis la liste — et leur ordre.
+    /// La liste que la Livraison donne à lire, telle qu'elle s'y lit : chaque entrée sa
+    /// clé de gabarit, son libellé, son papier par défaut — le triplet du livrable qu'on
+    /// obtient en l'ajoutant depuis la liste —, dans l'ordre des `FOURNIS`.
     ///
-    /// Converti et non retiré (décision du 26/08) : la clé change de convention à cette
-    /// tâche, le compte et l'ordre restent les mêmes tant que le lot 3 n'a pas remplacé
-    /// cette liste par la cascade. Le compte, seul, était déjà tenu ; les clés le sont
-    /// par les ancrages de dos qui les nomment. Ni l'un ni les autres ne voient un `nom`
-    /// de POD réécrit ni deux fichiers fournis permutés — les deux passaient toute la
-    /// suite. Or c'est un choix de prestataire que l'utilisateur fait dans cette liste, à
-    /// la lecture de ces libellés : l'ordre vient des `FOURNIS`, le libellé du POD et du
-    /// format, et rien d'autre ici ne le dit.
+    /// Le compte n'est pas figé ici : un POD qui publie un format de plus en ajoute une
+    /// entrée sans que ce soit une régression. Ce que ce test protège, c'est l'**ordre**
+    /// — celui des `FOURNIS`, puis celui d'écriture des formats dans chaque fichier, dont
+    /// dépend `Pod::fabrication_defaut` — et le **contenu** de chaque entrée : la clé,
+    /// le libellé du POD et du format, le papier par défaut. Ni l'un ni les autres ne
+    /// voient un `nom` de POD réécrit, un format réordonné ou deux fichiers fournis
+    /// permutés — les trois passeraient un test qui ne compterait que des entrées.
     #[test]
-    fn la_liste_des_prestataires_garde_ses_quatorze_libelles_dans_l_ordre() {
+    fn la_liste_plate_garde_ses_libelles_dans_l_ordre() {
         let vue: Vec<(&str, &str, &str)> = providers()
             .iter()
             .map(|p| {
@@ -1988,6 +1988,15 @@ dos = { forme = "multiplie", par = 0.06, plus = 0.0 }
             [
                 ("lulu-108x175-broche", "Lulu — poche 108 × 175", "standard"),
                 ("bod-135x215-broche", "BoD — 13,5 × 21,5 cm", "creme-90"),
+                ("bod-120x190-broche", "BoD — 12 × 19 cm", "creme-90"),
+                ("bod-148x210-broche", "BoD — 14,8 × 21 cm", "creme-90"),
+                ("bod-155x220-broche", "BoD — 15,5 × 22 cm", "creme-90"),
+                ("bod-170x170-broche", "BoD — 17 × 17 cm", "creme-90"),
+                ("bod-170x220-broche", "BoD — 17 × 22 cm", "creme-90"),
+                ("bod-190x270-broche", "BoD — 19 × 27 cm", "creme-90"),
+                ("bod-210x150-broche", "BoD — 21 × 15 cm", "creme-90"),
+                ("bod-210x210-broche", "BoD — 21 × 21 cm", "creme-90"),
+                ("bod-210x297-broche", "BoD — 21 × 29,7 cm", "creme-90"),
                 ("kdp-5x8-broche", "Amazon KDP — 5 × 8 po", "creme"),
                 ("kdp-55x85-broche", "Amazon KDP — 5,5 × 8,5 po", "creme"),
                 ("kdp-6x9-broche", "Amazon KDP — 6 × 9 po", "creme"),
@@ -2376,7 +2385,7 @@ non_outille = "géométrie du casewrap non relevée"
         let e = resout(&fabrication("bod", "135x215", "rigide", "creme-90")).unwrap_err();
         assert!(e.contains("rigide"), "{e}");
         assert!(
-            e.contains("non relevée"),
+            e.contains("ne sait pas composer"),
             "la raison du fichier doit traverser : {e}"
         );
     }
@@ -2415,6 +2424,72 @@ non_outille = "géométrie du casewrap non relevée"
             .provider();
         assert_eq!(p.fabrication.papier, "blanc");
         assert_eq!(p.cle, "kdp-6x9-broche");
+    }
+
+    /// Le format historique de BoD ne bouge pas d'un dixième.
+    ///
+    /// Le modèle Word « Roman A » donne 18,75 mm en marge haute ; la table porte 18,8
+    /// depuis le lot 1, arrondi assumé. Le relevé du lot 4 a confirmé la source sans
+    /// autoriser la correction : reprendre 18,75 changerait la hauteur du bloc de texte,
+    /// donc la pagination, donc le dos — et `cargo run --example temoin` cesserait de
+    /// valoir 98 pages sans que rien ne dise pourquoi.
+    #[test]
+    fn le_format_historique_de_bod_ne_bouge_pas() {
+        let bod = pod_de("bod");
+        let f = bod
+            .formats
+            .iter()
+            .find(|f| f.cle == "135x215")
+            .expect("BoD garde son format historique");
+        assert_eq!((f.mm.largeur, f.mm.hauteur), (135.0, 215.0));
+        assert_eq!(f.marges.haut, 18.8, "l'arrondi du lot 1 fait foi");
+        assert_eq!(f.marges.bas, 28.0);
+        assert_eq!(f.marges.exterieur, 15.0);
+        assert_eq!(f.gouttieres.len(), 1);
+        assert_eq!((f.gouttieres[0].de, f.gouttieres[0].a), (24, 900));
+        assert_eq!(f.gouttieres[0].mm, 20.0);
+        assert_eq!(
+            bod.formats.first().map(|f| f.cle.as_str()),
+            Some("135x215"),
+            "il reste en tête : c'est lui que la cascade propose d'office"
+        );
+    }
+
+    /// Le seul papier du catalogue livré qui plafonne plus bas que sa reliure.
+    ///
+    /// Il donne au champ `pages` du papier son unique emploi réel, et c'est ce qui rend
+    /// vérifiable, sur le catalogue fourni et non sur une fixture, que le croisement des
+    /// bornes descend jusqu'au fichier.
+    #[test]
+    fn le_photo_brillant_de_bod_plafonne_plus_bas_que_sa_reliure() {
+        let bod = pod_de("bod");
+        let broche = bod
+            .reliures
+            .iter()
+            .find(|r| r.cle == "broche")
+            .expect("BoD relie en broché");
+        let brillant = bod
+            .papiers
+            .iter()
+            .find(|p| p.cle == "photo-brillant-130")
+            .expect("BoD offre le photo brillant");
+        let pages = broche
+            .pages
+            .expect("une reliure composable porte sa pagination");
+
+        assert_eq!(pages.max, 900);
+        assert_eq!(brillant.bornes_dans(pages.min, pages.max), (24, 868));
+
+        let creme = bod
+            .papiers
+            .iter()
+            .find(|p| p.cle == "creme-90")
+            .expect("BoD offre le crème");
+        assert_eq!(
+            creme.bornes_dans(pages.min, pages.max),
+            (24, 900),
+            "un papier sans plafond ne resserre rien"
+        );
     }
 
     /// La table de migration est ancrée sur les fichiers : chaque triplet qu'elle porte se
