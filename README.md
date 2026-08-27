@@ -377,11 +377,13 @@ La commande écrit aussi `icons/android/` et `icons/ios/`, que le `.gitignore` �
 projet ne cible ni l'un ni l'autre. Elle ramène par ailleurs `icon.png` à 512 px — c'est
 son comportement, et c'est pourquoi la source est gardée à côté.
 
-**L'arrondi vit dans la source**, parce que rien ne l'applique à sa place : macOS
-n'arrondit pas les icônes, chaque application dessine la sienne. La source suit donc le
-gabarit d'Apple — une forme de 824 px centrée dans un canevas de 1024, soit 100 px de marge
-sur chaque bord, aux coins continus. Hors de cette forme, le PNG est transparent : sous
-Windows, l'icône garde ces coins arrondis, ce qui est le comportement habituel d'une
+**L'arrondi et l'ombre vivent dans la source**, parce que rien ne les applique à leur
+place : macOS n'arrondit pas les icônes et n'en ombre aucune, chaque application dessine
+la sienne. La source suit donc le gabarit d'Apple — une forme de 824 px centrée dans un
+canevas de 1024, soit 100 px de marge sur chaque bord, aux coins continus, posée sur une
+ombre douce décalée vers le bas. Cette marge de 100 px n'est pas du vide : c'est ce qui
+laisse l'ombre tenir dans le cadre. Hors de la forme, le PNG est transparent — sous
+Windows, l'icône garde donc ses coins arrondis, ce qui est le comportement habituel d'une
 application multiplateforme.
 
 Le contrôle qui compte sur une icône est sa **réduction** : à 32 px, tout doit encore se
