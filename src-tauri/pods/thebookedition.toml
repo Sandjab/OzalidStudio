@@ -1,0 +1,75 @@
+# TheBookEdition — production française, contrôle manuel des fichiers.
+#
+# Ils ne publient aucune dimension : ni format de rognage en millimètres, ni fond perdu, ni
+# formule de dos. Toutes les valeurs ci-dessous sont mesurées sur ce que leur générateur
+# rend (POST sur /fr/module/bookscover/simulationcover, relevé le 20/08/2026), et non
+# reconstituées. Leur aide fait du gabarit généré une condition de recevabilité : le
+# vérifier contre la planche avant de déposer.
+#
+# Trois des neuf formats admis en dos carré collé, ceux qui servent au roman.
+
+cle = "tbe"
+nom = "TheBookEdition"
+# Mesuré : leur générateur rend une planche haute de la hauteur du livre + 10 mm, sur les
+# cinq formats mesurés.
+fond_perdu = 5.0
+
+# Marges du guide de mise en page, page « Réussir la mise en page » : 12,5 mm sur les quatre
+# côtés pour les formats jusqu'à l'A5, plus 5 mm de reliure — d'où 17,5 mm de gouttière.
+# Aucune variation selon la pagination n'est publiée : tranche unique, bornée par les 40 à
+# 750 pages que leur dos carré collé admet.
+
+[[format]]
+cle = "110x170"
+nom = "Poche 11 × 17"
+mm = { largeur = 110.0, hauteur = 170.0 }
+marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
+gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
+source = "leur table des formats ; marges de la page « Réussir la mise en page »"
+
+[[format]]
+cle = "120x180"
+nom = "Manga 12 × 18"
+mm = { largeur = 120.0, hauteur = 180.0 }
+marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
+gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
+source = "leur table des formats ; marges de la page « Réussir la mise en page »"
+
+[[format]]
+# 148,5 et non 148 : c'est la largeur que déclare leur table des formats, et c'est elle qui
+# dimensionne le gabarit de couverture.
+cle = "1485x210"
+nom = "A5 14,8 × 21"
+mm = { largeur = 148.5, hauteur = 210.0 }
+marges = { haut = 12.5, bas = 12.5, exterieur = 12.5 }
+gouttieres = [ { de = 40, a = 750, mm = 17.5 } ]
+source = "leur table des formats — 148,5 et non 148"
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 40, max = 750 }
+parite = "paire"
+source = "leur aide : 40 à 750 pages en dos carré collé, nombre pair"
+
+# Le dos ne dépend que de la pagination : 0,060 mm par page, quel que soit le papier et
+# quel que soit le format. Ce n'est pas une simplification de notre part — c'est ce que
+# produit leur générateur de gabarit. Mesuré sur la largeur des gabarits JPEG 300 dpi qu'il
+# renvoie : 40 p → 232,41 mm, 100 p → 235,97, 280 p → 246,80, 500 p → 260,01,
+# 750 p → 275,00, soit 2 × 110 + 2 × 5 de fond perdu + pages × 0,060 au format Poche. Les
+# mêmes paginations sur le papier 120 g, et sur les formats 12x18, 14,8x21 et 21x29,7,
+# donnent le même dos à moins de 0,04 mm — l'écart résiduel est l'arrondi au pixel.
+[[papier]]
+cle = "munken-80"
+nom = "Munken 80 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.060, plus = 0.0 }
+source = "mesuré sur les gabarits JPEG 300 dpi du 20/08/2026"
+
+[[papier]]
+cle = "120"
+nom = "Papier 120 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.060, plus = 0.0 }
+source = "mesuré sur les gabarits JPEG 300 dpi du 20/08/2026 — même dos que le Munken 80 g"

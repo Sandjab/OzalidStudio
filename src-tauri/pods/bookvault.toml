@@ -1,0 +1,85 @@
+# Bookvault — finitions premium dès un exemplaire, formats libres de l'A6 au carré 297 mm.
+#
+# Leur guide PDF publie le fond perdu et la gouttière, mais pas les trois autres marges ni
+# la formule du dos, calculé par leur serveur. Les épaisseurs viennent de leur calculateur
+# public (tools.bookvault.app/sizingcalculator, relevé le 20/08/2026, reliure « Perfect
+# Bound »).
+#
+# Trois des onze formats du calculateur.
+
+cle = "bookvault"
+nom = "Bookvault"
+# Guide PDF, « Paperback Book - Cover Setup » : 3 mm sur les quatre côtés de la planche.
+fond_perdu = 3.0
+
+# Gouttière du guide « Your Guide to Supplying Print-Ready PDF Files » (help.bookvault.app),
+# page 2 : « Allow a safety margin of 20mm on the gutter ». C'est la seule marge que
+# Bookvault impose ; les trois autres restent un choix typographique, repris ci-dessous du
+# format déjà en table le plus proche. Le calculateur refuse en dessous de 24 pages
+# (« It needs to be at least 1.3mm (24 pages) ») et accepte encore 1000 pages.
+
+[[format]]
+cle = "127x203"
+nom = "Novel 127 × 203"
+mm = { largeur = 127.0, hauteur = 203.0 }
+# Format à 0,2 mm du KDP 5 × 8 déjà en table : ses marges sont reprises telles quelles,
+# faute de valeur publiée par Bookvault hors gouttière.
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 1000, mm = 20.0 } ]
+source = "calculateur pour le format ; gouttière du guide PDF p. 2 ; marges du KDP 5 × 8"
+
+[[format]]
+cle = "129x198"
+nom = "B Format 129 × 198"
+mm = { largeur = 129.0, hauteur = 198.0 }
+marges = { haut = 12.7, bas = 12.7, exterieur = 12.7 }
+gouttieres = [ { de = 24, a = 1000, mm = 20.0 } ]
+source = "calculateur pour le format ; gouttière du guide PDF p. 2 ; marges du KDP 5 × 8"
+
+[[format]]
+cle = "148x210"
+nom = "A5 148 × 210"
+mm = { largeur = 148.0, hauteur = 210.0 }
+# Format identique au CoolLibri A5 : mêmes marges que lui.
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 24, a = 1000, mm = 20.0 } ]
+source = "calculateur pour le format ; gouttière du guide PDF p. 2 ; marges du CoolLibri A5"
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 24, max = 1000 }
+# Bookvault impose une autre règle — pagination en multiple de douze moins un (11, 23, 35,
+# 47…), leur système imprimant un code-barres en dernière page — que la composition ne sait
+# pas tenir. « paire » est ce que l'application fait ; le compte généré ici ne respectera
+# pas leur règle, et la réserve est au COOKBOOK.
+parite = "paire"
+source = "calculateur : « It needs to be at least 1.3mm (24 pages) », et encore 1000 pages"
+
+# Bookvault module le dos par le papier : dos = pages × épaisseur, sans terme additif. Le
+# 70 g crème est linéaire à la décimale près sur sept paginations (40 p → 2,2 mm ;
+# 100 → 5,6 ; 200 → 11,2 ; 280 → 15,7 ; 400 → 22,4 ; 560 → 31,4 ; 800 → 44,8) ; les deux
+# autres papiers sont confirmés sur trois paginations chacun. Leur guide PDF cite 5,6 mm
+# pour 100 pages de 80 g bond là où le calculateur en rend 5,5 : le calculateur fait foi,
+# c'est lui qui produit les gabarits.
+[[papier]]
+cle = "creme-70"
+nom = "Crème 70 g"
+teinte = "#f7f0e0"
+dos = { forme = "multiplie", par = 0.056, plus = 0.0 }
+source = "calculateur, linéaire sur sept paginations — 280 p → 15,7 mm, 800 p → 44,8 mm"
+
+[[papier]]
+cle = "bond-80"
+nom = "Bond blanc 80 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.055, plus = 0.0 }
+source = "calculateur, trois paginations — 100 p → 5,5 mm et non les 5,6 du guide PDF"
+
+[[papier]]
+cle = "creme-premium-80"
+nom = "Crème premium 80 g"
+teinte = "#f7f0e0"
+dos = { forme = "multiplie", par = 0.072, plus = 0.0 }
+source = "calculateur, trois paginations — 400 p → 28,8 mm"

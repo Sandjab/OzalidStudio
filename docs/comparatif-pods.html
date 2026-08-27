@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparatif — Services d'impression à la demande (POD) pour livres</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --ink-soft:#4a4a4a; --ink-faint:#767676;
+    --rule:#d8d4cc; --rule-soft:#eae7e0; --bg:#fbfaf7; --panel:#ffffff;
+    --accent:#7a3b2e; --s:#2f6b4f; --a:#4a6b8a; --b:#8a7440; --c:#8a5050;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.62 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  }
+  .wrap{max-width:940px;margin:0 auto;padding:48px 22px 80px}
+  header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:34px}
+  h1{font-size:1.75rem;line-height:1.25;margin:0 0 14px;letter-spacing:-.01em}
+  .meta{font:13px/1.7 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink-soft)}
+  .meta b{color:var(--ink);font-weight:600}
+  h2{font-size:1.28rem;margin:52px 0 14px;padding-bottom:7px;border-bottom:1px solid var(--rule);letter-spacing:-.005em}
+  h3{font-size:1.05rem;margin:30px 0 8px}
+  h4{font:600 12px/1.5 ui-sans-serif,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint);margin:16px 0 6px}
+  p{margin:0 0 12px}
+  ul,ol{margin:0 0 12px;padding-left:20px}
+  li{margin:0 0 5px}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(122,59,46,.3)}
+  a:hover{border-bottom-color:var(--accent)}
+  code,.mono{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  .tldr{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--accent);padding:20px 22px;margin:0 0 12px;border-radius:3px}
+  .tldr p:last-child{margin-bottom:0}
+
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:20px 22px;margin:0 0 18px}
+  .card h3{margin-top:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .origin{font:13px/1.6 ui-sans-serif,system-ui,sans-serif;color:var(--ink-faint);margin:-4px 0 12px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:8px 28px}
+  @media(max-width:680px){.cols{grid-template-columns:1fr}}
+  .verdict{border-top:1px solid var(--rule-soft);margin-top:14px;padding-top:12px;font-size:.95rem}
+  .verdict span{font-weight:600}
+
+  .tier{display:inline-block;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.06em;
+        padding:4px 8px;border-radius:3px;color:#fff;vertical-align:middle}
+  .t-S{background:var(--s)} .t-A{background:var(--a)} .t-B{background:var(--b)} .t-C{background:var(--c)}
+
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 10px;border:1px solid var(--rule);border-radius:3px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;min-width:900px;font:13px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  thead th{background:#f2efe9;font-weight:600;border-bottom:1px solid var(--rule);position:sticky;top:0}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#fcfbf8}
+  td.name{font-weight:600;white-space:nowrap}
+  .yes{color:var(--s);font-weight:600}
+  .no{color:var(--c);font-weight:600}
+  .hint{font:12px/1.6 ui-sans-serif,system-ui,sans-serif;color:var(--ink-faint);margin:0 0 26px}
+
+  .tierbox{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 18px;margin:0 0 12px}
+  .tierbox h4{margin-top:0;font-size:13px;letter-spacing:.08em}
+  .tierbox ul{margin-bottom:0}
+
+  ol.tree{counter-reset:step;list-style:none;padding-left:0}
+  ol.tree li{counter-increment:step;position:relative;padding-left:38px;margin-bottom:12px}
+  ol.tree li::before{content:counter(step);position:absolute;left:0;top:1px;width:25px;height:25px;
+    border:1px solid var(--rule);border-radius:50%;background:var(--panel);
+    font:600 12px/24px ui-sans-serif,system-ui,sans-serif;text-align:center;color:var(--ink-soft)}
+
+  .gap{background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:14px 18px;margin:0 0 12px}
+  .gap p{margin:0}
+  .gap .claim{font-size:.93rem;color:var(--ink-soft);margin-bottom:6px}
+  .gap .claim b{color:var(--ink)}
+
+  .srcgrid{font:13.5px/1.7 ui-sans-serif,system-ui,sans-serif}
+  .srcgrid li{margin-bottom:7px}
+  .caveat{color:var(--ink-faint);font-size:.92em}
+
+  footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--rule);
+    font:12px/1.7 ui-sans-serif,system-ui,sans-serif;color:var(--ink-faint)}
+
+  @media print{
+    body{background:#fff;font-size:10.5pt}
+    .wrap{max-width:none;padding:0}
+    .card,.tierbox,.gap,.tldr,.scroll{break-inside:avoid;border-color:#bbb}
+    a{color:#000;border:none}
+    table{min-width:0;font-size:8pt}
+    thead th{position:static;background:#eee}
+    h2{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Comparatif — Services d'impression à la demande (POD) pour livres</h1>
+  <p class="meta">
+    <b>Périmètre</b> : plateformes POD accessibles depuis la France, commande à partir d'1 exemplaire.<br>
+    <b>Contexte retenu</b> : impression pour usage personnel ou petites quantités (1 à 10 ex.), livraison France métropolitaine. Le cas « vendre » est traité en annexe.<br>
+    <b>Critères</b> : prix unitaire, qualité de fabrication constatée, délais réels, diversité des options, minimum de commande, impression sans publication.<br>
+    <b>Généré le</b> 19 août 2026 · profondeur de recherche <span class="mono">deep</span> (20 requêtes et fetches) · 11 candidats
+  </p>
+</header>
+
+<h2>Verdict</h2>
+<div class="tldr">
+  <p>Pour imprimer chez soi sans vendre, <b>BoD</b> est le meilleur compromis : impression privée explicitement autorisée sans publication, dès 2,05 €/ex, 4 papiers, broché ou rigide, 5–10 jours. <b>CoolLibri</b> est l'alternative française si vous voulez une facture FR, du papier crème ou satiné, et un click &amp; collect.</p>
+  <p>Si la qualité de l'objet prime sur le prix, <b>TheBookEdition</b> produit le meilleur bloc-livre des trois grands testés en main : rainage marqué, couverture épaisse. Pour un livre photo ou illustré, aucun généraliste ne rivalise avec <b>Blurb</b> — mais comptez 3 à 5× le prix d'un broché texte.</p>
+  <p>Évitez <b>Lulu</b> si vous cherchez un bel objet : papier fin, rainage mou, et c'est le POD le plus cher à l'exemplaire malgré le meilleur catalogue de reliures du marché.</p>
+</div>
+
+<h2>Fiches par candidat</h2>
+
+<div class="card">
+  <h3>BoD (Books on Demand) <span class="tier t-S">TIER S</span></h3>
+  <p class="origin">Allemagne (Hambourg), 2001 · filiale française active · impression Europe</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li>Impression privée assumée : « pour un usage privé », sans obligation de distribution ni d'ISBN.</li>
+        <li>Prix le plus bas du test 10 exemplaires : <b>5,21 €/ex</b> (A5 140 p N&amp;B).</li>
+        <li>4 papiers réels : crème 90 g, blanc 90 g, photo mat 120 g, photo brillant 130 g. 10 formats.</li>
+        <li>Broché, couverture rigide, carnet à anneaux, livret.</li>
+        <li>Si vous basculez vers la vente : distribution librairies françaises via Hachette.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Finition intermédiaire : rainage du dos « à peine marqué » sur le banc d'essai indépendant.</li>
+        <li>Délai réel constaté 2,5 semaines, contre 5–10 jours ouvrés annoncés.</li>
+        <li>Parcours « impression seule » peu mis en avant face aux formules de publication.</li>
+        <li>Formules payantes (39 € / 249 € / 799 €) sans utilité pour un usage privé.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : impression seule d'accès gratuit, dès 2,05 €/ex, dégressif. — <span>Idéal pour</span> : imprimer son manuscrit en 1 à 50 ex. sans le publier. — <span>À éviter si</span> : vous voulez un objet haut de gamme ou une reliure cousue.</p>
+</div>
+
+<div class="card">
+  <h3>CoolLibri <span class="tier t-S">TIER S</span></h3>
+  <p class="origin">France (Toulouse) · présenté comme le premier imprimeur de livres en ligne en volume sur le marché français</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li>Tarif unitaire transparent : <b>7,43 € TTC</b> pour un A5 152 pages, couverture couleur pelliculée.</li>
+        <li>Options papier facturées au détail : doux 80 g +0,30 €, crème ancien 80 g +0,30 €, lisse satin 115 g +0,05 €.</li>
+        <li>Jusqu'à 648 pages (18,83 €/ex au maximum) — le plus haut plafond du panel.</li>
+        <li>Click &amp; collect gratuit à Toulouse, ISBN offert, production française.</li>
+        <li>6,01 €/ex sur le test 10 exemplaires : 3<sup>e</sup> prix du panel français.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Imprimeur, pas éditeur : pas de distribution librairie sérieuse.</li>
+        <li>Aucun écosystème e-commerce ni notoriété internationale.</li>
+        <li>Délais de livraison signalés comme le point à surveiller par les retours clients.</li>
+        <li>Catalogue de reliures plus étroit que Lulu : ni linen wrap, ni jaquette premium.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : 5,63 € (74 p) à 18,83 € (648 p) l'exemplaire unique ; 2,58 €/ex à 500 ex. — <span>Idéal pour</span> : usage personnel en France, 1 à 10 ex., avec choix de papier. — <span>À éviter si</span> : vous visez la distribution.</p>
+</div>
+
+<div class="card">
+  <h3>TheBookEdition <span class="tier t-A">TIER A</span></h3>
+  <p class="origin">France (Lille) · impression via Reprocolor, certifiée PEFC et Imprim'Vert</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li><b>Meilleure fabrication du banc d'essai à trois</b> : rainage « très bien marqué », couverture nettement plus épaisse que Lulu et BoD.</li>
+        <li>Impression française traçable, contrôle manuel des fichiers avant production.</li>
+        <li>100 % de marge conservée en cas de vente, sans frais de plateforme.</li>
+        <li>Remises quantité jusqu'à −42 %, dès 1 exemplaire. Port peu cher (1,40 € constaté).</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Le plus cher des trois grands sur le même livre : 5,97 € contre 3,62 € (BoD) et 2,28 € (Lulu).</li>
+        <li>Contrôles d'upload les plus stricts du panel : un PDF non conforme rallonge le cycle.</li>
+        <li>Dos carré collé uniquement en France — pas de couverture rigide.</li>
+        <li>Délai réel observé ~2 semaines, au-delà des 8–12 jours ouvrés annoncés.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : ~5,97 €/ex sur un A5 140 p, dégressif jusqu'à −42 %. — <span>Idéal pour</span> : un exemplaire personnel qu'on veut <i>beau</i>, en broché, fabriqué en France. — <span>À éviter si</span> : vous voulez du relié rigide ou une mise en production sans friction.</p>
+</div>
+
+<div class="card">
+  <h3>Bookvault <span class="tier t-A">TIER A</span></h3>
+  <p class="origin">Royaume-Uni · impression UK/Europe · orienté vente directe et financement participatif</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li>Finitions premium disponibles <b>dès 1 exemplaire</b> : dorure de couverture, tranches colorées, pages de garde imprimées, jaquettes toilées. Unique à ce prix dans le panel.</li>
+        <li>Papier intérieur 150 g, plus épais et plus résistant à l'usure que le standard Blurb.</li>
+        <li>Coût compétitif : ~5,88 $/ex, délai 3–7 jours.</li>
+        <li>Intégrations e-commerce et Kickstarter matures.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Frais d'upload de 10 à 15 $ par fichier — rédhibitoire sur un tirage unique.</li>
+        <li>Seuil de versement à 100 € et gestion administrative signalée comme perfectible.</li>
+        <li>Impression brute légèrement en retrait sur la photo : 7,0/10 contre 7,3/10 pour Blurb sur test comparatif.</li>
+        <li>Post-Brexit : frais et délais à vérifier depuis la France, l'infrastructure restant centrée UK.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : ~5,88 $/ex + 10–15 $ de frais d'upload. — <span>Idéal pour</span> : une édition « collector » à quelques exemplaires. — <span>À éviter si</span> : vous imprimez un seul livre banal.</p>
+</div>
+
+<div class="card">
+  <h3>Blurb <span class="tier t-A">TIER A</span></h3>
+  <p class="origin">États-Unis, 2005 · impression Europe (expéditions depuis les Pays-Bas constatées)</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li><b>Meilleure colorimétrie du panel</b> : rendu fin, pas de postérisation, dérive métamérique minime sur test terrain.</li>
+        <li>Papiers photo sérieux : Standard 80# semi-mat 118 g, Premium Lustre/Mat 148 g, Mohawk Superfine 148 g, Mohawk proPhoto Pearl 190 g, layflat 432–750 g.</li>
+        <li>Reliures premium réelles : ImageWrap rigide, jaquette rigide, couverture toilée, Wire-O.</li>
+        <li>Flux photo natif : Lightroom, InDesign, BookWright. Délai constaté 7 jours porte à porte.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Cher : coût moyen relevé <b>14,33 $/ex</b>. Test terrain à 47,28 € port compris pour un 20×25 cm de 22 pages.</li>
+        <li>Papier économique jugé « flimsy » sous 170 pages ; couverture brillante susceptible de craqueler.</li>
+        <li>Seulement 3 formats en livre texte (5×8, 6×9, 8×10 in) — catalogue étroit hors photo.</li>
+        <li>Port élevé (10,99 € constaté sur un exemplaire). Seuil de versement 25 $ et paiements lents si vous vendez.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : dès 3,99 $ (broché compact), livre photo dès 12 $, en pratique 15–50 €/ex selon finition. — <span>Idéal pour</span> : livre photo, portfolio, beau livre illustré, mémoire familial. — <span>À éviter si</span> : votre livre est un bloc de texte noir sur blanc.</p>
+</div>
+
+<div class="card">
+  <h3>Lulu <span class="tier t-B">TIER B</span></h3>
+  <p class="origin">États-Unis, 2002 · imprime en France et au Royaume-Uni pour les commandes européennes</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li><b>Le catalogue d'options le plus large</b> : perfect bound (32–800 p), coil, saddle stitch, casewrap rigide, linen wrap en 6 coloris, Wire-O, jaquette lin à dos marqué à chaud.</li>
+        <li>4 papiers : 60# crème non couché, 60# blanc non couché, 80# blanc couché, 100# blanc couché. Tous FSC, sans acide.</li>
+        <li>Sur le papier, spécifications supérieures à KDP (60# vs 55# intérieur, 100# vs 80# couverture).</li>
+        <li>Production 3–5 jours ouvrés, impression en Europe : pas de douane intra-UE.</li>
+        <li>Vente directe intégrée (Shopify, Wix, WooCommerce) avec conservation des données clients.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li><b>Fabrication décevante en pratique</b> : papier fin, plis de dos et de gouttière à peine marqués, objet décrit comme « une brochure agrafée » plutôt qu'un livre.</li>
+        <li>Coût total le plus élevé des grands POD : 7,24 $ contre 3,66 $ (KDP) et 4,45 $ (IngramSpark) sur un même titre.</li>
+        <li>Port cher (4,00 € sur un exemplaire) ; modes Mail et Priority pouvant atteindre 28 jours.</li>
+        <li>Impossible de choisir l'usine d'impression : qualité et délais variables selon l'attribution.</li>
+        <li>Service client décrit comme irrégulier par plusieurs revues d'auteurs.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : très variable, le plus cher au global des POD majeurs. — <span>Idéal pour</span> : reliures exotiques (spirale, toile, jaquette), calendriers, formats non standards. — <span>À éviter si</span> : vous jugez un livre à la tenue du dos et à la main du papier.</p>
+</div>
+
+<div class="card">
+  <h3>Amazon KDP <span class="tier t-B">TIER B</span></h3>
+  <p class="origin">États-Unis · service intégré à Amazon · référence de prix du marché</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li>Le moins cher en pratique : 5,50 €/ex sur le test 10 exemplaires.</li>
+        <li>Délai le plus court du panel : 3–7 jours ouvrés.</li>
+        <li>Distribution mondiale automatique, jusqu'à 999 exemplaires auteur par commande.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li><b>Contrainte structurelle</b> : les exemplaires auteur exigent un livre au statut « Live », donc publié et en vente publique.</li>
+        <li>L'alternative privée — l'épreuve — est limitée à 5 par commande et porte un filigrane « Not for Resale ».</li>
+        <li>Broché uniquement en France. Qualité jugée « correcte » sans plus.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : ~5,50 €/ex (A5 140 p N&amp;B). — <span>Idéal pour</span> : auteur qui publie <i>et</i> vend sur Amazon. — <span>À éviter si</span> : vous voulez juste imprimer sans rien publier.</p>
+</div>
+
+<div class="card">
+  <h3>IngramSpark <span class="tier t-B">TIER B</span></h3>
+  <p class="origin">États-Unis (Ingram Content Group) · distribution mondiale librairies</p>
+  <div class="cols">
+    <div>
+      <h4>Forces</h4>
+      <ul>
+        <li>Qualité et options de papier supérieures à KDP : jaquettes, couleur premium, formats personnalisés.</li>
+        <li>~6 $/ex, délai ~5 jours.</li>
+        <li>La référence pour entrer dans les catalogues des libraires.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Limites</h4>
+      <ul>
+        <li>Frais de mise en place par titre (promotions fréquentes mais non garanties).</li>
+        <li>Royalties 45 % contre 60 % chez KDP ; délais de paiement à 90 jours.</li>
+        <li>Plateforme orientée professionnels, courbe d'apprentissage réelle.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="verdict"><span>Tarif</span> : ~6 $/ex + frais de setup titre. — <span>Idéal pour</span> : auteur visant les librairies physiques. — <span>À éviter si</span> : usage personnel — les frais fixes n'ont aucun sens pour 1 exemplaire.</p>
+</div>
+
+<div class="card">
+  <h3>Bookelis <span class="tier t-B">TIER B</span> · Pumbo <span class="tier t-C">TIER C</span> · Booksline <span class="tier t-C">TIER C</span></h3>
+  <p class="origin">Acteurs secondaires du panel français</p>
+  <ul>
+    <li><b>Bookelis</b> (France) — 5,99 €/ex sur le test 10 exemplaires, acteur historique de l'autoédition avec capacité de distribution librairie. Correct, mais aucun argument distinctif face à BoD.</li>
+    <li><b>Pumbo</b> (Pays-Bas/France) — production annoncée dès 2 jours ouvrés, broché / rigide / Wire-O / photo / magazine dès 1 exemplaire. Mais <b>10,64 €/ex</b> sur le test 10 exemplaires, soit le double de BoD, sans contrepartie identifiée.</li>
+    <li><b>Booksline</b> (France) — minimum <b>10 exemplaires</b> et ~4 semaines de délai. Seul intérêt réel : la <b>reliure cousue</b>, rare en POD. Économiquement pertinent à partir de 50 exemplaires (roman A5 crème 250 p : 13,11 €/ex à 50, 8,07 €/ex à 500).</li>
+    <li><b>Imprimeurs français à l'unité</b> (Kalikrea, Impression-Edition Gironde, Imprimer son livre, Je fais mon livre) — 14,90 à 29,50 €/ex sur le même test. Hors sujet économiquement, sauf besoin de conseil humain local.</li>
+  </ul>
+</div>
+
+<h2>Tableau comparatif</h2>
+<div class="scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Service</th>
+      <th>Prix 1 ex.<br>(A5 ~150 p N&amp;B)</th>
+      <th>Prix 10 ex.<br>(A5 140 p)</th>
+      <th>Délai France</th>
+      <th>Min.</th>
+      <th>Reliures</th>
+      <th>Papiers intérieur</th>
+      <th>Impression privée<br>sans publier</th>
+      <th>Lieu d'impression</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td class="name">BoD</td><td>dès 2,05 €</td><td><b>5,21 €/ex</b></td><td>5–10 j ouvrés<br><span class="caveat">(2,5 sem. constatées)</span></td><td>1</td><td>Broché, rigide, anneaux, livret</td><td>4 — crème 90 g, blanc 90 g, photo mat 120 g, photo brillant 130 g</td><td class="yes">Oui, explicitement</td><td>Europe (DE)</td></tr>
+    <tr><td class="name">CoolLibri</td><td><b>7,43 € TTC</b></td><td>6,01 €/ex</td><td>non publié<br><span class="caveat">(à surveiller)</span></td><td>1</td><td>Dos carré collé, spirale</td><td>4 — blanc 90 g + 3 options payantes</td><td class="yes">Oui</td><td>France (Toulouse)</td></tr>
+    <tr><td class="name">TheBookEdition</td><td>~5,97 € + 1,40 € port</td><td>n.c.</td><td>8–12 j ouvrés<br><span class="caveat">(2 sem. constatées)</span></td><td>1</td><td>Dos carré collé uniquement (FR)</td><td>Plusieurs, non détaillés publiquement</td><td class="yes">Oui</td><td>France (Reprocolor)</td></tr>
+    <tr><td class="name">Lulu</td><td>2,28 € + 4,00 € port</td><td>n.c.</td><td>3–5 j prod. + 7–14 j<br><span class="caveat">(jusqu'à 28 j en Mail)</span></td><td>1</td><td><b>6</b> — perfect, coil, saddle, casewrap, linen wrap, Wire-O</td><td>4 — 60# crème, 60# blanc, 80# couché, 100# couché</td><td class="yes">Oui</td><td>France / UK</td></tr>
+    <tr><td class="name">Blurb</td><td>15–50 € selon finition</td><td>n.c.</td><td>6–10 j <span class="caveat">(7 j constatés)</span></td><td>1</td><td>Broché, ImageWrap, jaquette rigide, Wire-O</td><td><b>6+</b> dont Mohawk et layflat 432–750 g</td><td class="yes">Oui</td><td>Europe (NL)</td></tr>
+    <tr><td class="name">Bookvault</td><td>~5,88 $ + 10–15 $ upload</td><td>n.c.</td><td>3–7 j</td><td>1</td><td>Broché, rigide, jaquette toilée</td><td>150 g + finitions premium (dorure, tranches colorées)</td><td class="yes">Oui</td><td>Royaume-Uni</td></tr>
+    <tr><td class="name">Amazon KDP</td><td>épreuve seule<br><span class="caveat">(max 5, filigranée)</span></td><td>5,50 €/ex</td><td><b>3–7 j ouvrés</b></td><td>1</td><td>Broché uniquement (FR)</td><td>2–3 standards</td><td class="no">Non — publication requise</td><td>Europe</td></tr>
+    <tr><td class="name">IngramSpark</td><td>~6 $ + frais titre</td><td>n.c.</td><td>~5 j</td><td>1</td><td>Broché, rigide, jaquette</td><td>Premium, crème/blanc</td><td class="yes">Oui, mais frais fixes</td><td>International</td></tr>
+    <tr><td class="name">Bookelis</td><td>n.c.</td><td>5,99 €/ex</td><td>n.c.</td><td>1</td><td>Broché</td><td>Standard</td><td class="yes">Oui</td><td>France</td></tr>
+    <tr><td class="name">Pumbo</td><td>n.c.</td><td>10,64 €/ex</td><td>dès 2 j ouvrés</td><td>1</td><td>Broché, rigide, Wire-O</td><td>Plusieurs</td><td class="yes">Oui</td><td>Pays-Bas / France</td></tr>
+    <tr><td class="name">Booksline</td><td>n.c.</td><td>n.c.<br><span class="caveat">(2,04 €/ex à 500)</span></td><td>~4 semaines</td><td><b>10</b></td><td>Dos carré collé souple <b>ou rigide cousu</b></td><td>Bouffant crème, offset blanc</td><td class="yes">Oui</td><td>France</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="hint"><b>Critères retenus et pourquoi.</b> Le prix à 1 <i>et</i> à 10 exemplaires sépare les modèles POD purs des imprimeurs à tirage court. La qualité de fabrication est le seul critère qu'aucune fiche produit ne révèle : il vient uniquement de bancs d'essai avec objets en main. Le délai France élimine les acteurs hors UE. La diversité des options discrimine fortement entre catalogue papier/reliure riche et offre standard. L'impression privée sans publication est le critère décisif pour un usage personnel — et le seul qui exclut KDP.</p>
+
+<h2>Tier list — usage personnel, France, 1 à 10 exemplaires</h2>
+
+<div class="tierbox">
+  <h4><span class="tier t-S">S</span> &nbsp;À prendre par défaut</h4>
+  <ul>
+    <li><b>BoD</b> — prix plancher, impression privée assumée, options correctes, délai raisonnable. Le défaut à battre.</li>
+    <li><b>CoolLibri</b> — imprimeur français, tarif unitaire honnête et lisible, options papier au détail, jusqu'à 648 pages.</li>
+  </ul>
+</div>
+
+<div class="tierbox">
+  <h4><span class="tier t-A">A</span> &nbsp;Meilleurs sur un axe précis</h4>
+  <ul>
+    <li><b>TheBookEdition</b> — la meilleure fabrication du panel généraliste. ~2 € de plus l'exemplaire pour un objet qui tient debout.</li>
+    <li><b>Bookvault</b> — pour une édition collector unitaire. Les frais d'upload le sortent du tier S en usage ponctuel.</li>
+    <li><b>Blurb</b> — hors concours sur l'illustré et le photo. Disqualifié sur le texte par le prix.</li>
+  </ul>
+</div>
+
+<div class="tierbox">
+  <h4><span class="tier t-B">B</span> &nbsp;Cas d'usage étroit</h4>
+  <ul>
+    <li><b>Lulu</b> — meilleur catalogue d'options du marché, exécution décevante. À réserver aux reliures qu'aucun autre ne propose.</li>
+    <li><b>Amazon KDP</b> — imbattable en prix, inutilisable proprement sans publier.</li>
+    <li><b>Bookelis</b> — correct, sans argument distinctif face à BoD.</li>
+    <li><b>IngramSpark</b> — mauvais outil pour l'usage personnel, bon pour la librairie.</li>
+  </ul>
+</div>
+
+<div class="tierbox">
+  <h4><span class="tier t-C">C</span> &nbsp;À écarter sauf besoin très spécifique</h4>
+  <ul>
+    <li><b>Pumbo</b> — deux fois le prix de BoD sur le même livre, sans contrepartie identifiée.</li>
+    <li><b>Booksline</b> — minimum 10 ex. et ~4 semaines. Seul intérêt : la reliure cousue, à partir de 50 exemplaires.</li>
+    <li><b>Imprimeurs français à l'unité</b> (14,90–29,50 €/ex) — hors sujet économiquement.</li>
+  </ul>
+</div>
+
+<h2>Arbre de décision</h2>
+<ol class="tree">
+  <li><b>Le livre contient beaucoup d'images, c'est un livre photo ?</b> → <b>Blurb</b>. Rien d'autre n'approche sa colorimétrie. Budget 20–50 €/ex.</li>
+  <li><b>Vous voulez un objet remarquable (tranches colorées, dorure) en 1–5 exemplaires ?</b> → <b>Bookvault</b>, en acceptant les 10–15 $ de frais d'upload.</li>
+  <li><b>Vous voulez le meilleur bloc-livre broché possible, fabriqué en France ?</b> → <b>TheBookEdition</b>. Préparez un PDF conforme, leurs contrôles sont stricts.</li>
+  <li><b>Vous voulez le meilleur rapport prix/qualité et pouvoir monter en quantité ?</b> → <b>BoD</b>.</li>
+  <li><b>Vous voulez une facture française, du papier crème, un click &amp; collect, ou plus de 400 pages ?</b> → <b>CoolLibri</b>.</li>
+  <li><b>Vous avez besoin d'une reliure spirale, agrafée, toilée, ou d'un calendrier ?</b> → <b>Lulu</b>, seul à couvrir ces cas, en assumant la finition moyenne.</li>
+  <li><b>Vous publiez ET vendez sur Amazon de toute façon ?</b> → <b>KDP</b>, exemplaires auteur au prix d'impression.</li>
+  <li><b>Vous partez sur 50 exemplaires et plus, avec exigence de durabilité ?</b> → sortez du POD : <b>Booksline</b> en reliure cousue, ou un imprimeur offset classique.</li>
+</ol>
+
+<h2>Ce que les fiches produits ne disent pas</h2>
+
+<div class="gap">
+  <p class="claim"><b>Lulu annonce</b> des spécifications supérieures à KDP : intérieur 60# contre 55#, couverture 100# contre 80#.</p>
+  <p><b>Constaté</b> : le banc d'essai avec objets en main décrit un papier fin, des plis de dos et de gouttière à peine marqués, un objet ressemblant à une brochure agrafée. <b>Le grammage annoncé ne prédit pas la tenue du livre</b> — ce qui la détermine, c'est le rainage du dos et l'épaisseur réelle du carton de couverture, deux paramètres jamais publiés.</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>BoD annonce</b> un délai de 5 à 10 jours ouvrés.</p>
+  <p><b>Constaté</b> : 2,5 semaines sur le banc d'essai indépendant, soit le double. « Impression à la demande » recouvre deux réalités : BoD et TheBookEdition sont des imprimeurs numériques à tirage court habillés en POD ; seuls KDP, Lulu et Bookvault ont une chaîne réellement automatisée.</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>Blurb affiche</b> des livres brochés « à partir de 3,99 $ ».</p>
+  <p><b>Constaté</b> : coût moyen relevé à 14,33 $/ex, et un test terrain sur un 20×25 cm de 22 pages en couverture toilée atteint 47,28 € port compris. Le papier économique est jugé « flimsy » sous 170 pages.</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>Bookvault affiche</b> un coût compétitif d'environ 5,88 $/ex.</p>
+  <p><b>Constaté</b> : des frais d'upload de 10 à 15 $ par fichier s'ajoutent, ce qui triple le coût réel d'un exemplaire unique. Seuil de versement fixé à 100 €.</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>Amazon KDP présente</b> l'impression à partir d'un exemplaire au prix d'impression, sans frais.</p>
+  <p><b>Constaté</b> : les exemplaires auteur exigent un livre au statut « Live », donc publié et en vente publique. L'alternative privée, l'épreuve, est plafonnée à 5 par commande et filigranée « Not for Resale ».</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>Biais de sourcing.</b> Les meilleurs comparatifs français en ligne sont publiés par des imprimeurs.</p>
+  <p>Booksline, publiersonlivre et j-imprime-mon-livre sont juges et parties. Les chiffres qu'ils publient sont vérifiables et cohérents entre eux, mais leurs classements qualitatifs sont à lire avec cette réserve. Le seul banc d'essai à trois avec objets en main provient d'un blog d'auteur indépendant.</p>
+</div>
+
+<div class="gap">
+  <p class="claim"><b>Le prix d'impression n'est pas le prix payé.</b></p>
+  <p>Sur un exemplaire unique, le port pèse de 1,40 € (TheBookEdition) à 10,99 € (Blurb). Comparer les tarifs d'impression seuls inverse purement et simplement le classement. Les planchers « à partir de 2,05 € » (BoD) correspondent par ailleurs à des livres très courts : sur un roman de 250 pages, comptez 2 à 3× ce montant.</p>
+</div>
+
+<h2>Annexe — si vous voulez aussi vendre</h2>
+<div class="scroll">
+<table style="min-width:0">
+  <thead><tr><th>Objectif</th><th>Choix</th><th>Pourquoi</th></tr></thead>
+  <tbody>
+    <tr><td class="name">Vendre sur Amazon</td><td>Amazon KDP</td><td>60 % de royalties, distribution automatique, aucun frais fixe</td></tr>
+    <tr><td class="name">Librairie française</td><td>BoD ou TheBookEdition</td><td>BoD diffuse via Hachette ; TBE laisse 100 % de marge</td></tr>
+    <tr><td class="name">Librairie internationale</td><td>IngramSpark</td><td>Le catalogue de référence des libraires anglophones</td></tr>
+    <tr><td class="name">Vente directe sur son site</td><td>Lulu Direct ou Bookvault</td><td>Intégrations Shopify/Woo, données clients conservées</td></tr>
+    <tr><td class="name">Marge maximale</td><td>TheBookEdition</td><td>100 % de marge, sans frais de plateforme</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Sources</h2>
+<p class="hint">Toutes consultées le 19 août 2026.</p>
+
+<h4>Sources primaires (éditeurs)</h4>
+<ul class="srcgrid">
+  <li><a href="https://www.bod.fr/prix">BoD — Prix &amp; coût pour l'impression et la publication</a></li>
+  <li><a href="https://www.bod.fr/livre/imprimer-livre">BoD — Imprimer un livre à partir d'un exemplaire</a></li>
+  <li><a href="https://help.lulu.com/en/support/solutions/articles/64000255473-cover-and-interior-paper-stocks">Lulu — Cover and Interior Paper Stocks</a></li>
+  <li><a href="https://www.lulu.com/products">Lulu — Custom Book Sizes &amp; Binding Options</a></li>
+  <li><a href="https://help.lulu.com/en/support/solutions/articles/64000255307-shipping-faq">Lulu — Shipping FAQ</a></li>
+  <li><a href="https://www.blurb.com/pricing">Blurb — Pricing</a></li>
+  <li><a href="https://www.coollibri.com/blog/de-quel-budget-faut-il-disposer-pour-imprimer-un-livre/">CoolLibri — De quel budget faut-il disposer pour imprimer un livre</a></li>
+  <li><a href="https://www.thebookedition.com/fr/">TheBookEdition — site officiel</a></li>
+  <li><a href="https://www.pumbo.fr/imprimer-un-livre/impression-numerique">Pumbo — Impression numérique à partir d'un exemplaire</a></li>
+  <li><a href="https://help.bookvault.app/what-services-can">Bookvault — What services can Bookvault offer?</a></li>
+  <li><a href="https://booksline.fr/tarifs">Booksline — Grille de prix 2026</a></li>
+  <li><a href="https://kdp.amazon.com/fr_FR/help/topic/G7BBN68RYX5UMDZF">Amazon KDP — Épreuves et exemplaires destinés à l'auteur</a></li>
+  <li><a href="https://kdp.amazon.com/fr_FR/help/topic/GVEG4YA9G2T7N6DR">Amazon KDP — Commander une épreuve ou un exemplaire auteur</a></li>
+</ul>
+
+<h4>Sources tierces et bancs d'essai</h4>
+<ul class="srcgrid">
+  <li><a href="https://ecriture-livres.fr/ou-publier/impression-web-comparatif-lulu-bod-tbe/">Écriture-Livres — Impression web : Lulu vs BoD vs TheBookEdition</a> <span class="caveat">— objets en main, seule comparaison physique du panel</span></li>
+  <li><a href="https://publiersonlivre.fr/imprimer-livre/liste-comparative-imprimeurs-de-livres-a-demande/">Publier son Livre — Comparatif des imprimeurs à partir d'1 exemplaire</a> <span class="caveat">— test 10 ex., mise à jour sept. 2025</span></li>
+  <li><a href="https://booksline.fr/comparatif-impression-livre-france">Booksline — Comparatif imprimeurs de livres en France 2026</a> <span class="caveat">— source non neutre : Booksline figure parmi les acteurs comparés</span></li>
+  <li><a href="https://reedsy.com/blog/best-book-printing-services/">Reedsy — The 9 Best Book Printing Services for Authors (2026)</a></li>
+  <li><a href="https://thewritepractice.com/lulu-print-on-demand-review/">The Write Practice — Lulu Print on Demand Review</a></li>
+  <li><a href="https://litmaglab.substack.com/p/blurb-vs-bookvault-print-on-demand">LitMagLab — Blurb vs Bookvault, side-by-side test</a></li>
+  <li><a href="https://blog.aube-nature.com/test-livre-blurb/">Aube Nature — Test grandeur nature d'un livre Blurb</a></li>
+  <li><a href="https://scribecount.com/author-resource/publishing-wide/bookvault">ScribeCount — BookVault: The Complete Guide for Direct-Sales Authors</a></li>
+  <li><a href="https://www.bookready.net/blog/kdp-vs-ingramspark-2026">BookReady — KDP vs IngramSpark 2026</a></li>
+</ul>
+
+<footer>
+  Comparatif généré le 19 août 2026 · 11 candidats · 9 critères · profondeur de recherche <span class="mono">deep</span>.<br>
+  Les prix relevés proviennent de tests datés et de grilles publiques ; ils varient selon la pagination, le format, le papier et le port. Vérifiez avec le calculateur du service retenu avant de commander.
+</footer>
+
+</div>
+</body>
+</html>

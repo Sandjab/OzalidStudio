@@ -5,15 +5,15 @@
 //! même chemin sur les fonctions de composition, ce qui suffit à vérifier que Typst
 //! accepte les sources et que les rendus sortent aux bonnes dimensions.
 //!
-//! Usage : cargo run --example canevas -- <projet.ozalid> <prestataire>
+//! Usage : cargo run --example canevas -- <projet.ozalid> <clé de gabarit>
 
 use std::path::Path;
 
+use ozalid_lib::catalogue;
 use ozalid_lib::envoi::Place;
 use ozalid_lib::interieur::{self, Quoi, Reglage, Trace};
 use ozalid_lib::manuscrit;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -21,11 +21,25 @@ fn main() -> Result<(), String> {
     let (ozalid, cle) = match (args.next(), args.next()) {
         (Some(a), Some(b)) => (a, b),
         _ => {
-            eprintln!("usage : canevas <projet.ozalid> <prestataire>");
+            eprintln!("usage : canevas <projet.ozalid> <clé de gabarit>");
             std::process::exit(2);
         }
     };
-    let pr = providers::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::providers()
+        .iter()
+        .find(|p| p.cle == cle)
+        .unwrap_or_else(|| {
+            eprintln!("clé de gabarit inconnue : {cle}");
+            eprintln!(
+                "gabarits : {}",
+                catalogue::providers()
+                    .iter()
+                    .map(|p| p.cle.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            std::process::exit(2);
+        });
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let livre = &projet.meta.livre;
     let int = &projet.meta.interieur;

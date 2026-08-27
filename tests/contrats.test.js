@@ -12,9 +12,9 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 
 const PROJET = {
@@ -35,8 +35,12 @@ const PROJET = {
   images: [],
   interieur: { police: 'Alegreya' },
   livraison: {
-    destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-    courant: 'lulu',
+    livrables: [{
+      cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+      pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+      finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+    }],
+    courant: 'lulu-108x175-broche-standard',
   },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
 };
@@ -44,6 +48,14 @@ const PROJET = {
 /** Le strict nécessaire pour que l'application charge et route un menu. */
 const invoke = async (cmd) => {
   if (cmd === 'providers_liste') return [LULU];
+  if (cmd === 'pods_liste') return [{
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  }];
+  if (cmd === 'catalogue_refus') return [];
   if (cmd === 'polices_liste') return ['Archivo'];
   if (cmd === 'polices_texte_liste') return ['Alegreya'];
   if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -222,6 +234,79 @@ test('chaque événement émis par le Rust est écouté par le front', async () 
     assert.ok(ecoutes.includes(nom),
       `« ${nom} » émis par le Rust, écouté par personne (posés : ${ecoutes.join(', ')})`);
   }
+});
+
+/* ---------- src/*.js → lib.rs ---------- */
+
+/**
+ * Chaque commande que le front appelle doit être déclarée au `generate_handler`.
+ *
+ * Rien ne confrontait ces deux listes : un nom renommé d'un seul côté compile des deux
+ * côtés, et ne se rate qu'à l'exécution, sur un « unknown command » que seule la bande
+ * d'alerte porterait — au moment précis où l'utilisateur fait le geste. C'est le garde
+ * qui manquait au renommage des `livrable_*` : quatre commandes déplacées à la main
+ * dans deux fichiers, sans rien pour dire qu'on en avait oublié une.
+ *
+ * Dans ce sens-là seulement : une commande déclarée que le front n'appelle pas n'est
+ * pas une faute — les exemples en appellent, et une commande peut précéder son écran.
+ */
+test('chaque commande appelée par le front est déclarée au Rust', () => {
+  const fichiers = fs
+    .readdirSync(path.join(__dirname, '..', 'src'))
+    .filter((f) => f.endsWith('.js'));
+  const appelees = [...new Set(
+    fichiers.flatMap((f) => [...source('src', f).matchAll(/\binvoke\('([a-z_]+)'/g)]
+      .map((m) => m[1]))
+  )];
+  // Soixante au lot 2 : si le relevé s'effondre, c'est la moisson qui est cassée, pas
+  // le contrat — le dire distinctement plutôt que de rendre vert sur zéro commande.
+  assert.ok(appelees.length >= 50, `moisson suspecte : ${appelees.length} commandes`);
+
+  // Le seul bloc `generate_handler![…]`, et non tout `lib.rs` : ailleurs, un
+  // doc-commentaire qui nommerait `commands::livrable_viser` suffirait à satisfaire ce
+  // test sans que la commande soit déclarée nulle part.
+  const lib = source('src-tauri', 'src', 'lib.rs');
+  const debut = lib.indexOf('generate_handler![');
+  assert.notEqual(debut, -1, 'generate_handler introuvable dans lib.rs');
+  const fin = lib.indexOf(']', debut);
+  assert.notEqual(fin, -1, 'generate_handler sans fin');
+  const declarees = new Set(
+    [...lib.slice(debut, fin).matchAll(/commands::([a-z_]+)/g)].map((m) => m[1])
+  );
+  assert.deepStrictEqual(
+    appelees.filter((c) => !declarees.has(c)),
+    [],
+    'appelées par le front, absentes du generate_handler de lib.rs'
+  );
+});
+
+/* ---------- commands.rs → livraison.js ---------- */
+
+/**
+ * `ProjetVue` doit continuer de porter `elagues`.
+ *
+ * `majElagues` le lit derrière un `?? []`, et ce repli est nécessaire : les fixtures des
+ * autres suites ne portent pas le champ. Mais il est aussi une trappe. Le front ne peut
+ * pas distinguer « champ absent de la vue » de « rien n'a été élagué » — les deux
+ * donnent une boîte muette. `elagues` retiré de `ProjetVue`, les deux suites resteraient
+ * vertes et le livrable recommencerait à disparaître en silence, ce que ce champ existe
+ * précisément pour empêcher. C'est le seul lien que rien d'autre ne tient.
+ *
+ * Le bloc de la structure, et non tout `commands.rs` : ailleurs, un commentaire qui
+ * citerait le champ suffirait à rendre vert une vue qui ne le porte plus.
+ */
+test('la vue du projet porte encore les livrables élagués', () => {
+  const rust = source('src-tauri', 'src', 'commands.rs');
+  const debut = rust.indexOf('pub struct ProjetVue {');
+  assert.notEqual(debut, -1, 'ProjetVue introuvable dans commands.rs');
+  const fin = rust.indexOf('\n}', debut);
+  assert.notEqual(fin, -1, 'ProjetVue sans fin');
+  assert.match(
+    rust.slice(debut, fin),
+    /pub elagues: Vec<String>/,
+    'ProjetVue ne porte plus `elagues` : le repli de `majElagues` rendrait la boîte '
+      + 'muette, et un livrable élagué disparaîtrait de nouveau sans un mot'
+  );
 });
 
 /* ---------- menu.rs → RECENT ---------- */
@@ -441,5 +526,65 @@ test('l\'aide des jetons vient du Rust, pas du HTML', async () => {
   const aide = els.get('aideJetons').textContent;
   for (const jeton of attendus) {
     assert.ok(aide.includes(jeton), `${jeton} absent de l'aide`);
+  }
+});
+
+/**
+ * Un fichier de catalogue que le démarrage a refusé doit se nommer à l'écran. Un POD
+ * absent de la liste sans explication se lirait comme un POD qui n'existe pas — et
+ * l'utilisateur chercherait la faute dans son fichier plutôt que dans sa syntaxe.
+ */
+test('un fichier de catalogue refusé se nomme à la Livraison', async () => {
+  const refuse = async (cmd, args) =>
+    cmd === 'catalogue_refus'
+      ? [{ fichier: '/config/pods/bod.toml', raison: 'expected value at line 2' }]
+      : invoke(cmd, args);
+  const { els } = await charge({ invoke: refuse, open: async () => null });
+  const p = els.get('refusCatalogue');
+  assert.equal(p.hidden, false);
+  assert.match(p.textContent, /bod\.toml/);
+  assert.match(p.textContent, /line 2/);
+  // Le fichier corrigé ne sera relu qu'au prochain démarrage : le dire est la moitié
+  // utile du message, sans quoi l'utilisateur corrige et regarde un écran inchangé.
+  assert.match(p.textContent, /relancer/);
+});
+
+/** Le cas courant : aucun fichier déposé, aucune ligne à l'écran. */
+test('sans fichier de catalogue refusé, la ligne reste muette', async () => {
+  const { els } = await charge({ invoke, open: async () => null });
+  assert.equal(els.get('refusCatalogue').hidden, true);
+});
+
+/**
+ * Deux fichiers, deux lignes — et le chemin entier au survol de chacune.
+ *
+ * `Refus.fichier` est un chemin absolu : écrit d'un seul tenant, il pousse la bande de
+ * contenu, et tronqué sans recours il ne mène plus au fichier. C'est le traitement que
+ * l'entête applique déjà au chemin du `.ozalid`.
+ */
+test('chaque fichier refusé garde son chemin entier au survol', async () => {
+  const chemins = [
+    '/Users/kim/Library/Application Support/org.ozalid.studio/pods/bod.toml',
+    '/Users/kim/Library/Application Support/org.ozalid.studio/pods/pumbo.toml',
+  ];
+  const refuse = async (cmd, args) =>
+    cmd === 'catalogue_refus'
+      ? chemins.map((fichier) => ({ fichier, raison: 'champ inconnu « papiers »' }))
+      : invoke(cmd, args);
+  const { els } = await charge({ invoke: refuse, open: async () => null });
+  const survols = [];
+  const visite = (e) => {
+    if (e.title) survols.push(e.title);
+    for (const enfant of e.children) visite(enfant);
+  };
+  for (const ligne of els.get('refusCatalogue').children) visite(ligne);
+  assert.deepStrictEqual(survols, chemins);
+  // Et le découpage lui-même, que le survol ne prouve pas : rendu d'un seul tenant, le
+  // chemin garderait son nom de fichier hors de vue dès que la troncature mord, et ces
+  // deux lignes-là — même répertoire, même raison — deviendraient indiscernables.
+  for (const [i, chemin] of chemins.entries()) {
+    const nom = els.get('refusCatalogue').children[i].children[0].children[0].textContent;
+    assert.ok(nom.endsWith(path.basename(chemin)), `nom absent ou rogné : ${nom}`);
+    assert.ok(!nom.includes(path.dirname(chemin)), `répertoire dans le nom : ${nom}`);
   }
 });

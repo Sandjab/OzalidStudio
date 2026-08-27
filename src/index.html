@@ -117,8 +117,8 @@
 
     <!-- Aucun bouton ici, et c'est le fait du chantier : la composition part au
          chargement d'un manuscrit, puis se tient à jour toute seule. Aucun sélecteur de
-         prestataire non plus — il est dans le pied, et il vaut pour toute la fenêtre :
-         on compose pour le destinataire visé. -->
+         livrable non plus — il est dans le pied, et il vaut pour toute la fenêtre :
+         on compose pour le livrable visé. -->
     <div class="bloc">
       <h2>Intérieur</h2>
       <label><span>Police</span><select id="inPoliceInterieur"></select></label>
@@ -152,8 +152,8 @@
          l'aperçu vide disait déjà, mot pour mot, deux centimètres plus bas. -->
     <div class="outils">
       <div class="ligne onglets" id="faces"></div>
-      <!-- La lunette de la planche : la coupe et les deux plis, que le PDF remis au
-           prestataire ne porte pas. « Repères » et non « Fond perdu » depuis que les
+      <!-- La lunette de la planche : la coupe et les deux plis, que le PDF remis
+           à l'imprimeur ne porte pas. « Repères » et non « Fond perdu » depuis que les
            plis s'y sont ajoutés — un dos qui prend le papier des faces ne se voit
            autrement nulle part.
            Hors de `#faces` : cette boîte est reconstruite par `construireFaces`, et
@@ -291,18 +291,32 @@
 
   <section id="etapeLivraison" class="etape" role="tabpanel" hidden>
     <div class="bloc">
-      <h2>Destinataires</h2>
-      <p class="note">Chaque destinataire compose son propre intérieur, donc sa propre
+      <h2>Livrables</h2>
+      <p class="note">Chaque livrable compose son propre intérieur, donc sa propre
         pagination, donc son propre dos et sa propre planche. Les fichiers sont écrits à côté
-        du <code>.ozalid</code>, dans un répertoire par prestataire.</p>
+        du <code>.ozalid</code>, dans un répertoire par livrable : deux papiers d'un même
+        imprimeur en font deux.</p>
+      <!-- Ce que le démarrage n'a pas pu lire dans <code>pods/</code>. Au-dessus de la
+           liste et du choix d'ajout : c'est là qu'on cherche l'imprimeur qui manque. -->
+      <div id="refusCatalogue" class="refus" hidden></div>
+      <!-- Ce que l'ouverture a retiré de la liste, juste sous les fichiers refusés :
+           l'un est la cause, l'autre la conséquence, et les lire dans cet ordre est ce
+           qui fait comprendre la disparition. Même ton que les refus — `note alerte`,
+           comme le repli de polices de l'étape Livre. -->
+      <p id="livrablesElagues" class="note alerte" hidden></p>
       <div class="ligne">
-        <!-- Le seul contrôle de la fenêtre sans étiquette visible, et c'est voulu : posé
-             à côté de son bouton, il se lit comme le geste d'ajout. Ce que l'œil déduit
-             de la disposition, l'`aria-label` le dit à qui ne la voit pas. -->
-        <select id="inAjoutDestinataire" aria-label="Prestataire à ajouter"></select>
-        <button id="btAjouterDestinataire" type="button">Ajouter</button>
+        <!-- Deux listes en cascade, et le seul endroit de la fenêtre où des contrôles
+             n'ont pas d'étiquette visible : posés contre leur bouton, ils se lisent
+             comme le geste d'ajout. Ce que l'œil déduit de la disposition, les
+             `aria-label` le disent à qui ne la voit pas.
+             Le POD d'abord, ses formats ensuite : un format ne veut rien dire sans
+             l'imprimeur qui le fabrique, et les mêmes 13,5 × 21,5 n'ont pas les mêmes
+             marges chez deux POD. -->
+        <select id="inAjoutPod" aria-label="Imprimeur à ajouter"></select>
+        <select id="inAjoutFormat" aria-label="Format du livrable à ajouter"></select>
+        <button id="btAjouterLivrable" type="button">Ajouter</button>
       </div>
-      <div id="destinataires" class="destinataires"></div>
+      <div id="livrables" class="livrables"></div>
       <div class="ligne">
         <button id="btPackager" type="button">Générer les packages</button>
         <span id="etatPackages" class="etat"></span>
@@ -316,7 +330,7 @@
         tous les chapitres, en PDF et en EPUB. Le PDF est le livre sans son imposition —
         marges symétriques, pas de page blanche de parité. Les fichiers sont écrits dans
         <code>ebook/</code>, à côté du <code>.ozalid</code>. Le format vient du
-        destinataire visé, en bas de la fenêtre.</p>
+        livrable visé, en bas de la fenêtre.</p>
       <div class="ligne">
         <button id="btEbooks" type="button">Générer les ebooks</button>
         <span id="etatEbooks" class="etat"></span>
@@ -334,7 +348,7 @@
     <div class="bande dedicataires">
       <h2>Dédicataires</h2>
       <div class="ligne">
-        <!-- Même parti que le select d'ajout d'un destinataire : posé contre son bouton,
+        <!-- Même parti que le select d'ajout d'un livrable : posé contre son bouton,
              il se lit comme le geste d'ajout, et l'`aria-label` le dit à qui ne le voit
              pas. -->
         <input type="text" id="inDedicataire" placeholder="à qui ?"
@@ -357,7 +371,7 @@
       <p class="note" id="etatPolice"></p>
     </div>
 
-    <!-- Le rail : toutes les pages du destinataire visé. Cliquer une vignette déplace
+    <!-- Le rail : toutes les pages du livrable visé. Cliquer une vignette déplace
          l'envoi sur cette page — c'est le seul moyen d'en changer, et c'est pourquoi il
          n'y a pas de champ « page ». -->
     <div class="bande rail">
@@ -477,7 +491,7 @@
 </main>
 
 <!-- Le pointeur : pour qui l'on compose, et sous quel format on regarde. Il est ici
-     parce que c'est vrai partout — on change de destinataire sans quitter la Couverture
+     parce que c'est vrai partout — on change de livrable sans quitter la Couverture
      qu'on est en train de régler. -->
 <!-- La légende de ce que la dernière composition a mesuré. Elle n'est ni un compte rendu
      de travail long — personne n'a cliqué —, ni un refus de saisie : c'est la troisième
@@ -486,7 +500,7 @@
      Un élément par mention plutôt qu'un seul texte : le lien réclame un enfant, et un
      élément qui mêlerait texte et enfants ne se lirait plus par `textContent`. -->
 <footer id="pied">
-  <label id="visee"><span>Vu pour</span><select id="inDestinataire"></select></label>
+  <label id="visee"><span>Vu pour</span><select id="inLivrable"></select></label>
   <p id="piedMesure"></p>
   <p id="piedDos"></p>
   <p id="piedInterieur"></p>

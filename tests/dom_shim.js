@@ -2,12 +2,33 @@
 // Faux DOM minimal, juste assez pour exécuter le VRAI src/app.js.
 //
 // Réservé au câblage de l'interface : un champ reconstruit qui perd sa valeur, un
-// prestataire sans formule dont on afficherait quand même un dos. Tout ce qui touche
+// imprimeur sans formule dont on afficherait quand même un dos. Tout ce qui touche
 // au rendu réel se vérifie dans l'application, pas ici.
 
 const fs = require('node:fs');
 const path = require('node:path');
+const test = require('node:test');
 const vm = require('node:vm');
+
+/**
+ * Les minuteurs que l'application a posés, retenus pour être coupés entre deux tests.
+ *
+ * L'application débounce : l'aperçu de couverture, la recomposition. Un test qui finit
+ * pendant qu'une attente court laisse un `setTimeout` dans la boucle d'événements — et
+ * si ce qu'il déclenche en réarme un autre, `node --test` ne rend **jamais** la main :
+ * pas de récapitulatif, pas de code de sortie, et un test rouge devient un blocage muet.
+ * C'est exactement ce que produit la recomposition quand une garde de la veille tombe
+ * (reconnaissance § 6), c'est-à-dire au moment précis où l'on a besoin de lire le rouge.
+ *
+ * Coupés par le crochet ci-dessous, une fois pour tous les fichiers de test : c'est
+ * `dom_shim` qui monte le faux environnement, c'est à lui de le démonter.
+ */
+const minuteurs = new Set();
+
+test.afterEach(() => {
+  for (const h of minuteurs) clearTimeout(h);
+  minuteurs.clear();
+});
 
 class El {
   constructor(tag) {
@@ -35,7 +56,7 @@ class El {
 
   /**
    * Un élément créé à la volée devient retrouvable par son identifiant dès qu'il en
-   * reçoit un : la liste des prestataires est construite ainsi, et l'application la
+   * reçoit un : la liste des livrables est construite ainsi, et l'application la
    * relit avec `getElementById`.
    */
   get id() {
@@ -359,9 +380,20 @@ async function charge({
     },
     console,
     FontFace,
-    // L'aperçu est débounce : sans minuteur, rien ne se déclenche.
-    setTimeout,
-    clearTimeout,
+    // L'aperçu est débounce : sans minuteur, rien ne se déclenche. Enveloppés pour que
+    // le crochet de fin de test sache lesquels courent encore ; voir `minuteurs`.
+    setTimeout: (fn, ms) => {
+      const h = setTimeout(() => {
+        minuteurs.delete(h);
+        fn();
+      }, ms);
+      minuteurs.add(h);
+      return h;
+    },
+    clearTimeout: (h) => {
+      minuteurs.delete(h);
+      clearTimeout(h);
+    },
     JSON,
     Number,
     String,

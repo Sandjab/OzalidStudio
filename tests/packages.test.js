@@ -8,20 +8,67 @@ const assert = require('node:assert');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 const KDP = {
-  cle: 'kdp-6x9', libelle: 'Amazon KDP — 6 × 9 po',
-  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
+  cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
+  libelle: 'Amazon KDP — 6 × 9 po',
+  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
+};
+// Le même imprimeur dans son autre format. La cascade offre les deux, la table plate
+// doit donc savoir les dire tous les deux : sans lui, un 5 × 8 ajouté partait au Rust
+// sans que rien ne puisse revenir à l'écran, et le test de l'ajout restait vert sur un
+// faux qui levait dans le vide.
+const KDP_5X8 = {
+  cle: 'kdp-5x8-broche', pod: 'kdp', format: '5x8', reliure: 'broche',
+  libelle: 'Amazon KDP — 5 × 8 po',
+  largeur: 127, hauteur: 203.2, fond_perdu: 3.175,
 };
 const COOLLIBRI = {
-  cle: 'coollibri-148x210', libelle: 'CoolLibri — A5',
-  largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
-  papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
+  cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
+  libelle: 'CoolLibri — A5',
+  largeur: 148, hauteur: 210, fond_perdu: null,
 };
+
+// L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
+// table plate des tests : c'est lui qui porte les choix, et le grisé motivé n'a rien à
+// lire ailleurs.
+//
+// Chez KDP, la reliure non outillée est posée **avant** la composable : c'est le seul
+// ordre qui laisse le test de l'ajout distinguer « la première composable » de « la
+// première tout court ». Avec l'ordre inverse, les deux règles rendent la même reliure
+// et le test ne protège plus rien.
+const PODS = [
+  {
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  },
+  {
+    cle: 'kdp', nom: 'Amazon KDP',
+    formats: [{ cle: '6x9', nom: '6 × 9 po' }, { cle: '5x8', nom: '5 × 8 po' }],
+    reliures: [
+      { cle: 'rigide', nom: 'Couverture rigide', non_outille: 'géométrie du casewrap non relevée' },
+      { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    ],
+    finitions: [{ cle: 'mat', nom: 'Pelliculage mat' }],
+    papiers: [
+      { cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0', dos_publie: true },
+      { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff', dos_publie: true },
+    ],
+  },
+  {
+    cle: 'coollibri', nom: 'CoolLibri',
+    formats: [{ cle: '148x210', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff', dos_publie: false }],
+  },
+];
 
 /**
  * La face par son libellé, et non par son rang : ces boutons se retrouvent par rang
@@ -32,9 +79,21 @@ const COOLLIBRI = {
 const face = (els, libelle) =>
   [...els.get('faces').children].find((b) => b.textContent === libelle);
 
-/** Un destinataire neuf chez un prestataire, comme le Rust en fabrique un. */
-const chez = (p) => ({
-  provider: p.cle, papier: p.papiers[0].cle, dos_mm: null, fond_perdu_mm: null,
+/**
+ * Un livrable neuf chez un imprimeur, comme le Rust en fabrique un : les quatre axes
+ * à plat, et la clé fabriquée **une fois** ici — le front la reçoit, il ne la recompose
+ * jamais.
+ *
+ * Le papier d'office vient de l'arbre, pas de la table plate : c'est elle qui porte
+ * l'offre, la table ne décrivant plus qu'un gabarit depuis le retrait de son champ
+ * `papiers`. `PODS` sert de défaut pour LULU, KDP et COOLLIBRI ; un POD tenu à part
+ * (`DEUX_RELIURES`, `mixte`…) passe son papier en second argument.
+ */
+const chez = (p, papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle) => ({
+  cle: `${p.pod}-${p.format}-${p.reliure}-${papier}`,
+  gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
+  papier, finition: null, dos_mm: null, fond_perdu_mm: null,
+  compose: null,
 });
 
 const PROJET = {
@@ -78,7 +137,7 @@ const faireComposer = async (els) => {
 
 function paquet(sur = {}) {
   return {
-    provider: 'lulu',
+    cle: 'lulu-108x175-broche-standard',
     libelle: 'Lulu — poche 108 × 175',
     papier: 'Papier standard',
     pages: 262,
@@ -97,38 +156,46 @@ function paquet(sur = {}) {
 
 /**
  * Un projet ouvert, avec un Rust de façade qui **tient réellement** la liste des
- * destinataires.
+ * livrables.
  *
- * Depuis le lot 3, le prestataire vit dans le projet et non dans un contrôle : le front
+ * Depuis le lot 3, le livrable vit dans le projet et non dans un contrôle : le front
  * relit la liste à chaque retour de commande. Un faux qui rendrait toujours le même
  * projet ne prouverait donc plus rien — il masquerait justement le câblage qu'on vérifie.
+ *
+ * `pods` sert `PODS` à défaut, et non une liste vide : depuis que les trois réglages de
+ * la ligne se construisent sur l'arbre, un test qui ne le passerait pas verrait la ligne
+ * perdre **tous** ses contrôles — et échouerait loin de la cause. C'est aussi ce que
+ * font les huit autres fichiers de tests, qui rendent l'arbre sans condition, et ce que
+ * fait le Rust, qui ne sait pas servir un catalogue à moitié.
  */
 async function ouvre(
   providers,
   sur = {},
-  { couverture = null, destinataires, dejaCompose = false } = {}
+  { couverture = null, livrables, dejaCompose = false, dosParPapier = {}, pods = PODS } = {}
 ) {
   const appels = [];
-  const liste = (destinataires ?? [chez(providers[0])]).map((d) => ({ ...d }));
+  const liste = (livrables ?? [chez(providers[0])]).map((d) => ({ ...d }));
   let projet = {
     ...PROJET,
     couverture,
-    livraison: { destinataires: liste, courant: liste[0].provider, deja_compose: dejaCompose },
+    livraison: { livrables: liste, courant: liste[0].cle, deja_compose: dejaCompose },
   };
   const maj = (livraison) => {
     projet = { ...projet, livraison: { ...projet.livraison, ...livraison } };
     return projet;
   };
   // Les règles du Rust, modélisées ici : la mesure d'une composition entre chez le
-  // destinataire pour qui elle a été faite, et tout ce qui pagine les efface toutes.
+  // livrable pour qui elle a été faite, et tout ce qui pagine les efface toutes.
   // Sans ce modèle, le front n'aurait plus rien à lire — il ne tient plus de dos.
   const oublier = () => maj({
-    destinataires: projet.livraison.destinataires.map(({ compose, ...d }) => d),
+    livrables: projet.livraison.livrables.map(({ compose, ...d }) => d),
   });
+  // La mesure entre chez tous les livrables du **gabarit** composé : c'est là qu'elle
+  // vit désormais, et c'est ce partage qui rend la comparaison de deux papiers gratuite.
   const retenir = (c) => maj({
     deja_compose: true,
-    destinataires: projet.livraison.destinataires.map((d) => (
-      d.provider === projet.livraison.courant
+    livrables: projet.livraison.livrables.map((d) => (
+      d.gabarit === projet.livraison.livrables.find((x) => x.cle === projet.livraison.courant)?.gabarit
         ? {
           ...d,
           compose: {
@@ -148,6 +215,8 @@ async function ouvre(
       return cmd === 'composer' ? { ...r, projet: retenir(r) } : r;
     }
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return pods;
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -155,29 +224,52 @@ async function ouvre(
     if (cmd === 'maquettes_liste') return [{ cle: 'bandeau', libelle: 'Bandeau' }];
     if (cmd === 'projet_ouvrir') return projet;
     if (cmd === 'couverture_apercu') return { image: 'data:image/png;base64,QUJD', reperes: null };
-    if (cmd === 'destinataire_viser') return maj({ courant: args.providerCle });
-    if (cmd === 'destinataire_regler') {
-      return maj({
-        destinataires: projet.livraison.destinataires.map((d) => (
-          d.provider === args.destinataire.provider
-            ? { ...args.destinataire, compose: undefined }
-            : d
+    if (cmd === 'livrable_viser') return maj({ courant: args.cle });
+    if (cmd === 'livrable_regler') {
+      // Le Rust recalcule le dos à la vue, depuis la formule du papier retenu. Le faux
+      // n'a pas les formules : il sert celui que le test lui donne pour ce papier-là.
+      const redos = (d) => (dosParPapier[d.papier] === undefined || !d.compose
+        ? d
+        : { ...d, compose: { ...d.compose, dos: dosParPapier[d.papier] } });
+      // Le papier change l'identité du livrable, jamais son gabarit : la mesure vit
+      // sous le gabarit, et **survit** au réglage. Le faux ne la touche donc plus.
+      // La reliure, elle, emporte le gabarit avec elle : `LivrableVue.gabarit` est
+      // recalculé sur les trois axes à chaque vue, et le laisser figé ici rendrait un
+      // livrable en spirale dont le gabarit dirait encore « broché ».
+      const l = args.livrable;
+      const gabarit = `${l.pod}-${l.format}-${l.reliure}`;
+      const neuve = `${gabarit}-${l.papier}`;
+      const majee = maj({
+        livrables: projet.livraison.livrables.map((d) => (
+          d.cle === args.cle ? redos({ ...d, ...l, gabarit, cle: neuve }) : d
         )),
       });
+      return projet.livraison.courant === args.cle ? maj({ courant: neuve }) : majee;
     }
-    if (cmd === 'destinataire_ajouter') {
+    if (cmd === 'livrable_ajouter') {
+      const f = args.fabrication;
+      const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
+      // Le faux ne sait rendre que ce que sa table plate porte, et l'arbre `PODS` est
+      // plus riche : un couple que la cascade offre sans ligne plate lèverait ici une
+      // `TypeError` que `tente()` avale, et le test échouerait plus loin sur « l'ajout
+      // n'a rien donné à l'écran » — le message même d'un vrai refus du Rust. Deux
+      // causes, un seul symptôme : celle-ci se nomme.
+      if (!p) throw new Error(`fixture : aucune ligne plate pour ${f.pod}-${f.format}-${f.reliure}`);
+      // La règle du Rust : le refus porte sur les quatre axes, et sur eux seuls.
+      const neuve = `${p.cle}-${f.papier}`;
+      if (projet.livraison.livrables.some((d) => d.cle === neuve)) {
+        throw new Error(`${p.libelle} en ${f.papier} est déjà un livrable de ce livre.`);
+      }
       return maj({
-        destinataires: [
-          ...projet.livraison.destinataires,
-          chez(providers.find((p) => p.cle === args.providerCle)),
+        livrables: [
+          ...projet.livraison.livrables,
+          { ...chez(p), papier: f.papier, cle: neuve },
         ],
       });
     }
-    if (cmd === 'destinataire_retirer') {
+    if (cmd === 'livrable_retirer') {
       return maj({
-        destinataires: projet.livraison.destinataires.filter(
-          (d) => d.provider !== args.providerCle
-        ),
+        livrables: projet.livraison.livrables.filter((d) => d.cle !== args.cle),
       });
     }
     if (cmd === 'interieur_modifier') {
@@ -210,87 +302,355 @@ const attendreComposition = () => new Promise((r) => setTimeout(r, 700));
 const combien = (appels, cmd) => appels.filter(([c]) => c === cmd).length;
 const dernier = (appels, cmd) => appels.filter(([c]) => c === cmd).pop();
 
-/* ---------- la liste des destinataires ---------- */
+/* ---------- la liste des livrables ---------- */
 
 /**
- * Un prestataire qui publie sa formule n'a rien à faire saisir : offrir un champ de
+ * Un imprimeur qui publie sa formule n'a rien à faire saisir : offrir un champ de
  * dos donnerait à croire qu'il compte, alors que la formule prime toujours.
  */
-test('seul un prestataire à gabarit demande un relevé', async () => {
+test('seul un imprimeur à gabarit demande un relevé', async () => {
   const { els } = await ouvre([LULU, COOLLIBRI], {}, {
-    destinataires: [chez(LULU), chez(COOLLIBRI)],
+    livrables: [chez(LULU), chez(COOLLIBRI)],
   });
-  assert.ok(!els.get('dest-dos-lulu'), 'dos saisissable chez Lulu');
-  assert.ok(!els.get('dest-fp-lulu'), 'fond perdu saisissable chez Lulu');
-  assert.ok(els.get('dest-dos-coollibri-148x210'), 'dos non demandé chez CoolLibri');
-  assert.ok(els.get('dest-fp-coollibri-148x210'), 'fond perdu non demandé chez CoolLibri');
+  assert.ok(!els.get('liv-dos-lulu-108x175-broche-standard'), 'dos saisissable chez Lulu');
+  assert.ok(!els.get('liv-fp-lulu-108x175-broche-standard'), 'fond perdu saisissable chez Lulu');
+  assert.ok(els.get('liv-dos-coollibri-148x210-broche-mesure'), 'dos non demandé chez CoolLibri');
+  assert.ok(els.get('liv-fp-coollibri-148x210-broche-mesure'), 'fond perdu non demandé chez CoolLibri');
 });
 
 /**
- * La liste ne montre que les destinataires du livre — c'est tout l'objet du lot : un
- * prestataire n'est plus désigné deux fois, et la table entière n'a plus à s'afficher.
+ * La liste ne montre que les livrables du livre — c'est tout l'objet du lot : un
+ * livrable n'est plus désigné deux fois, et la table entière n'a plus à s'afficher.
  */
-test('la liste ne porte que les destinataires déclarés', async () => {
-  const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { destinataires: [chez(LULU)] });
-  assert.deepStrictEqual(els.get('destinataires').textes('span').filter((t) => t.includes('—')), [
+test('la liste ne porte que les livrables déclarés', async () => {
+  const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { livrables: [chez(LULU)] });
+  assert.deepStrictEqual(els.get('livrables').textes('span').filter((t) => t.includes('—')), [
     'Lulu — poche 108 × 175',
     '108,0 × 175,0 mm — fond perdu 3,175 mm',
   ]);
-  assert.ok(!els.get('dest-papier-kdp-6x9'), 'un prestataire non destinataire est offert');
+  assert.ok(!els.get('liv-papier-kdp-6x9-broche-creme'), 'un gabarit non livrable est offert');
 });
 
-test('on ne peut ajouter que ce qui n\'est pas déjà destinataire', async () => {
-  const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, {
-    destinataires: [chez(LULU), chez(KDP)],
+/**
+ * La liste d'ajout **ne filtre plus** ce qui est déjà déclaré : c'est ce qui permet de
+ * déclarer deux fois le même gabarit pour comparer deux papiers. Ce qui est refusé,
+ * c'est le vrai doublon — les quatre axes —, et c'est le Rust qui le refuse, en le
+ * disant.
+ */
+test('la liste d\'ajout garde les gabarits déjà déclarés', async () => {
+  const { els, appels } = await ouvre([LULU, KDP, COOLLIBRI], {}, {
+    livrables: [chez(LULU), chez(KDP)], pods: PODS,
   });
   assert.deepStrictEqual(
-    els.get('inAjoutDestinataire').textes('option'),
-    ['CoolLibri — A5']
+    els.get('inAjoutPod').textes('option'),
+    ['Lulu', 'Amazon KDP', 'CoolLibri']
   );
 
-  els.get('inAjoutDestinataire').value = 'coollibri-148x210';
-  await els.get('btAjouterDestinataire').declenche('click');
-  assert.ok(els.get('dest-papier-coollibri-148x210'), 'ajout sans effet à l\'écran');
+  els.get('inAjoutPod').value = 'coollibri';
+  await els.get('inAjoutPod').declenche('change');
+  await els.get('btAjouterLivrable').declenche('click');
+  assert.ok(els.get('liv-papier-coollibri-148x210-broche-mesure'), 'ajout sans effet à l\'écran');
+  // La fabrication entière part au Rust, pas une clé à découper : les trois axes du
+  // gabarit viennent de l'arbre du catalogue, le papier est celui d'office du POD.
+  assert.deepStrictEqual({ ...dernier(appels, 'livrable_ajouter')[1].fabrication }, {
+    pod: 'coollibri', format: '148x210', reliure: 'broche', papier: 'mesure',
+  });
   assert.strictEqual(
-    els.get('btAjouterDestinataire').disabled,
-    true,
-    'ajouter reste offert alors que la table est épuisée'
+    els.get('btAjouterLivrable').disabled,
+    false,
+    'ajouter s\'est éteint : la table n\'est jamais épuisée'
   );
 });
 
 /**
- * Le dernier destinataire ne se retire pas : c'est lui qui donne son format à l'aperçu,
+ * Le pendant du filtre disparu : déclarer deux fois les mêmes quatre axes écrirait les
+ * mêmes octets dans deux répertoires. Le Rust refuse, et le refus doit se lire — c'est
+ * la seule chose qui reste à l'écran pour dire pourquoi rien ne s'est ajouté.
+ */
+test('le même livrable deux fois est refusé, et le refus se lit', async () => {
+  const { els } = await ouvre([LULU, KDP], {}, { livrables: [chez(LULU)], pods: PODS });
+
+  els.get('inAjoutPod').value = 'lulu';
+  await els.get('inAjoutPod').declenche('change');
+  await els.get('btAjouterLivrable').declenche('click');
+
+  assert.match(els.get('alerte').textContent, /déjà un livrable/);
+  assert.strictEqual(els.get('livrables').children.length, 1,
+    'le doublon s\'est ajouté malgré le refus');
+});
+
+test('la cascade offre les formats du POD choisi, et eux seuls', async () => {
+  const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { pods: PODS });
+
+  assert.deepStrictEqual(
+    els.get('inAjoutPod').textes('option'),
+    ['Lulu', 'Amazon KDP', 'CoolLibri'],
+    'la liste des POD ne les donne pas tous, ou pas dans l\'ordre du catalogue'
+  );
+  // Le premier POD est choisi d'office : une cascade qui commence vide demande un clic
+  // pour ne rien dire.
+  assert.deepStrictEqual(els.get('inAjoutFormat').textes('option'), ['poche 108 × 175']);
+
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  assert.deepStrictEqual(
+    els.get('inAjoutFormat').textes('option'),
+    ['6 × 9 po', '5 × 8 po'],
+    'changer de POD n\'a pas rechargé ses formats'
+  );
+});
+
+test('l\'ajout envoie les quatre axes, la reliure composable et le premier papier', async () => {
+  const { els, appels } = await ouvre([LULU, KDP, KDP_5X8, COOLLIBRI], {}, { pods: PODS });
+
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  els.get('inAjoutFormat').value = '5x8';
+  await els.get('btAjouterLivrable').declenche('click');
+
+  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_ajouter');
+  // Étalé : la fabrication vient du contexte du front, et `deepStrictEqual` compare
+  // aussi les prototypes — c'est ce que fait déjà l'autre test de l'ajout, plus haut.
+  assert.deepStrictEqual({ ...args.fabrication }, {
+    // La reliure d'office est la première **composable** : la rigide de KDP porte une
+    // raison de ne pas l'être, et le Rust la refuserait.
+    pod: 'kdp', format: '5x8', reliure: 'broche', papier: 'creme',
+  });
+  // L'ajout doit **aboutir**, pas seulement partir. Sans cette ligne, le test lisait le
+  // départ de la commande et rien d'autre : il serait resté vert sur une fabrication que
+  // le Rust refuse, l'exception étant avalée par `tente()`.
+  assert.ok(
+    els.get('liv-papier-kdp-5x8-broche-creme'),
+    'le livrable ajouté ne paraît pas à l\'écran'
+  );
+  // Le format retenu survit à l'ajout, comme le POD : comparer deux papiers d'un même
+  // livre, ce que cet écran existe pour permettre, c'est ajouter deux fois le même
+  // couple imprimeur × format avant de changer le papier sur l'une des deux lignes.
+  assert.strictEqual(
+    els.get('inAjoutFormat').value,
+    '5x8',
+    'le format est retombé sur le premier du POD entre deux ajouts'
+  );
+});
+
+/**
+ * **La promesse du lot, à l'écran.** Deux livrables du même gabarit coexistent, et rien
+ * ne les confond : leurs lignes portent des `id` distincts — c'est la clé à quatre axes
+ * qui les nomme, jamais le gabarit, que les deux partagent — et le sélecteur du pied les
+ * donne à lire distincts, le papier étant tout ce qui les sépare.
+ *
+ * Sans cela, les deux lignes s'écraseraient l'une l'autre dans le document : régler le
+ * papier de la première irait lire le champ de la seconde, et le refus du Rust serait le
+ * seul à s'en apercevoir.
+ */
+test('deux papiers d\'un même gabarit tiennent deux lignes distinctes', async () => {
+  const { els } = await ouvre([KDP], {}, {
+    livrables: [
+      chez(KDP),
+      { ...chez(KDP), papier: 'blanc', cle: 'kdp-6x9-broche-blanc' },
+    ],
+  });
+
+  assert.ok(els.get('liv-papier-kdp-6x9-broche-creme'), 'la ligne du crème manque');
+  assert.ok(els.get('liv-papier-kdp-6x9-broche-blanc'), 'la ligne du blanc manque');
+  assert.strictEqual(els.get('liv-papier-kdp-6x9-broche-creme').value, 'creme');
+  assert.strictEqual(els.get('liv-papier-kdp-6x9-broche-blanc').value, 'blanc');
+  assert.notStrictEqual(
+    els.get('liv-retirer-kdp-6x9-broche-creme'),
+    els.get('liv-retirer-kdp-6x9-broche-blanc'),
+    'les deux lignes ne font qu\'un bouton : les `id` sont fabriqués sur le gabarit'
+  );
+  // Le pied doit les nommer distinctement : c'est là qu'on choisit lequel on compose,
+  // et deux libellés identiques ne se choisiraient pas.
+  assert.deepStrictEqual(els.get('inLivrable').textes('option'), [
+    'Amazon KDP — 6 × 9 po — Crème',
+    'Amazon KDP — 6 × 9 po — Blanc',
+  ]);
+});
+
+/**
+ * Le dernier livrable ne se retire pas : c'est lui qui donne son format à l'aperçu,
  * et une liste vide rendrait la Couverture inutilisable. Le Rust refuse ; le bouton
  * s'éteint plutôt que de mener à ce refus.
  */
-test('le dernier destinataire ne peut pas être retiré', async () => {
+test('le dernier livrable ne peut pas être retiré', async () => {
   const { els, appels } = await ouvre([LULU, KDP], {}, {
-    destinataires: [chez(LULU), chez(KDP)],
+    livrables: [chez(LULU), chez(KDP)],
   });
-  assert.strictEqual(els.get('dest-retirer-lulu').disabled, false);
+  assert.strictEqual(els.get('liv-retirer-lulu-108x175-broche-standard').disabled, false);
 
-  await els.get('dest-retirer-kdp-6x9').declenche('click');
-  assert.strictEqual(dernier(appels, 'destinataire_retirer')[1].providerCle, 'kdp-6x9');
+  await els.get('liv-retirer-kdp-6x9-broche-creme').declenche('click');
+  assert.strictEqual(dernier(appels, 'livrable_retirer')[1].cle, 'kdp-6x9-broche-creme');
   assert.strictEqual(
-    els.get('dest-retirer-lulu').disabled,
+    els.get('liv-retirer-lulu-108x175-broche-standard').disabled,
     true,
-    'le dernier destinataire reste retirable'
+    'le dernier livrable reste retirable'
+  );
+});
+
+/**
+ * Le grisé motivé, tel que la spec § 6 le demande : ce que le POD n'outille pas reste
+ * visible et se refuse en disant pourquoi. « Ce POD ne le fait pas » et « l'application
+ * ne le compose pas » sont deux choses, et l'écran doit les distinguer.
+ */
+test('la ligne offre les reliures du POD, la non outillée grisée avec sa raison', async () => {
+  const { els } = await ouvre([KDP], {}, { pods: PODS, livrables: [chez(KDP)] });
+
+  const reliures = els.get('liv-reliure-kdp-6x9-broche-creme');
+  // Dans l'ordre du fichier, non outillée comprise : l'ordre d'un POD est celui de son
+  // catalogue, et `PODS` déclare la rigide **avant** la brochée chez KDP — c'est ce que
+  // le test de l'ajout exploite pour distinguer « la première composable » de « la
+  // première tout court ». Réordonner à l'affichage inventerait une règle que rien ne
+  // demande, et masquerait cet ordre-là.
+  assert.deepStrictEqual(
+    reliures.textes('option'),
+    ['Couverture rigide', 'Broché — dos carré collé']
+  );
+
+  const [rigide, broche] = reliures.children;
+  assert.strictEqual(broche.disabled, false);
+  assert.strictEqual(rigide.disabled, true, 'une reliure non outillée doit être grisée');
+
+  // La raison en clair, sous la ligne — pas dans une infobulle : c'est la différence
+  // entre « ce POD ne le fait pas » et « l'application ne le compose pas », et elle
+  // doit se lire à l'écran.
+  const raison = els.get('liv-reliure-raison-kdp-6x9-broche-creme');
+  assert.match(raison.textContent, /casewrap/);
+});
+
+// Deux reliures composables chez le même POD : le cas que la reliure réglable rend
+// possible, et qu'aucun POD fourni n'offre encore — BoD a bien deux reliures, mais l'une
+// n'est pas outillée, et un livrable ne peut pas vivre dessus. Le catalogue le permet
+// depuis le lot 1 : `pages` et `parite` vivent sur la reliure, précisément parce que deux
+// reliures d'un même format n'admettent pas la même pagination.
+const DEUX_RELIURES = {
+  cle: 'tbe', nom: 'TheBookEdition',
+  formats: [{ cle: '148x210', nom: 'A5' }],
+  reliures: [
+    { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    { cle: 'spirale', nom: 'Reliure spirale', non_outille: null },
+  ],
+  finitions: [],
+  papiers: [{ cle: 'munken-80', libelle: 'Munken 80 g', teinte: '#f7f0e0', dos_publie: true }],
+};
+// Les deux entrées plates ci-dessous sont exactement ce qu'`aplatit` rend pour ce POD :
+// une par POD × format × reliure composable, même libellé — le libellé de ligne ne dit
+// pas la reliure, qui se lit dans son propre contrôle. Tant qu'`aplatit` ne produisait
+// qu'une entrée par POD × format, cette fixture décrivait un catalogue impossible, et
+// c'est ce qui masquait le trou : régler la reliure désignait un gabarit absent de la
+// table, et l'écran dégradait en silence.
+const TBE_BROCHE = {
+  cle: 'tbe-148x210-broche', pod: 'tbe', format: '148x210', reliure: 'broche',
+  libelle: 'TheBookEdition — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
+};
+const TBE_SPIRALE = { ...TBE_BROCHE, cle: 'tbe-148x210-spirale', reliure: 'spirale' };
+
+test('régler la reliure renvoie les quatre axes au Rust', async () => {
+  const { els, appels } = await ouvre(
+    [TBE_BROCHE, TBE_SPIRALE],
+    {},
+    { pods: [DEUX_RELIURES], livrables: [chez(TBE_BROCHE, 'munken-80')] }
+  );
+
+  const reliures = els.get('liv-reliure-tbe-148x210-broche-munken-80');
+  reliures.value = 'spirale';
+  await reliures.declenche('change');
+
+  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_regler');
+  assert.strictEqual(args.cle, 'tbe-148x210-broche-munken-80');
+  assert.strictEqual(args.livrable.reliure, 'spirale');
+  assert.strictEqual(args.livrable.pod, 'tbe');
+  assert.strictEqual(args.livrable.format, '148x210');
+});
+
+test('deux livrables du même papier se distinguent par leur reliure au pied', async () => {
+  // Le pointeur du pied et les comptes rendus de package ne portent aucun contrôle : ce
+  // qui distingue deux livrables doit s'y lire dans le libellé, ou ne s'y lit pas. Depuis
+  // que la reliure se règle, elle peut être ce qui les distingue à elle seule.
+  const broche = chez(TBE_BROCHE, 'munken-80');
+  const spirale = {
+    ...chez(TBE_SPIRALE, 'munken-80'),
+    cle: 'tbe-148x210-spirale-munken-80',
+    gabarit: 'tbe-148x210-spirale',
+  };
+  const { els } = await ouvre(
+    [TBE_BROCHE, TBE_SPIRALE],
+    {},
+    { pods: [DEUX_RELIURES], livrables: [broche, spirale] }
+  );
+
+  const [un, deux] = els.get('inLivrable').textes('option');
+  assert.notStrictEqual(un, deux, 'deux livrables ne doivent jamais se lire identiques');
+  assert.match(un, /Broché/);
+  assert.match(deux, /spirale/i);
+});
+
+test('la finition ne paraît que chez un POD qui en déclare', async () => {
+  const chezKdp = await ouvre([KDP], {}, { pods: PODS, livrables: [chez(KDP)] });
+  const finitions = chezKdp.els.get('liv-finition-kdp-6x9-broche-creme');
+  assert.ok(finitions, 'KDP déclare une finition : le contrôle doit être là');
+  // Le vide en tête : aucune finition est le cas courant, et il doit rester choisissable.
+  assert.deepStrictEqual(finitions.textes('option'), ['—', 'Pelliculage mat']);
+
+  const chezLulu = await ouvre([LULU], {}, { pods: PODS });
+  assert.ok(
+    !chezLulu.els.get('liv-finition-lulu-108x175-broche-standard'),
+    'un POD sans finition ne doit pas offrir un contrôle vide'
+  );
+});
+
+test('le relevé de dos suit le papier, pas le POD', async () => {
+  // Un POD dont un papier publie sa formule et l'autre pas : le cas que la table plate
+  // ne savait pas dire, puisqu'elle tranchait sur le papier d'office.
+  const mixte = {
+    cle: 'mixte', nom: 'Mixte',
+    formats: [{ cle: 'a5', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché', non_outille: null }],
+    finitions: [],
+    papiers: [
+      { cle: 'formule', libelle: 'Papier à formule', teinte: '#ffffff', dos_publie: true },
+      { cle: 'gabarit', libelle: 'Papier à relever', teinte: '#ffffff', dos_publie: false },
+    ],
+  };
+  const plat = {
+    cle: 'mixte-a5-broche', pod: 'mixte', format: 'a5', reliure: 'broche',
+    libelle: 'Mixte — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
+  };
+  const { els } = await ouvre([plat], {}, { pods: [mixte], livrables: [chez(plat, 'formule')] });
+
+  assert.ok(
+    !els.get('liv-dos-mixte-a5-broche-formule'),
+    'le papier à formule ne doit pas réclamer de relevé'
+  );
+
+  els.get('liv-papier-mixte-a5-broche-formule').value = 'gabarit';
+  await els.get('liv-papier-mixte-a5-broche-formule').declenche('change');
+  assert.ok(
+    els.get('liv-dos-mixte-a5-broche-gabarit'),
+    'le papier à relever doit réclamer son dos'
   );
 });
 
 /* ---------- les relevés ---------- */
 
 test('un relevé saisi part au projet, avec le papier de la ligne', async () => {
-  const { els, appels } = await ouvre([COOLLIBRI], {}, { destinataires: [chez(COOLLIBRI)] });
+  const { els, appels } = await ouvre([COOLLIBRI], {}, { livrables: [chez(COOLLIBRI)] });
 
-  els.get('dest-dos-coollibri-148x210').value = '18.4';
-  els.get('dest-fp-coollibri-148x210').value = '4';
-  await els.get('dest-dos-coollibri-148x210').declenche('change');
+  els.get('liv-dos-coollibri-148x210-broche-mesure').value = '18.4';
+  els.get('liv-fp-coollibri-148x210-broche-mesure').value = '4';
+  await els.get('liv-dos-coollibri-148x210-broche-mesure').declenche('change');
 
+  // Le livrable entier voyage, ses trois axes de gabarit compris : régler son papier
+  // change son identité, et `cle` dit lequel il était pour que `courant` puisse suivre.
+  const [, args] = dernier(appels, 'livrable_regler');
+  assert.strictEqual(args.cle, 'coollibri-148x210-broche-mesure');
   // Étalé : l'objet vient du contexte `vm`, et `deepStrictEqual` compare les prototypes.
-  assert.deepStrictEqual({ ...dernier(appels, 'destinataire_regler')[1].destinataire }, {
-    provider: 'coollibri-148x210',
+  assert.deepStrictEqual({ ...args.livrable }, {
+    pod: 'coollibri',
+    format: '148x210',
+    reliure: 'broche',
     papier: 'mesure',
+    finition: null,
     dos_mm: 18.4,
     fond_perdu_mm: 4,
   });
@@ -303,14 +663,14 @@ test('un relevé saisi part au projet, avec le papier de la ligne', async () => 
  */
 test('un relevé effacé redevient une absence, jamais un zéro', async () => {
   const { els, appels } = await ouvre([COOLLIBRI], {}, {
-    destinataires: [{ ...chez(COOLLIBRI), dos_mm: 18.4, fond_perdu_mm: 4 }],
+    livrables: [{ ...chez(COOLLIBRI), dos_mm: 18.4, fond_perdu_mm: 4 }],
   });
-  assert.strictEqual(els.get('dest-dos-coollibri-148x210').value, '18.4');
+  assert.strictEqual(els.get('liv-dos-coollibri-148x210-broche-mesure').value, '18.4');
 
-  els.get('dest-dos-coollibri-148x210').value = '';
-  await els.get('dest-dos-coollibri-148x210').declenche('change');
+  els.get('liv-dos-coollibri-148x210-broche-mesure').value = '';
+  await els.get('liv-dos-coollibri-148x210-broche-mesure').declenche('change');
 
-  assert.strictEqual(dernier(appels, 'destinataire_regler')[1].destinataire.dos_mm, null);
+  assert.strictEqual(dernier(appels, 'livrable_regler')[1].livrable.dos_mm, null);
 });
 
 /* ---------- génération ---------- */
@@ -321,8 +681,8 @@ test('un relevé effacé redevient une absence, jamais un zéro', async () => {
  */
 test('générer ne transmet aucune liste : elle est dans le projet', async () => {
   const { els, appels } = await ouvre([LULU, KDP], {
-    packager: () => [{ provider: 'lulu', libelle: 'Lulu', package: paquet(), erreur: null }],
-  }, { destinataires: [chez(LULU), chez(KDP)] });
+    packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
+  }, { livrables: [chez(LULU), chez(KDP)] });
 
   await els.get('btPackager').declenche('click');
   assert.deepStrictEqual(dernier(appels, 'packager')[1], undefined);
@@ -330,22 +690,22 @@ test('générer ne transmet aucune liste : elle est dans le projet', async () =>
 });
 
 /**
- * Un prestataire en échec ne doit pas emporter les autres : ce qui a été produit est
+ * Un livrable en échec ne doit pas emporter les autres : ce qui a été produit est
  * livrable, et l'échec doit être lisible plutôt que noyé dans un message global.
  */
-test('un prestataire en échec est signalé sans masquer ceux qui ont abouti', async () => {
+test('un livrable en échec est signalé sans masquer ceux qui ont abouti', async () => {
   const { els } = await ouvre([LULU, KDP], {
     packager: () => [
-      { provider: 'lulu', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null },
+      { cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null },
       {
-        provider: 'kdp-6x9',
+        cle: 'kdp-6x9-broche-creme',
         libelle: 'Amazon KDP',
         package: null,
         vignette: null,
         erreur: '1200 pages : tranche de gouttière absente du gabarit kdp-6x9',
       },
     ],
-  }, { destinataires: [chez(LULU), chez(KDP)] });
+  }, { livrables: [chez(LULU), chez(KDP)] });
   await els.get('btPackager').declenche('click');
 
   const box = els.get('packages');
@@ -363,7 +723,7 @@ test('un prestataire en échec est signalé sans masquer ceux qui ont abouti', a
 test('un package composé par repli porte l\'alerte de police', async () => {
   const { els } = await ouvre([LULU], {
     packager: () => [{
-      provider: 'lulu', libelle: 'Lulu', erreur: null,
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', erreur: null,
       package: paquet({ polices_introuvables: ['plume ivan'] }),
     }],
   });
@@ -376,7 +736,7 @@ test('un package composé par repli porte l\'alerte de police', async () => {
 
 test('un package sans substitution n\'affiche aucune alerte de police', async () => {
   const { els } = await ouvre([LULU], {
-    packager: () => [{ provider: 'lulu', libelle: 'Lulu', package: paquet(), erreur: null }],
+    packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   });
   await els.get('btPackager').declenche('click');
   assert.doesNotMatch(els.get('packages').textContent, /repli/);
@@ -391,7 +751,7 @@ test('un package sans substitution n\'affiche aucune alerte de police', async ()
 test('un dos trop mince pour son texte porte l\'alerte sur son package', async () => {
   const { els } = await ouvre([LULU], {
     packager: () => [{
-      provider: 'lulu', libelle: 'Lulu', erreur: null,
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', erreur: null,
       package: paquet({ dos: 4.2, dos_requis: 6.31 }),
     }],
   });
@@ -405,7 +765,7 @@ test('un dos trop mince pour son texte porte l\'alerte sur son package', async (
 
 test('un dos qui tient n\'affiche aucune alerte', async () => {
   const { els } = await ouvre([LULU], {
-    packager: () => [{ provider: 'lulu', libelle: 'Lulu', package: paquet(), erreur: null }],
+    packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   });
   await els.get('btPackager').declenche('click');
   assert.doesNotMatch(els.get('packages').textContent, /rogné/);
@@ -414,7 +774,7 @@ test('un dos qui tient n\'affiche aucune alerte', async () => {
 test('un package affiche le dos, la planche et les fichiers produits', async () => {
   const { els } = await ouvre([LULU], {
     packager: () => [{
-      provider: 'lulu', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
     }],
   });
   await els.get('btPackager').declenche('click');
@@ -432,14 +792,14 @@ test('un package affiche le dos, la planche et les fichiers produits', async () 
 
 /**
  * Le répertoire une fois, les noms ensuite. Ce n'est pas de la cosmétique : le compte
- * rendu de deux destinataires ne tient dans la fenêtre que si le chemin du projet n'y
+ * rendu de deux livrables ne tient dans la fenêtre que si le chemin du projet n'y
  * est pas écrit quatre fois. Ce que le test protège, c'est que les noms de fichiers
  * restent lisibles — pas la mise en page qui les range.
  */
 test('les fichiers d\'un package nomment leur répertoire une seule fois', async () => {
   const { els } = await ouvre([LULU], {
     packager: () => [{
-      provider: 'lulu', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
     }],
   });
   await els.get('btPackager').declenche('click');
@@ -460,7 +820,7 @@ test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
   const disperses = { ...paquet(), chemins: ['/a/interieur.pdf', '/b/couverture.pdf'] };
   const { els } = await ouvre([LULU], {
     packager: () => [{
-      provider: 'lulu', libelle: 'Lulu', package: disperses, vignette: null, erreur: null,
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: disperses, vignette: null, erreur: null,
     }],
   });
   await els.get('btPackager').declenche('click');
@@ -471,24 +831,24 @@ test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
 
 /**
  * La vignette est le seul endroit où « est-ce que ça tient » se vérifie sur du vrai,
- * pour chaque prestataire, avec son dos mesuré. Le package qui a échoué n'en a pas —
+ * pour chaque livrable, avec son dos mesuré. Le package qui a échoué n'en a pas —
  * et l'absence ne doit pas poser une image vide, qui se lirait comme une planche.
  */
 test('chaque package abouti montre sa planche en vignette', async () => {
   const { els } = await ouvre([LULU, KDP], {
     packager: () => [
       {
-        provider: 'lulu',
+        cle: 'lulu-108x175-broche-standard',
         libelle: 'Lulu',
         package: paquet(),
         vignette: 'data:image/png;base64,QUJD',
         erreur: null,
       },
       {
-        provider: 'kdp-6x9', libelle: 'KDP', package: null, vignette: null, erreur: 'raté',
+        cle: 'kdp-6x9-broche-creme', libelle: 'KDP', package: null, vignette: null, erreur: 'raté',
       },
     ],
-  }, { destinataires: [chez(LULU), chez(KDP)] });
+  }, { livrables: [chez(LULU), chez(KDP)] });
   await els.get('btPackager').declenche('click');
 
   const images = [];
@@ -520,7 +880,7 @@ test('l\'aperçu de planche n\'a pas de dos tant que l\'intérieur n\'est pas co
 
 /**
  * Le gabarit ne voyage plus avec l'aperçu : le Rust le lit dans le projet. Le repasser
- * ici rouvrirait la porte à deux vérités sur le prestataire courant.
+ * ici rouvrirait la porte à deux vérités sur le gabarit courant.
  */
 test('l\'aperçu ne transporte plus de gabarit', async () => {
   const { els, appels } = await ouvre([LULU], {}, { couverture: {} });
@@ -542,8 +902,8 @@ test('une fois l\'intérieur composé, l\'aperçu de planche reçoit ce dos-là'
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 });
 
-/** Composer, c'est composer pour le destinataire visé : plus rien à lui désigner. */
-test('composer ne transmet plus de prestataire', async () => {
+/** Composer, c'est composer pour le livrable visé : plus rien à lui désigner. */
+test('composer ne transmet plus de livrable', async () => {
   const { els, appels } = await ouvre([LULU], { composer: COMPOSITION });
   await faireComposer(els);
   assert.deepStrictEqual(dernier(appels, 'composer')[1], undefined);
@@ -551,21 +911,21 @@ test('composer ne transmet plus de prestataire', async () => {
 
 /**
  * Le dos vaut pour un gabarit et un seul : le même manuscrit ne fait pas le même
- * nombre de pages en poche et en grand format. Le traîner d'un destinataire à l'autre
+ * nombre de pages en poche et en grand format. Le traîner d'un livrable à l'autre
  * donnerait à voir une planche fausse, et c'est exactement le défaut que l'atelier
  * HTML avait.
  */
-test('viser un autre destinataire périme le dos de l\'aperçu', async () => {
+test('viser un autre livrable périme le dos de l\'aperçu', async () => {
   const { els, appels } = await ouvre([LULU, KDP], { composer: COMPOSITION }, {
-    couverture: {}, destinataires: [chez(LULU), chez(KDP)],
+    couverture: {}, livrables: [chez(LULU), chez(KDP)],
   });
   await faireComposer(els);
   await face(els, 'Planche').declenche('click');
   await attendreApercu();
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 
-  els.get('inDestinataire').value = 'kdp-6x9';
-  await els.get('inDestinataire').declenche('change');
+  els.get('inLivrable').value = 'kdp-6x9-broche-creme';
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   assert.strictEqual(
     dernier(appels, 'couverture_apercu')[1].dosMm,
@@ -575,25 +935,39 @@ test('viser un autre destinataire périme le dos de l\'aperçu', async () => {
 });
 
 /**
- * Le papier est la cause la plus chère des trois, parce qu'il déplace le dos **sans
- * passer par la pagination** : chez KDP, 0,0635 mm par page en crème contre 0,0572 en
- * blanc, soit 1,65 mm d'écart sur 262 pages — l'épaisseur d'une couverture entière.
+ * Le papier déplace le dos **sans passer par la pagination** : chez KDP, 0,0635 mm par
+ * page en crème contre 0,0572 en blanc, soit 1,65 mm d'écart sur 262 pages —
+ * l'épaisseur d'une couverture entière.
+ *
+ * Ce n'est plus une péremption depuis que la mesure vit sous le gabarit : les deux
+ * papiers la partagent, et chacun en tire son dos. La planche doit donc montrer
+ * aussitôt celui du blanc — et **sans recomposer**, c'est toute la promesse du lot.
+ * Le chiffre est recalculé par le Rust ; ce qui se vérifie ici, c'est que le pointeur a
+ * suivi l'identité du livrable réglé, faute de quoi l'aperçu n'aurait plus de dos du
+ * tout.
  */
-test('un dos calculé sur un autre papier ne vaut plus rien', async () => {
-  const { els, appels } = await ouvre([KDP], { composer: COMPOSITION }, { couverture: {} });
+test('changer de papier montre le dos de ce papier, sans recomposer', async () => {
+  const { els, appels } = await ouvre([KDP], { composer: COMPOSITION }, {
+    couverture: {}, dosParPapier: { blanc: 14.986 },
+  });
   await faireComposer(els);
   await face(els, 'Planche').declenche('click');
   await attendreApercu();
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
+  const avant = combien(appels, 'composer');
 
-  els.get('dest-papier-kdp-6x9').value = 'blanc';
-  await els.get('dest-papier-kdp-6x9').declenche('change');
+  els.get('liv-papier-kdp-6x9-broche-creme').value = 'blanc';
+  await els.get('liv-papier-kdp-6x9-broche-creme').declenche('change');
+  await attendreComposition();
   await attendreApercu();
+
   assert.strictEqual(
     dernier(appels, 'couverture_apercu')[1].dosMm,
-    null,
-    'dos du papier crème réutilisé pour le blanc'
+    14.986,
+    'dos du papier crème réutilisé pour le blanc, ou pointeur perdu en chemin'
   );
+  assert.strictEqual(combien(appels, 'composer'), avant,
+    'comparer deux papiers a coûté une composition');
 });
 
 /**
@@ -620,22 +994,22 @@ test('un dos calculé pour une autre police ne vaut plus rien', async () => {
 
 /**
  * **Le test qui porte le lot.** Le même livre a autant de paginations que de gabarits,
- * et chacune coûte une composition entière. Les retenir une par destinataire, dans le
- * projet, fait de la lunette ce qu'elle prétend être : revenir sur un prestataire déjà
+ * et chacune coûte une composition entière. Les retenir une par livrable, dans le
+ * projet, fait de la lunette ce qu'elle prétend être : revenir sur un livrable déjà
  * composé retrouve son dos, sans rien recalculer et sans emprunter celui du voisin.
  *
  * Le compte des `composer` est la moitié du test : sans lui, une implémentation qui
  * recomposerait en douce à chaque aller-retour passerait pour juste.
  */
-test('revenir à un destinataire déjà composé retrouve son dos sans recomposer', async () => {
+test('revenir à un livrable déjà composé retrouve son dos sans recomposer', async () => {
   const dos = [16.513, 21.4];
   let n = 0;
   const { els, appels } = await ouvre([LULU, KDP], {
     composer: () => ({ ...COMPOSITION, dos: dos[n++] }),
-  }, { couverture: {}, destinataires: [chez(LULU), chez(KDP)] });
+  }, { couverture: {}, livrables: [chez(LULU), chez(KDP)] });
   const vise = async (cle) => {
-    els.get('inDestinataire').value = cle;
-    await els.get('inDestinataire').declenche('change');
+    els.get('inLivrable').value = cle;
+    await els.get('inLivrable').declenche('change');
     await attendreComposition();
   };
   await faireComposer(els);
@@ -644,15 +1018,15 @@ test('revenir à un destinataire déjà composé retrouve son dos sans recompose
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513);
 
   // KDP n'a jamais été composé : la veille s'en charge, et lui donne son dos à lui.
-  await vise('kdp-6x9');
+  await vise('kdp-6x9-broche-creme');
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 21.4);
 
   const avant = combien(appels, 'composer');
-  await vise('lulu');
+  await vise('lulu-108x175-broche-standard');
   assert.strictEqual(dernier(appels, 'couverture_apercu')[1].dosMm, 16.513,
     'le dos de Lulu n\'a pas été retrouvé');
   assert.strictEqual(combien(appels, 'composer'), avant,
-    'revenir sur un destinataire déjà composé a recomposé');
+    'revenir sur un livrable déjà composé a recomposé');
 });
 
 /**
@@ -910,7 +1284,7 @@ test('un dos calculé sur un autre manuscrit ne vaut plus rien', async () => {
 test('réimporter le manuscrit efface ce que l\'ancien texte avait fait afficher', async () => {
   const { els } = await ouvre([LULU], {
     composer: COMPOSITION,
-    packager: [{ provider: 'lulu', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null }],
+    packager: [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null }],
     epreuve_tirer: '/livres/LHC/epreuve.pdf',
   }, { couverture: {} });
 
@@ -937,7 +1311,7 @@ test('réimporter le manuscrit efface ce que l\'ancien texte avait fait afficher
 });
 
 /**
- * Remplacer le texte n'est pas changer de livre : le projet, ses destinataires et
+ * Remplacer le texte n'est pas changer de livre : le projet, ses livrables et
  * l'étape où l'on travaille sont les mêmes avant et après. Oublier les sorties du
  * précédent — celles qui renvoient à l'accueil et vident la liste — renverrait au Livre
  * quelqu'un qui venait de réimporter depuis la Livraison.
@@ -951,6 +1325,6 @@ test('réimporter le manuscrit ne quitte pas l\'étape où l\'on travaille', asy
 
   assert.strictEqual(els.get('etapeLivraison').hidden, false,
     'un réimport a renvoyé au Livre');
-  assert.ok(els.get('destinataires').textes('span').includes('Lulu — poche 108 × 175'),
-    'un réimport a vidé la liste des destinataires');
+  assert.ok(els.get('livrables').textes('span').includes('Lulu — poche 108 × 175'),
+    'un réimport a vidé la liste des livrables');
 });

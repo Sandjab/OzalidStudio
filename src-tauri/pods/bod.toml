@@ -1,0 +1,173 @@
+# BoD (Books on Demand) — Hambourg, filiale française, impression Europe.
+#
+# Imprimer n'oblige pas à publier : le parcours myBoD permet de commander pour soi sans
+# référencer le titre. C'est ce qui en fait le défaut du comparatif POD du 19/08/2026.
+#
+# Formats et marges relevés dans les modèles Word « Roman A » du 11/12/2024, épaisseurs et
+# bornes au calculateur de couverture officiel
+# (https://www.bod.fr/aide/calcul-de-la-couverture.html), le 26/08/2026. Les quatre modèles
+# de BoD ne s'accordent pas partout — Roman A fait foi, c'est celui dont le format
+# historique est tiré. Le détail des divergences est dans la reconnaissance du lot 4,
+# verdict 3.
+
+cle = "bod"
+nom = "BoD"
+# Guide de maquette BoD, confirmé par le calculateur, qui rend « fond perdu » à 0,5 cm sur
+# tous les formats interrogés. Commun à ses formats.
+fond_perdu = 5.0
+
+# Le format historique reste en tête : c'est lui que la cascade propose d'office, et le
+# seul sur lequel des livres ont déjà été composés. Ses marges portent l'arrondi du lot 1
+# — 18,8 là où le modèle Word donne 18,75 — et ne doivent pas être « corrigées » : le
+# témoin de non-régression en dépend.
+[[format]]
+cle = "135x215"
+nom = "13,5 × 21,5 cm"
+mm = { largeur = 135.0, hauteur = 215.0 }
+marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
+# BoD ne module pas la marge de reliure selon l'épaisseur — tranche unique, couvrant les
+# 24 à 900 pages que sa couverture souple admet.
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
+source = "modèle Word « Roman A » 13,5 × 21,5"
+
+[[format]]
+cle = "120x190"
+nom = "12 × 19 cm"
+mm = { largeur = 120.0, hauteur = 190.0 }
+marges = { haut = 15.0, bas = 22.0, exterieur = 15.0 }
+gouttieres = [ { de = 24, a = 900, mm = 18.0 } ]
+source = "modèle Word « Roman A » 12 × 19"
+
+[[format]]
+cle = "148x210"
+nom = "14,8 × 21 cm"
+mm = { largeur = 148.0, hauteur = 210.0 }
+marges = { haut = 18.7, bas = 28.0, exterieur = 16.0 }
+gouttieres = [ { de = 24, a = 900, mm = 22.0 } ]
+source = "modèle Word « Roman A » 14,8 × 21"
+
+[[format]]
+cle = "155x220"
+nom = "15,5 × 22 cm"
+mm = { largeur = 155.0, hauteur = 220.0 }
+marges = { haut = 18.7, bas = 28.0, exterieur = 16.0 }
+gouttieres = [ { de = 24, a = 900, mm = 22.0 } ]
+source = "modèle Word « Roman A » 15,5 × 22"
+
+[[format]]
+cle = "170x170"
+nom = "17 × 17 cm"
+mm = { largeur = 170.0, hauteur = 170.0 }
+marges = { haut = 13.0, bas = 24.0, exterieur = 16.0 }
+gouttieres = [ { de = 24, a = 900, mm = 21.0 } ]
+source = "modèle Word « Roman A » 17 × 17"
+
+[[format]]
+cle = "170x220"
+nom = "17 × 22 cm"
+mm = { largeur = 170.0, hauteur = 220.0 }
+marges = { haut = 18.7, bas = 28.0, exterieur = 16.0 }
+gouttieres = [ { de = 24, a = 900, mm = 22.0 } ]
+source = "modèle Word « Roman A » 17 × 22"
+
+[[format]]
+cle = "190x270"
+nom = "19 × 27 cm"
+mm = { largeur = 190.0, hauteur = 270.0 }
+marges = { haut = 21.0, bas = 28.0, exterieur = 22.0 }
+gouttieres = [ { de = 24, a = 900, mm = 26.0 } ]
+source = "modèle Word « Roman A » 19 × 27"
+
+# BoD nomme ce format « 21 x 15 cm » : c'est le seul à l'italienne de son catalogue. Son
+# modèle « Livre pratique A » du même nom contient une page de 210 × 210 mm — un fichier
+# mal préparé chez eux ; les trois autres modèles s'accordent sur 210 × 150.
+[[format]]
+cle = "210x150"
+nom = "21 × 15 cm"
+mm = { largeur = 210.0, hauteur = 150.0 }
+marges = { haut = 14.0, bas = 23.0, exterieur = 16.0 }
+gouttieres = [ { de = 24, a = 900, mm = 21.0 } ]
+source = "modèle Word « Roman A » 21 × 15 ; le « Livre pratique A » du même nom est faux"
+
+[[format]]
+cle = "210x210"
+nom = "21 × 21 cm"
+mm = { largeur = 210.0, hauteur = 210.0 }
+marges = { haut = 16.0, bas = 26.0, exterieur = 19.0 }
+gouttieres = [ { de = 24, a = 900, mm = 24.0 } ]
+source = "modèle Word « Roman A » 21 × 21"
+
+[[format]]
+cle = "210x297"
+nom = "21 × 29,7 cm"
+mm = { largeur = 210.0, hauteur = 297.0 }
+marges = { haut = 24.0, bas = 33.0, exterieur = 22.3 }
+gouttieres = [ { de = 24, a = 900, mm = 26.0 } ]
+source = "modèle Word « Roman A » 21 × 29,7 ; le « Roman B » donne 14 mm en haut, écarté"
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 24, max = 900 }
+parite = "paire"
+source = "calculateur : minimum 24 pages, maximum 900, compte pair obligatoire"
+
+# La géométrie est relevable — le calculateur rend le rempli et le rabat —, mais `planche`
+# ne sait pas la composer : une couverture rigide déborde du livre, se replie à l'intérieur
+# des plats et se monte sur des cartons. La spec range ce chantier hors périmètre.
+[[reliure]]
+cle = "rigide"
+nom = "Couverture rigide"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+
+# Trois pelliculages, offerts sur toutes les couvertures. Aucun n'a d'effet sur la
+# composition : la finition nomme une option de commande, et le livrable en garde la trace.
+[[finition]]
+cle = "mat"
+nom = "Pelliculage mat"
+
+[[finition]]
+cle = "brillant"
+nom = "Pelliculage brillant"
+
+[[finition]]
+cle = "relief"
+nom = "Pelliculage en relief"
+
+# BoD : dos = pages × épaisseur_feuille/2 + 0,6 mm de couverture. Le terme constant est le
+# carton de 250 g, identique pour les quatre papiers — vérifié sur chaque relevé, où le
+# calculateur sépare l'épaisseur du bloc (`spine_width`) du dos total (`thickness`).
+# Le crème 90 g reste en tête : c'est le papier d'office de BoD, et celui du roman.
+[[papier]]
+cle = "creme-90"
+nom = "Crème 90 g"
+teinte = "#f7f0e0"
+dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
+source = "calculateur, 0,0135 cm/feuille — 24 p → 1,62 mm, 280 p → 19,5 mm, 868 p → 58,59 mm"
+
+[[papier]]
+cle = "blanc-90"
+nom = "Blanc 90 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.06, plus = 0.6 }
+source = "calculateur, 0,012 cm/feuille — 24 p → 1,44 mm, 868 p → 52,08 mm"
+
+[[papier]]
+cle = "photo-mat-120"
+nom = "Photo mat 120 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.063, plus = 0.6 }
+source = "calculateur, 0,0126 cm/feuille — 24 p → 1,512 mm, 500 p → 31,5 mm"
+
+# Le seul papier qui plafonne plus bas que sa reliure : 868 pages contre 900. La valeur
+# vient d'une clé de configuration du calculateur (`[PhotoBrilliant]: 868`, relevé du lot 4,
+# § 8), sans raison donnée avec la valeur. Ce n'est pas une question d'épaisseur : à 0,0101
+# cm/feuille, c'est au contraire le plus mince des quatre papiers de la table.
+[[papier]]
+cle = "photo-brillant-130"
+nom = "Photo brillant 130 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.0505, plus = 0.6 }
+pages = { min = 24, max = 868 }
+source = "calculateur, 0,0101 cm/feuille — 24 p → 1,212 mm, 868 p → 43,834 mm ; plafond à 868"

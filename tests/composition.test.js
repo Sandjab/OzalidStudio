@@ -7,28 +7,78 @@ const path = require('node:path');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 const KDP = {
-  cle: 'kdp-6x9', libelle: 'Amazon KDP — 6 × 9 po',
-  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'creme', libelle: 'Crème' }, { cle: 'blanc', libelle: 'Blanc' }],
+  cle: 'kdp-6x9-broche', pod: 'kdp', format: '6x9', reliure: 'broche',
+  libelle: 'Amazon KDP — 6 × 9 po',
+  largeur: 152.4, hauteur: 228.6, fond_perdu: 3.175,
 };
 const COOLLIBRI = {
-  cle: 'coollibri-148x210', libelle: 'CoolLibri — A5',
-  largeur: 148, hauteur: 210, fond_perdu: null, dos_publie: false,
-  papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit' }],
+  cle: 'coollibri-148x210-broche', pod: 'coollibri', format: '148x210', reliure: 'broche',
+  libelle: 'CoolLibri — A5',
+  largeur: 148, hauteur: 210, fond_perdu: null,
 };
 
-/** La livraison d'un livre qui n'a qu'un destinataire, comme un projet neuf en a un. */
-const livraison = (p) => ({
-  destinataires: [{
-    provider: p.cle, papier: p.papiers[0].cle, dos_mm: null, fond_perdu_mm: null,
-  }],
-  courant: p.cle,
-});
+// L'arbre du catalogue, tel que `pods_liste` le rend. Volontairement plus riche que la
+// table plate des tests : c'est lui qui porte les choix, et le grisé motivé n'a rien à
+// lire ailleurs.
+//
+// Chez KDP, la reliure non outillée est posée **avant** la composable : c'est le seul
+// ordre qui laisse le test de l'ajout distinguer « la première composable » de « la
+// première tout court ». Avec l'ordre inverse, les deux règles rendent la même reliure
+// et le test ne protège plus rien.
+const PODS = [
+  {
+    cle: 'lulu', nom: 'Lulu',
+    formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+  },
+  {
+    cle: 'kdp', nom: 'Amazon KDP',
+    formats: [{ cle: '6x9', nom: '6 × 9 po' }, { cle: '5x8', nom: '5 × 8 po' }],
+    reliures: [
+      { cle: 'rigide', nom: 'Couverture rigide', non_outille: 'géométrie du casewrap non relevée' },
+      { cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null },
+    ],
+    finitions: [{ cle: 'mat', nom: 'Pelliculage mat' }],
+    papiers: [
+      { cle: 'creme', libelle: 'Crème', teinte: '#f7f0e0', dos_publie: true },
+      { cle: 'blanc', libelle: 'Blanc', teinte: '#ffffff', dos_publie: true },
+    ],
+  },
+  {
+    cle: 'coollibri', nom: 'CoolLibri',
+    formats: [{ cle: '148x210', nom: 'A5' }],
+    reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+    finitions: [],
+    papiers: [{ cle: 'mesure', libelle: 'Dos relevé sur le gabarit', teinte: '#ffffff', dos_publie: false }],
+  },
+];
+
+/**
+ * La livraison d'un livre qui n'a qu'un livrable, comme un projet neuf en a un. La clé
+ * à quatre axes est fabriquée **une fois** ici : le front la reçoit du Rust, il ne la
+ * recompose jamais.
+ *
+ * Le papier d'office vient de l'arbre (`PODS`), pas de la table plate : c'est elle qui
+ * porte l'offre, la table ne décrivant plus qu'un gabarit depuis le retrait de son champ
+ * `papiers`.
+ */
+const livraison = (p) => {
+  const papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle;
+  const d = {
+    cle: `${p.pod}-${p.format}-${p.reliure}-${papier}`,
+    gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
+    papier, finition: null, dos_mm: null, fond_perdu_mm: null,
+    compose: null,
+  };
+  return { livrables: [d], courant: d.cle };
+};
 
 const PROJET = {
   chemin: '/livres/LHC.ozalid',
@@ -71,6 +121,8 @@ function faux(providers, sur = {}) {
   const servi = sur.projet_ouvrir ?? sur.projet_importer ?? PROJET;
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return PODS;
+    if (cmd === 'catalogue_refus') return [];
     // Recharger un manuscrit périme tout ce qui a été mesuré : c'est la règle du Rust,
     // et sans elle le front n'aurait rien à recomposer.
     if (cmd === 'manuscrit_reimporter' && !(cmd in sur)) {
@@ -78,7 +130,7 @@ function faux(providers, sur = {}) {
         ...servi,
         livraison: {
           ...servi.livraison,
-          destinataires: servi.livraison.destinataires.map(({ compose, ...d }) => d),
+          livrables: servi.livraison.livrables.map(({ compose, ...d }) => d),
         },
       };
     }
@@ -113,7 +165,7 @@ const MESURE = { pages: 262, gouttiere: 25, blanche: true, dos: 16.513 };
  * Ce que `composer` rend.
  *
  * Les chiffres du dessus sont une **copie de lecture** ; ce qui compte est le `projet`,
- * où la mesure est rangée chez son destinataire. C'est de là que le pied la lit — et
+ * où la mesure est rangée chez son livrable. C'est de là que le pied la lit — et
  * c'est ce qui la fait survivre à la réouverture du livre, là où un panneau rempli
  * depuis le retour de commande se serait tu.
  *
@@ -134,7 +186,7 @@ const composition = (p = LULU, m = {}, pdf = PDF) => {
       livraison: {
         ...l,
         deja_compose: true,
-        destinataires: [{ ...l.destinataires[0], compose: mesure }],
+        livrables: [{ ...l.livrables[0], compose: mesure }],
       },
     },
   };
@@ -142,9 +194,9 @@ const composition = (p = LULU, m = {}, pdf = PDF) => {
 
 const COMPOSITION = composition();
 
-/* ---------- destinataires ---------- */
+/* ---------- livrables ---------- */
 
-/** Un projet ouvert, visé sur le prestataire donné. */
+/** Un projet ouvert, visé sur le gabarit donné. */
 async function ouvre(p, sur = {}) {
   const projet = { ...PROJET, livraison: livraison(p) };
   const ctx = await charge({
@@ -157,20 +209,20 @@ async function ouvre(p, sur = {}) {
 
 test('le choix du papier n\'est offert que quand il y en a plusieurs', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('dest-papier-lulu').disabled, true);
-  assert.strictEqual(els.get('dest-papier-lulu').children.length, 1);
+  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').disabled, true);
+  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').children.length, 1);
 
   const { els: chezKdp } = await ouvre(KDP);
-  assert.strictEqual(chezKdp.get('dest-papier-kdp-6x9').disabled, false);
+  assert.strictEqual(chezKdp.get('liv-papier-kdp-6x9-broche-creme').disabled, false);
   assert.deepStrictEqual(
-    [...chezKdp.get('dest-papier-kdp-6x9').children].map((o) => o.value),
+    [...chezKdp.get('liv-papier-kdp-6x9-broche-creme').children].map((o) => o.value),
     ['creme', 'blanc']
   );
 });
 
-test('un prestataire à gabarit annonce que le fond perdu se relève', async () => {
+test('un imprimeur à gabarit annonce que le fond perdu se relève', async () => {
   const { els } = await ouvre(COOLLIBRI);
-  const note = els.get('destinataires').textContent;
+  const note = els.get('livrables').textContent;
   assert.match(note, /148,0 × 210,0 mm/);
   assert.match(note, /relever sur le gabarit/);
   assert.doesNotMatch(note, /fond perdu \d/, 'aucun chiffre de fond perdu inventé');
@@ -180,18 +232,21 @@ test('un prestataire à gabarit annonce que le fond perdu se relève', async () 
  * Le pied dit pour qui l'on regarde, et le dos n'y paraît qu'une fois composé : le pas
  * encore mesuré ne doit jamais s'y lire comme un chiffre.
  */
-test('le pied nomme le destinataire visé et l\'état de son dos', async () => {
+test('le pied nomme le livrable visé et l\'état de son dos', async () => {
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('inDestinataire').value, 'lulu');
-  assert.deepStrictEqual(els.get('inDestinataire').textes('option'), ['Lulu — poche 108 × 175']);
+  assert.strictEqual(els.get('inLivrable').value, 'lulu-108x175-broche-standard');
+  // Le libellé dit le papier, et la reliure seulement là où le POD en offre plusieurs.
+  // Lulu n'en a qu'une : la nommer n'y distinguerait rien et alourdirait la lecture.
+  assert.deepStrictEqual(els.get('inLivrable').textes('option'),
+    ['Lulu — poche 108 × 175 — Papier standard']);
   assert.match(els.get('piedDos').textContent, /dos non composé/);
 });
 
 /**
- * Chez un prestataire sans formule, il n'y a jamais rien à composer : « non composé »
+ * Chez un imprimeur sans formule, il n'y a jamais rien à composer : « non composé »
  * ferait recomposer en boucle un livre dont la pagination est déjà juste.
  */
-test('un prestataire à gabarit ne réclame pas une composition mais un relevé', async () => {
+test('un imprimeur à gabarit ne réclame pas une composition mais un relevé', async () => {
   const { els } = await ouvre(COOLLIBRI);
   assert.match(els.get('piedDos').textContent, /relevé sur le gabarit/);
 });
@@ -382,7 +437,7 @@ test('un dos périmé fait taire la légende', async () => {
     ...c.projet,
     livraison: {
       ...c.projet.livraison,
-      destinataires: c.projet.livraison.destinataires.map(({ compose, ...d }) => d),
+      livrables: c.projet.livraison.livrables.map(({ compose, ...d }) => d),
     },
   };
   const { els } = await charge({
@@ -626,11 +681,11 @@ test('une écriture déjà chargée ne se redemande pas, une autre si', async ()
 });
 
 /**
- * Le cœur du projet : le dos ne doit jamais apparaître comme un nombre quand le
- * prestataire n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
+ * Le cœur du projet : le dos ne doit jamais apparaître comme un nombre quand
+ * l'imprimeur n'en publie pas de formule. Un « 0,00 mm » affiché ici enverrait une
  * planche fausse à l'impression sans que rien ne l'ait signalé.
  */
-test('un prestataire sans formule n\'affiche jamais de dos chiffré', async () => {
+test('un imprimeur sans formule n\'affiche jamais de dos chiffré', async () => {
   const c = composition(COOLLIBRI, { pages: 190, dos: null });
   const { els } = await charge({
     invoke: faux([COOLLIBRI], {
@@ -646,7 +701,7 @@ test('un prestataire sans formule n\'affiche jamais de dos chiffré', async () =
   assert.match(dos, /relevé sur le gabarit/);
   assert.doesNotMatch(dos, /\d/, `dos chiffré affiché : « ${dos} »`);
   // Les pages, elles, sont mesurées : composé ne veut pas dire chiffré, mais le
-  // manuscrit fait bien 190 pages chez ce prestataire-là.
+  // manuscrit fait bien 190 pages chez cet imprimeur-là.
   assert.match(els.get('piedMesure').textContent, /190 pages/);
 });
 

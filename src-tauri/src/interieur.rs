@@ -2,7 +2,7 @@
 //!
 //! Deux conditions doivent être satisfaites **ensemble** : la gouttière doit
 //! correspondre à la tranche de pagination effective, et le compte de pages doit être
-//! pair — une feuille porte deux pages, les prestataires refusent l'impair. Chacune
+//! pair — une feuille porte deux pages, les imprimeurs refusent l'impair. Chacune
 //! peut déplacer la pagination, d'où la reprise.
 //!
 //! Le compte de pages produit ici est celui que consomme la couverture pour calculer
@@ -10,10 +10,23 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::catalogue::Provider;
 use crate::manuscrit::{echappe, echappe_chaine, inline, Bloc, Piece, Sorte, SCENE};
 use crate::projet::Livre;
-use crate::providers::Provider;
 use crate::typst::MARQUEUR;
+
+/// Corps du texte, en points.
+///
+/// Il vivait dans la table des gabarits, **identique dans ses quatorze entrées** :
+/// ce n'est pas un fait d'imprimeur mais un choix typographique. La pagination en dépend,
+/// donc le dos : le déplacer est un acte délibéré, à revalider sur un livre réel.
+pub const CORPS_PT: f64 = 9.5;
+
+/// Interligne, en multiple du corps. Rapporté à `leading` Typst par `- 1.0`.
+pub const INTERLIGNE: f64 = 1.42;
+
+/// Corps du folio, en points.
+pub const FOLIO_PT: f64 = 8.0;
 
 /// Les polices que l'intérieur admet.
 ///
@@ -37,7 +50,7 @@ fn police_defaut() -> String {
 
 /// Réglages d'intérieur du projet.
 ///
-/// Le prestataire impose le format, les marges, la gouttière et le corps ; le livre
+/// L'imprimeur impose le format, les marges, la gouttière et le corps ; le livre
 /// choisit son caractère. C'est la raison pour laquelle la police n'est pas un champ
 /// de `Provider`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,10 +189,10 @@ fn assemble(
     // `leading` Typst = espace entre lignes ; `line-height` CSS = distance entre lignes
     // de base. Les deux ne coïncident qu'une fois la boîte de ligne ramenée à 1em par
     // top-edge/bottom-edge — sans quoi l'interligne dépend de la police choisie.
-    let lead = pr.interligne - 1.0;
+    let lead = INTERLIGNE - 1.0;
     let folio = format!(
         r#"context align(center, text(size: {}pt, counter(page).display()))"#,
-        pr.folio_pt
+        FOLIO_PT
     );
 
     // Les zones sont déjà validées par `decoupe` : le découpage n'a qu'à les suivre.
@@ -231,7 +244,7 @@ fn assemble(
         pr.exterieur,
         // La police est validée en amont par `Interieur::verifie` : pas d'échappement.
         int.police,
-        pr.corps_pt,
+        CORPS_PT,
         fg = foreground(envoi, fw),
     ));
 
@@ -566,7 +579,7 @@ fn blocs_typst(blocs: &[Bloc]) -> String {
                 s.push_str(&inline(p));
                 s.push_str("\n\n");
             }
-            // Le blanc est en em, non en mm : il suit le corps du prestataire comme
+            // Le blanc est en em, non en mm : il suit le corps de l'intérieur comme
             // l'interligne, là où l'épreuve, qui n'a qu'un format, se règle en mm.
             // Il s'ajoute à l'espace de paragraphe, de part et d'autre — une rupture
             // se voit d'un coup d'œil sur la page, sans la trouer.
@@ -587,8 +600,8 @@ fn blocs_typst(blocs: &[Bloc]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalogue::provider;
     use crate::envoi::Place;
-    use crate::providers::provider;
     use crate::typst::Typst;
     use std::cell::RefCell;
     use std::path::Path;
@@ -762,7 +775,7 @@ mod tests {
     }
 
     #[test]
-    fn la_source_porte_le_gabarit_du_prestataire_et_le_marqueur() {
+    fn la_source_porte_le_gabarit_de_l_imprimeur_et_le_marqueur() {
         let pr = provider("bod").unwrap();
         let r = Reglage {
             gouttiere: 20.0,
@@ -774,6 +787,51 @@ mod tests {
         assert!(s.contains("outside: 15mm"));
         assert!(s.contains("costs: (orphan: 100%, widow: 100%)"), "veuves");
         assert!(s.trim_end().ends_with(MARQUEUR), "marqueur de pagination");
+    }
+
+    /// Le corps et l'interligne ne sont pas des faits d'imprimeur : ils étaient
+    /// identiques dans les quatorze entrées de la table. Ils vivent ici désormais, et la
+    /// source composée les porte quel que soit le gabarit visé — un poche et un grand
+    /// format se composent au même corps.
+    #[test]
+    fn le_corps_et_l_interligne_ne_dependent_pas_de_l_imprimeur() {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        for cle in ["lulu", "kdp-6x9"] {
+            let pr = provider(cle).unwrap();
+            let s = source(&livre(), &Interieur::default(), pr, &r, &[], None);
+            assert!(s.contains(&format!("size: {CORPS_PT}pt")), "{cle} : {s}");
+            assert!(
+                s.contains(&format!("leading: {}em", INTERLIGNE - 1.0)),
+                "{cle} : {s}"
+            );
+        }
+    }
+
+    /// Le folio est le seul des trois réglages déménagés dont plus rien ne verrait la
+    /// valeur changer : la pagination n'en dépend pas, donc le témoin le laisse passer.
+    /// Sa valeur historique est donc épinglée ici, en clair — écrite avec la constante,
+    /// l'assertion ne dirait plus rien.
+    #[test]
+    fn le_folio_garde_le_corps_de_huit_points_de_la_table() {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(
+            &livre(),
+            &Interieur::default(),
+            provider("bod").unwrap(),
+            &r,
+            &[],
+            None,
+        );
+        assert!(
+            s.contains("text(size: 8pt, counter(page).display())"),
+            "{s}"
+        );
     }
 
     /// L'ebook est le livre **sans son imposition** : la gouttière revient à la marge

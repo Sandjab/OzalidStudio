@@ -6,8 +6,8 @@ const { charge } = require('./dom_shim');
 const { groupes, lire, ecrire, placeImage } = require('../src/couverture.js');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu', largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 
 const style = (police, taille, couleur) => ({
@@ -103,8 +103,12 @@ function projet(couverture) {
     interieur: { police: 'Alegreya' },
     envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
     livraison: {
-      destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-      courant: 'lulu',
+      livrables: [{
+        cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+        pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+        finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+      }],
+      courant: 'lulu-108x175-broche-standard',
     },
   };
 }
@@ -123,6 +127,14 @@ async function ouvre(couverture, sur = {}, dialogues = []) {
     // pourrait jamais remplacer le comportement d'une commande courante.
     if (cmd in sur) return sur[cmd](args);
     if (cmd === 'providers_liste') return [LULU];
+    if (cmd === 'pods_liste') return [{
+      cle: 'lulu', nom: 'Lulu',
+      formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+      reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+      finitions: [],
+      papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+    }];
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Archivo', 'Spectral', 'Bodoni Moda'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -178,10 +190,10 @@ async function ouvre(couverture, sur = {}, dialogues = []) {
         { cle: 'editeur', debut: 0.92, fin: 0.98 },
       ];
     }
-    // Viser un autre destinataire est un des gestes qui redemandent un aperçu : le
+    // Viser un autre livrable est un des gestes qui redemandent un aperçu : le
     // format de la page vient de lui. Le projet de ce fichier n'en déclare qu'un, et
     // c'est assez — ce qui est vérifié ici, c'est que l'aperçu reparte.
-    if (cmd === 'destinataire_viser') return projet(couverture);
+    if (cmd === 'livrable_viser') return projet(couverture);
     // Le démarrage et la garde envoient ces trois commandes sans qu'aucun test ne les
     // demande : sans réponse ici, elles lèveraient avant que rien ne soit vérifié.
     if (cmd === 'recents_liste') return [];
@@ -572,14 +584,14 @@ test('l\'aperçu est demandé et affiché à l\'ouverture du projet', async () =
 });
 
 /**
- * Le format vient du destinataire visé : en changer change l'aperçu, même si aucun
+ * Le format vient du livrable visé : en changer change l'aperçu, même si aucun
  * réglage de maquette n'a bougé.
  */
-test('viser un autre destinataire redemande un aperçu', async () => {
+test('viser un autre livrable redemande un aperçu', async () => {
   const { els, appels } = await ouvre(maquette());
   await attendreApercu();
   const avant = appels.filter(([c]) => c === 'couverture_apercu').length;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   const apres = appels.filter(([c]) => c === 'couverture_apercu').length;
   assert.ok(apres > avant, 'aperçu non redemandé');
@@ -619,7 +631,7 @@ test('un aperçu qui échoue efface l\'image et affiche la cause', async () => {
   assert.strictEqual(els.get('apercu').hidden, false, 'aperçu réussi mais masqué');
 
   casse = true;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   assert.strictEqual(els.get('apercu').src, undefined, 'aperçu périmé laissé à l\'écran');
   assert.strictEqual(els.get('apercu').hidden, true, 'cadre d\'image sans image');
@@ -678,10 +690,10 @@ test('la planche marque la coupe et les deux plis que le Rust donne', async () =
 });
 
 /**
- * Les quatre nombres écrits sous la planche sont ceux du fichier remis au prestataire :
+ * Les quatre nombres écrits sous la planche sont ceux du fichier remis à l'imprimeur :
  * c'est en les comparant à son gabarit qu'on vérifie qu'on lui envoie la bonne planche.
  * Ils viennent du Rust en millimètres et ne se recomposent pas ici — refaire l'addition
- * dans la fenêtre, c'est la voir dériver le jour où un prestataire compte autrement.
+ * dans la fenêtre, c'est la voir dériver le jour où un imprimeur compte autrement.
  * Le fond perdu porte trois décimales et le reste deux, comme la Livraison : un fond
  * perdu se relève au millième de millimètre sur les gabarits, un dos jamais.
  */
@@ -760,7 +772,7 @@ test('un aperçu qui échoue emporte l\'habillage avec l\'image', async () => {
   assert.strictEqual(els.get('reperes').hidden, false);
 
   casse = true;
-  await els.get('inDestinataire').declenche('change');
+  await els.get('inLivrable').declenche('change');
   await attendreApercu();
   assert.strictEqual(els.get('reperes').hidden, true, 'habillage laissé seul à l\'écran');
 });

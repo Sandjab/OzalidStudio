@@ -59,7 +59,7 @@ a perdu une valeur.
 |---|---|
 | `src-tauri/src/catalogue.rs` | **Créé.** Les types à cinq axes, leur lecture TOML, leur validation, le chargement (fournis + poste), et la vue plate `Provider` |
 | `src-tauri/pods/*.toml` | **Créés.** Six fichiers, un par POD, incorporés par `include_str!` |
-| `src-tauri/src/providers.rs` | **Supprimé** à la tâche 4, son contenu ayant migré |
+| `src-tauri/src/providers.rs` | **Supprimé** à la tâche 4 — ses valeurs **et ses tests d'ancrage** ayant migré |
 | `src-tauri/src/lib.rs` | **Modifié.** `pub mod catalogue;` remplace `pub mod providers;` ; `initialiser` appelé dans `.setup()` |
 | `src-tauri/src/commands.rs` | **Modifié.** `providers_liste`, la commande de refus, et les deux signatures `&'static Provider` |
 | `src-tauri/src/interieur.rs` | **Modifié** à la tâche 7. Corps, interligne et folio deviennent des constantes |
@@ -92,8 +92,10 @@ mod tests {
     /// s'il change, tous les fichiers fournis changent avec lui.
     #[test]
     fn un_pod_se_lit_depuis_son_toml() {
+        // `r##"…"##` et non `r#"…"#` : la séquence `"#` de `teinte = "#f7f0e0"`
+        // fermerait le littéral.
         let pod = Pod::depuis_toml(
-            r#"
+            r##"
 cle = "essai"
 nom = "Imprimeur d'essai"
 fond_perdu = 5.0
@@ -102,15 +104,15 @@ fond_perdu = 5.0
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "essai"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 
 [[finition]]
@@ -122,17 +124,25 @@ cle = "creme-90"
 nom = "Crème 90 g"
 teinte = "#f7f0e0"
 dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
-"#,
+"##,
         )
         .unwrap();
 
         assert_eq!(pod.cle, "essai");
         assert_eq!(pod.fond_perdu, Some(5.0));
-        assert_eq!(pod.formats[0].mm, (135.0, 215.0));
+        assert_eq!(pod.formats[0].mm.largeur, 135.0);
+        assert_eq!(pod.formats[0].mm.hauteur, 215.0);
         assert_eq!(pod.formats[0].marges.bas, 28.0);
-        assert_eq!(pod.formats[0].gouttieres, vec![(24, 900, 20.0)]);
+        assert_eq!(
+            pod.formats[0].gouttieres,
+            vec![Tranche {
+                de: 24,
+                a: 900,
+                mm: 20.0
+            }]
+        );
         assert_eq!(pod.reliures[0].geometrie, Some(Geometrie::DosCarreColle));
-        assert_eq!(pod.reliures[0].pages, Some((24, 900)));
+        assert_eq!(pod.reliures[0].pages, Some(Pagination { min: 24, max: 900 }));
         assert_eq!(pod.papiers[0].teinte, "#f7f0e0");
         // Comparaison à la tolérance : 0,0675 n'a pas de représentation binaire
         // exacte, et `280 × 0,0675 + 0,6` ne vaut pas `19.5` au bit près.
@@ -154,7 +164,7 @@ nom = "Imprimeur d'essai"
 cle = "cousu"
 nom = "Reliure cousue"
 geometrie = "cousue"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 "#,
         )
@@ -294,8 +304,34 @@ pub struct Marges {
     pub exterieur: f64,
 }
 
+/// Dimensions d'un format de rognage, en mm.
+///
+/// Nommées et non positionnelles : ces fichiers s'éditent à la main, des années après
+/// avoir été écrits, et une largeur prise pour une hauteur donne un livre à l'italienne
+/// que rien ne rattrape avant l'aperçu de la planche.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dimensions {
+    pub largeur: f64,
+    pub hauteur: f64,
+}
+
 /// Une tranche de pagination et la gouttière (marge intérieure) qu'elle impose.
-pub type Tranche = (u32, u32, f64);
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tranche {
+    pub de: u32,
+    pub a: u32,
+    pub mm: f64,
+}
+
+/// Pagination admise, bornes comprises.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pagination {
+    pub min: u32,
+    pub max: u32,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Format {
@@ -304,8 +340,8 @@ pub struct Format {
     /// **Transitoire.** La clé plate que portent encore le `.ozalid`, les répertoires de
     /// package et l'interface. Elle disparaît au lot 2, avec la migration des projets.
     pub cle_heritee: String,
-    /// Format de rognage en mm (largeur, hauteur).
-    pub mm: (f64, f64),
+    /// Format de rognage.
+    pub mm: Dimensions,
     pub marges: Marges,
     /// Seules les tranches vérifiées dans le guide du prestataire figurent ici. Hors
     /// tranche, on refuse plutôt qu'inventer.
@@ -328,7 +364,7 @@ pub struct Reliure {
     /// c'est elle qui la détermine — TheBookEdition accepte 40 à 750 pages en dos carré
     /// collé et 24 à 300 en rigide, au même format.
     #[serde(default)]
-    pub pages: Option<(u32, u32)>,
+    pub pages: Option<Pagination>,
     #[serde(default)]
     pub parite: Option<Parite>,
     /// Pourquoi cette reliure n'est pas composable. Décrit **notre** état, jamais celui
@@ -441,6 +477,41 @@ git commit -m "Le catalogue a ses types, et refuse ce qu'il ne sait pas tenir"
 
 ---
 
+#### Ce que l'exécution a ajouté à la tâche 1
+
+Écrit après coup, pour que ce plan ne mente pas à qui le relira. La tâche 1 a été livrée
+telle que décrite ci-dessus (`27ca0ce`), puis une revue de qualité a montré que `verifie`
+ne regardait que le couple géométrie/raison — aucun nombre, aucune clé, aucune liste. Or
+c'est le nombre qui va au massicot. Dix corrections ont suivi (`17241e7`, `102c1e3`) :
+
+- **Les nombres sont validés.** `par = nan` était accepté — TOML 1.0 lit littéralement
+  `nan` et `inf` —, `forme = "divise", par = 0.0` donnait un dos infini et `par = -0.07`
+  un dos de −19,6 mm. Sont refusés : facteur de dos non fini ou ≤ 0, constante non finie
+  ou < 0, dimension non finie ou ≤ 0, marge ou fond perdu non fini ou < 0.
+- **`#[serde(deny_unknown_fields)]`** sur les structures. Sans lui, `fond-perdu` avec un
+  tiret était ignoré sans erreur : quelqu'un relève une valeur, l'écrit, et le catalogue
+  fait comme s'il ne l'avait pas. C'est le pire défaut possible dans un module dont la
+  règle est qu'on ne reporte que ce qu'on a lu.
+- **Une reliure ne peut pas porter à la fois `geometrie` et `non_outille`.** Deux
+  appelants qui n'interrogent pas le même champ en tireraient deux réponses opposées.
+- **Unicité des `cle`** dans les quatre listes et des `cle_heritee` entre formats ; **au
+  moins un format, une reliure, un papier** — `papier_defaut()` indexera `papiers[0]`, et
+  l'invariant que `&'static [Papier]` tenait par construction n'existe plus ; **bornes**
+  `de <= a` et `min <= max`.
+- **Les tuples positionnels deviennent `Dimensions`, `Tranche` et `Pagination`** — c'est
+  la forme qui figure dans les blocs de code ci-dessus, mise à jour.
+- **Cinq tests neufs** là où rien ne protégeait : parité inconnue, reliure outillée sans
+  parité, reliure non outillée lue avec sa raison, `Dos::Divise` sur le cas Lulu vérifié
+  sur livre réel (244 pages → 15,48 mm), `Dos::Mesure` rendant `None`.
+
+Un contrôle a été **écarté** et ne doit pas être ajouté plus tard par mégarde : vérifier
+que les tranches de gouttière couvrent la pagination admise d'une reliure. Le catalogue
+réel ne le respecte pas — Lulu accepte 32 à 800 pages en dos carré collé et ne publie de
+gouttière que pour 151 à 400. Le refus tardif à la composition est le comportement voulu,
+et le COOKBOOK le documente comme piège.
+
+---
+
 ### Tâche 2 : Les six fichiers fournis
 
 **Fichiers :**
@@ -534,10 +605,18 @@ Correspondance des quatorze entrées historiques :
 | `thebookedition.toml` | `tbe` | `110x170` → `tbe-110x170`, `120x180` → `tbe-120x180`, `1485x210` → `tbe-1485x210` |
 | `bookvault.toml` | `bookvault` | `127x203` → `bookvault-127x203`, `129x198` → `bookvault-129x198`, `148x210` → `bookvault-148x210` |
 
-Le `nom` du POD est son nom d'imprimeur seul (« BoD (Books on Demand) », « Amazon KDP »), le
-`nom` du format son format seul (« 13,5 × 21,5 cm », « 5,5 × 8,5 po ») : le `libelle` plat
-d'aujourd'hui — « Amazon KDP — 5,5 × 8,5 po » — se reconstitue à la tâche 3 en les joignant
-par « — ». C'est ce qui garde l'interface identique.
+Le `nom` du POD est son nom d'imprimeur seul, le `nom` du format son format seul
+(« 13,5 × 21,5 cm », « 5,5 × 8,5 po ») : le `libelle` plat d'aujourd'hui — « Amazon KDP —
+5,5 × 8,5 po » — se reconstitue à la tâche 3 en les joignant par « — ». C'est ce qui garde
+l'interface identique.
+
+**Contrainte qui en découle, et qui prime sur l'envie de bien nommer : le `nom` du POD doit
+être exactement le préfixe du libellé historique.** Donc `nom = "BoD"`, et non
+« BoD (Books on Demand) » : ce dernier donnerait « BoD (Books on Demand) — 13,5 × 21,5 cm »
+à l'écran, ferait échouer la tâche 3, et changerait l'interface — contre le but déclaré du
+lot. Le nom complet vit en commentaire de tête du fichier. Les cinq autres n'ont pas ce
+problème : « Lulu », « Amazon KDP », « CoolLibri », « TheBookEdition » et « Bookvault » sont
+déjà les préfixes historiques.
 
 Reliures et finitions, pour les six : chacun porte au minimum
 
@@ -546,7 +625,7 @@ Reliures et finitions, pour les six : chacun porte au minimum
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]        # les bornes de son entrée historique
+pages = { min = 24, max = 900 }   # les bornes de son entrée historique
 parite = "paire"
 ```
 
@@ -564,7 +643,8 @@ les apporte pour BoD.
 # référencer le titre. C'est ce qui en fait le défaut du comparatif POD du 19/08/2026.
 
 cle = "bod"
-nom = "BoD (Books on Demand)"
+# « BoD » seul : c'est le préfixe du libellé historique, et la tâche 3 le vérifie.
+nom = "BoD"
 # Guide de maquette BoD. Commun à ses formats.
 fond_perdu = 5.0
 
@@ -572,18 +652,18 @@ fond_perdu = 5.0
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
 cle_heritee = "bod"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
 # BoD ne module pas la marge de reliure selon l'épaisseur — tranche unique, couvrant les
 # 24 à 900 pages que sa couverture souple admet.
-gouttieres = [[24, 900, 20.0]]
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
 source = "modèle Word « Roman » 13,5 × 21,5"
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 source = "validation du calculateur officiel : nombre pair obligatoire"
 
@@ -633,7 +713,12 @@ Dans `src-tauri/src/providers.rs`, renommer la constante publique :
 pub const PROVIDERS_HERITEE: &[Provider] = &[
 ```
 
-et corriger l'unique usage hors tests, `commands.rs:156`, en `providers::PROVIDERS_HERITEE`.
+et corriger **tous** ses usages. Ils ne sont pas un seul, contrairement à ce que ce plan a
+d'abord écrit : `commands.rs:156`, `projet.rs:325` (le `impl Default for Livraison`) et
+`examples/composer.rs:25` (la liste des prestataires du message d'usage) hors tests, plus
+`maquettes.rs:923` et `projet.rs:1356` dans des tests, plus quatre internes à `providers.rs`.
+Un renommage partiel ne compile pas. La seule occurrence à **laisser** est `providers.rs:4`,
+qui parle du `PROVIDERS` d'`index.html` — une autre variable, dans un autre fichier.
 
 Puis, dans le `mod tests` de `catalogue.rs` :
 
@@ -704,7 +789,9 @@ pub struct Provider {
     pub marge_haut: f64,
     pub marge_bas: f64,
     pub exterieur: f64,
-    pub gouttieres: Vec<Tranche>,
+    /// Triplets, comme la table historique les écrivait : la vue plate est comparée à
+    /// elle, champ par champ, à la tâche 3.
+    pub gouttieres: Vec<(u32, u32, f64)>,
     pub corps_pt: f64,
     pub interligne: f64,
     pub folio_pt: f64,
@@ -760,24 +847,26 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
         let Some(r) = pod.reliures.iter().find(|r| r.geometrie.is_some()) else {
             continue;
         };
-        let Some((pages_min, pages_max)) = r.pages else {
+        let Some(pagination) = r.pages else {
             continue;
         };
         for f in &pod.formats {
             v.push(Provider {
                 cle: f.cle_heritee.clone(),
                 libelle: format!("{} — {}", pod.nom, f.nom),
-                format: f.mm,
+                // La vue plate garde les tuples de la table historique : c'est ce qui
+                // permet au test de non-régression de comparer sans traduction.
+                format: (f.mm.largeur, f.mm.hauteur),
                 marge_haut: f.marges.haut,
                 marge_bas: f.marges.bas,
                 exterieur: f.marges.exterieur,
-                gouttieres: f.gouttieres.clone(),
+                gouttieres: f.gouttieres.iter().map(|t| (t.de, t.a, t.mm)).collect(),
                 corps_pt: CORPS_PT,
                 interligne: INTERLIGNE,
                 folio_pt: FOLIO_PT,
                 fond_perdu: f.fond_perdu.or(pod.fond_perdu),
-                pages_min,
-                pages_max,
+                pages_min: pagination.min,
+                pages_max: pagination.max,
                 papiers: pod.papiers.clone(),
             });
         }
@@ -803,8 +892,9 @@ passe, jamais l'inverse.
 cd src-tauri && cargo test --lib catalogue
 ```
 
-Attendu : 7 tests passent. Un échec nomme la clé et le champ fautifs — c'est une valeur mal
-recopiée dans un TOML, à corriger là et non dans le test.
+Attendu : tous les tests de `catalogue` passent — ils sont vingt-cinq à ce stade, la tâche 1
+en ayant apporté bien plus que ce plan ne le prévoyait. Un échec nomme la clé et le champ
+fautifs : c'est une valeur mal recopiée dans un TOML, à corriger là et non dans le test.
 
 - [ ] **Étape 5 : Commit**
 
@@ -820,7 +910,12 @@ git commit -m "La vue plate du catalogue rend ce que la table rendait"
 **Fichiers :**
 - Supprimer : `src-tauri/src/providers.rs`
 - Modifier : `src-tauri/src/catalogue.rs`, `lib.rs`, `commands.rs`, `interieur.rs`,
-  `package.rs`, `planche.rs`, `projet.rs`, `ebook.rs`, `examples/temoin.rs`
+  `package.rs`, `planche.rs`, `projet.rs`, `ebook.rs`, `maquettes.rs`,
+  `examples/temoin.rs`, `examples/composer.rs`
+
+`maquettes.rs` et les deux exemples ne figuraient pas dans la première rédaction de ce plan :
+ils sont apparus au renommage de la tâche 3. Le compilateur les nommera de toute façon —
+c'est écrit ici pour que leur présence au diff ne passe pas pour un débordement.
 
 - [ ] **Étape 1 : Écrire le test qui échoue**
 
@@ -878,13 +973,45 @@ par `catalogue::providers()` dans `commands.rs:156`. Supprimer `src-tauri/src/pr
 et sa ligne dans `lib.rs`. Supprimer le test transitoire
 `la_vue_plate_rend_ce_que_la_table_historique_rendait`, qui n'a plus de table à comparer.
 
+**Mais migrer les douze autres tests de son `mod tests`, et non les supprimer avec lui.**
+Cette rédaction du plan les avait oubliés, et c'est la faute la plus lourde qu'il ait
+portée : ils ne comparent rien à la table, ils **ancrent des valeurs sur des relevés
+extérieurs** — le dos de Lulu à 244 pages sur un livre réel tenu en main, le calculateur
+BoD à 280 et 560 pages, les gabarits de TheBookEdition à 40, 280 et 750, le calculateur
+Bookvault papier par papier, la bascule de gouttière KDP entre 700 et 701 pages, le fond
+perdu de chaque gabarit, le refus hors tranche.
+
+Ils n'utilisent que `provider`, `papier_defaut`, `papier`, `gouttiere` et `fond_perdu` —
+tous présents à l'identique sur la vue plate. **Contrairement au test de comparaison, ils
+ont un après** : une fois la table morte, ce sont eux qui disent que les TOML portent les
+bonnes valeurs, le témoin ne composant qu'un livre, chez un seul prestataire, à un seul
+format.
+
+Trois d'entre eux recoupent en apparence la validation de la tâche 1. Les garder quand
+même : `verifie` contrôle la **forme** de n'importe quel fichier — teinte non vide, bornes
+dans l'ordre —, eux contrôlent les **valeurs des six fournis** — colonne de texte au-dessus
+de 30 mm, teinte de sept caractères. L'une ne remplace pas l'autre.
+
+Une seule retouche est nécessaire : `assert_eq!(p(f).gouttieres, GOUTTIERES_KDP)` perd sa
+constante avec le fichier. Comparer les trois formats KDP entre eux dit la même chose, et
+mieux — la garantie cesse de dépendre d'un détail d'écriture de la table.
+
+**Aucune valeur ancrée ni aucun commentaire de documentation ne se réécrit** : leur mérite
+est de n'avoir pas été recalculés. Un test qui tomberait après migration ne se corrige pas —
+il signalerait que les TOML et les relevés divergent, et c'est une décision, pas un
+ajustement.
+
 Les deux signatures de `commands.rs` — `couple` (`:467`) et `papier` (`:1890`) — gardent
 `&'static Provider` et `&'static Papier` sans changement : le `OnceLock` les honore.
 
 Ce que le compilateur signalera, et qui est attendu :
 - `pr.cle` et `pr.libelle` sont des `String` et non plus des `&'static str`. Les
-  `cle: p.cle.into()` de `ProviderVue` continuent de compiler ; un `pr.cle` passé là où un
-  `&str` est attendu devient `&pr.cle`.
+  `cle: p.cle.into()` de `ProviderVue` **ne compilent pas**, contrairement à ce que cette
+  rédaction a d'abord écrit : `String` n'étant pas `Copy`, `into()` déplacerait un champ
+  derrière une référence partagée (E0507). Ils passent en `.clone()` — ce qui était de
+  toute façon le coût réel, `into()` de `String` vers `String` n'étant qu'un déplacement
+  déguisé. Un `pr.cle` passé là où un `&str` est attendu devient `&pr.cle`, et
+  `racine.join(pr.cle)` devient `racine.join(&pr.cle)`.
 - `pr.gouttieres[0].2` (`interieur.rs:105`) et `pr.papiers` continuent de compiler,
   `Vec<T>` s'indexant et s'itérant comme `&[T]`.
 - `PapierVue`, dans `commands.rs`, lit `pa.libelle` : le catalogue dit `nom`. La ligne
@@ -941,15 +1068,15 @@ fond_perdu = 4.0
 cle = "100x150"
 nom = "10 × 15 cm"
 cle_heritee = "essai"
-mm = [100.0, 150.0]
+mm = { largeur = 100.0, hauteur = 150.0 }
 marges = { haut = 10.0, bas = 10.0, exterieur = 10.0 }
-gouttieres = [[24, 400, 15.0]]
+gouttieres = [ { de = 24, a = 400, mm = 15.0 } ]
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 400]
+pages = { min = 24, max = 400 }
 parite = "paire"
 
 [[papier]]
@@ -1006,6 +1133,30 @@ fn un_fichier_fautif_est_refuse_en_le_nommant_et_les_autres_tiennent() {
         pods.iter().any(|p| p.cle == "bod"),
         "les fournis n'ont pas tenu"
     );
+}
+
+/// Un POD sans reliure composable ne produit aucune entrée : il doit le dire, pas
+/// s'évanouir.
+///
+/// `aplatit` ne retient qu'un POD portant une reliure de géométrie connue — c'est
+/// délibéré, on ne peut pas annoncer un format qu'on ne sait pas composer. Mais tant que
+/// le catalogue était écrit en dur, le cas n'existait pas ; un fichier déposé, si. Sans
+/// ce refus, l'utilisateur dépose un fichier valide, relance, et son imprimeur n'est
+/// nulle part — sans un mot.
+#[test]
+fn un_pod_sans_reliure_composable_est_refuse() {
+    let d = TempDir::new().unwrap();
+    pose(
+        &d,
+        "rigide.toml",
+        &IMPRIMEUR_ESSAI.replace(
+            "geometrie = \"dos-carre-colle\"\npages = { min = 24, max = 400 }\nparite = \"paire\"",
+            "non_outille = \"géométrie du casewrap non relevée\"",
+        ),
+    );
+    let (pods, refus) = charge(Some(d.path()));
+    assert_eq!(refus.len(), 1, "{pods:?}");
+    assert!(refus[0].raison.contains("reliure"), "{:?}", refus[0]);
 }
 
 /// Un répertoire de surcharges absent n'est pas une avarie : c'est l'état d'un poste où
@@ -1100,6 +1251,16 @@ pub fn initialiser(config: Option<&Path>) -> Result<Vec<Refus>, String> {
 }
 ```
 
+**`initialiser` n'aura aucun test, et il ne faut surtout pas lui en écrire un ici.** Les
+cinq tests ci-dessus passent tous par `charge`, jamais par `initialiser` : c'est ce qui les
+rend possibles. `PLATS` est un `OnceLock` de processus, et les quatre cent cinquante tests
+de `--lib` partagent un seul processus où des dizaines appellent `provider(…)` — il y est
+donc déjà initialisé quand un test d'`initialiser` s'exécuterait, et celui-ci échouerait de
+façon non déterministe selon l'ordre d'exécution. Le `PLATS.set`, le refus du second appel
+et la ligne de `.setup()` ne sont couverts que par le démarrage réel de l'application. S'il
+faut un jour les tester, ce sera dans un binaire d'intégration à part (`src-tauri/tests/`),
+qui a son propre processus.
+
 Dans `lib.rs`, en toute première ligne du `.setup(|app| { … })`, avant `menu::poser` :
 
 ```rust
@@ -1117,13 +1278,29 @@ et, dans `commands.rs`, l'état qui les porte :
 pub struct CatalogueRefus(pub Vec<crate::catalogue::Refus>);
 ```
 
+Et, dans `verifie` (`catalogue.rs`), l'exigence que ce test réclame :
+
+```rust
+        if !self.reliures.iter().any(|r| r.geometrie.is_some()) {
+            return Err(format!(
+                "{} : aucune reliure composable. Un POD dont aucune reliure ne porte de \
+                 géométrie ne produirait aucun format, et disparaîtrait sans un mot.",
+                self.cle
+            ));
+        }
+```
+
+Ce contrôle n'existait pas avant ce lot parce que le cas n'existait pas : la table écrite
+en dur ne pouvait pas porter un tel POD. Un fichier déposé, si. **Vérifier que les six
+fournis le passent** — ils portent tous une broché.
+
 - [ ] **Étape 4 : Lancer les tests pour les voir passer**
 
 ```
 cd src-tauri && cargo test --lib catalogue
 ```
 
-Attendu : 11 tests passent.
+Attendu : tous les tests de `catalogue` passent, les cinq de cette tâche compris.
 
 - [ ] **Étape 5 : Commit**
 

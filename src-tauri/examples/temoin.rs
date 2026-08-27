@@ -8,29 +8,29 @@
 //! nombre de pages sur macOS et sur Windows. Un écart invaliderait la promesse centrale
 //! du projet — un dos calculé sur une plateforme ne vaudrait que pour elle.
 //!
-//! Le gabarit est `bod`, et non `lulu` : la table Lulu ne porte pas de tranche de
-//! gouttière sous 151 pages, et la compléter pour les besoins d'un test reviendrait à
-//! laisser le test dicter la production.
+//! Le gabarit est BoD (bod-135x215-broche), et non Lulu : la table Lulu ne porte pas de
+//! tranche de gouttière sous 151 pages, et la compléter pour les besoins d'un test
+//! reviendrait à laisser le test dicter la production.
 //!
 //! Usage : cargo run --example temoin [répertoire de sortie]
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::maquettes;
 use ozalid_lib::package;
 use ozalid_lib::planche::Releve;
 use ozalid_lib::projet::{Livre, Projet};
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
-const PROVIDER: &str = "bod";
+const FABRICATION: (&str, &str, &str, &str) = ("bod", "135x215", "broche", "creme-90");
 
 /// Pagination attendue du témoin.
 ///
 /// Relevée sur macOS avec Typst 0.15.1 et EB Garamond, au corps et à l'interligne que
-/// `providers` fixe pour BoD. Elle dépend de chacun de ces éléments : la déplacer est un
-/// acte délibéré, à revalider sur un livre réel — jamais un ajustement pour faire passer
-/// l'intégration continue.
+/// `interieur` fixe pour tout gabarit. Elle dépend de chacun de ces éléments : la
+/// déplacer est un acte délibéré, à revalider sur un livre réel — jamais un ajustement
+/// pour faire passer l'intégration continue.
 const PAGES_ATTENDUES: u32 = 98;
 
 fn main() -> Result<(), String> {
@@ -63,15 +63,25 @@ fn main() -> Result<(), String> {
             .couverture,
     );
 
-    let pr = providers::provider(PROVIDER).ok_or("prestataire inconnu : bod")?;
+    let (pod, format, reliure, papier) = FABRICATION;
+    let r = catalogue::resout(&catalogue::Fabrication {
+        pod: pod.into(),
+        format: format.into(),
+        reliure: reliure.into(),
+        papier: papier.into(),
+    })?;
+    let pr = r.provider();
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+    let int = package::composer_interieur(&projet, &pr, &pr.cle, &sortie, &typst)?;
     let p = package::assembler(
         &projet,
-        pr,
-        pr.papier_defaut(),
+        &pr,
+        r.papier,
         // BoD publie son dos et son fond perdu : le relevé est ignoré.
         Releve::default(),
+        &pr.cle,
+        &int,
         &sortie,
         &typst,
     )?;

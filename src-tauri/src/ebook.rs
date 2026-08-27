@@ -1,6 +1,6 @@
 //! Les ebooks locaux : le PDF et l'EPUB, écrits à côté du projet.
 //!
-//! Ce module est aux sorties locales ce que `package` est aux prestataires : il
+//! Ce module est aux sorties locales ce que `package` est aux imprimeurs : il
 //! traverse la chaîne, il ne compose rien lui-même. Le PDF vient d'`interieur`, la
 //! couverture de `couverture`, l'archive d'`epub` — et Typst fait les deux rendus.
 //!
@@ -11,8 +11,8 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::catalogue::Provider;
 use crate::projet::Projet;
-use crate::providers::Provider;
 use crate::typst::Typst;
 use crate::{couverture, envoi, epub, interieur, manuscrit, package, police};
 
@@ -46,7 +46,7 @@ fn nom_de_fichier(titre: &str) -> String {
 
 /// Écrit le PDF et l'EPUB du livre dans `dossier`.
 ///
-/// `dos_mm` vient du destinataire visé : il ne sert qu'au cadrage panoramique de la
+/// `dos_mm` vient du livrable visé : il ne sert qu'au cadrage panoramique de la
 /// couverture. Absent, l'image se cadre sur la seule 1ère — ce que fait déjà l'aperçu à
 /// l'écran, et ce n'est pas un refus de plus.
 pub fn generer(
@@ -239,8 +239,8 @@ fn libres(livre: &crate::projet::Livre) -> (String, String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalogue::provider;
     use crate::projet::{Livre, Projet};
-    use crate::providers::provider;
 
     /// Un projet qui passe tous les refus : une maquette, la police de labeur par
     /// défaut, un manuscrit d'un chapitre. Les tests ci-dessous le cassent chacun d'un

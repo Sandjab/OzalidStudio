@@ -1,6 +1,6 @@
 # Ozalid Studio — instructions
 
-Chaîne d'auto-édition, du manuscrit aux packages prestataires : intérieur composé,
+Chaîne d'auto-édition, du manuscrit aux packages pour l'imprimeur : intérieur composé,
 couverture, planche, dos qui découle de la pagination sans jamais être ressaisi.
 Tauri 2 + Rust, front vanilla sans bundler, Typst en sidecar. L'architecture, la
 mise en route et le plan du `.ozalid` sont dans `README.md` ; les specs et plans
@@ -37,3 +37,11 @@ anglais conservés tels quels (`fond perdu` reste `fond perdu`, mais `viewport`,
 - Le front est embarqué dans le binaire à la compilation : après un changement de
   `src/` seul, `touch src-tauri/src/lib.rs` avant `cargo build`, sinon le binaire
   garde l'ancien front.
+- **Les ressources embarquées par `include_str!` / `include_bytes!` — `src-tauri/pods/`
+  et `src-tauri/maquettes/` — ne suivent pas mieux que le front**, et leur piège ment
+  bien : cargo juge le binaire à jour si leur date précède les artefacts, et fait
+  tourner l'**ancien** catalogue contre les nouveaux tests. Le symptôme n'est pas une
+  interface périmée mais un écart de valeur — `left: 18.75, right: 18.8` —, c'est-à-dire
+  la signature exacte d'une pagination qui aurait bougé. Devant un tel écart, relancer
+  d'abord après un `touch` des deux répertoires et de `src-tauri/src/lib.rs`, avant de
+  conclure à une régression du témoin.

@@ -1,3 +1,4 @@
+pub mod catalogue;
 pub mod commands;
 pub mod couverture;
 pub mod detourage;
@@ -19,7 +20,6 @@ pub mod png;
 pub mod police;
 pub mod preferences;
 pub mod projet;
-pub mod providers;
 pub mod typst;
 
 pub fn run() {
@@ -32,6 +32,13 @@ pub fn run() {
         .manage(commands::Atelier::default())
         .manage(commands::Interface::default())
         .setup(|app| {
+            // Première ligne du démarrage, et elle doit le rester : `providers()`
+            // initialiserait `PLATS` sur les seuls fournis, et les fichiers du poste
+            // seraient ignorés en silence. Le `expect` est ce qui le dirait tout haut.
+            use tauri::Manager;
+            let refus = catalogue::initialiser(app.path().app_config_dir().ok().as_deref())
+                .expect("le catalogue doit être chargé avant toute commande");
+            app.manage(commands::CatalogueRefus(refus));
             menu::poser(app.handle())?;
             Ok(())
         })
@@ -87,6 +94,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::providers_liste,
+            commands::pods_liste,
+            commands::catalogue_refus,
             commands::projet_importer,
             commands::projet_ouvrir,
             commands::projet_enregistrer_sous,
@@ -115,10 +124,10 @@ pub fn run() {
             commands::couverture_calques,
             commands::couverture_dos_boites,
             commands::composer,
-            commands::destinataire_ajouter,
-            commands::destinataire_retirer,
-            commands::destinataire_regler,
-            commands::destinataire_viser,
+            commands::livrable_ajouter,
+            commands::livrable_retirer,
+            commands::livrable_regler,
+            commands::livrable_viser,
             commands::packager,
             commands::ebook_generer,
             commands::envoi_regler,

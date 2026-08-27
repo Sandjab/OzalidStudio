@@ -1,0 +1,59 @@
+# CoolLibri — imprimeur toulousain. Son intérieur est outillé ; son dos se relève, il ne
+# se calcule pas : CoolLibri publie sa formule, (grammage / 1000) × main × (pages / 2),
+# mais pas la « main » de ses papiers.
+#
+# Aucun fond perdu en table : il se relève lui aussi sur leur gabarit, et se saisit à la
+# Livraison (3 mm chez eux). Écrire la valeur ici la ferait passer pour un fait relevé
+# alors que c'est le parcours en ligne qui l'affiche, papier et pagination en main.
+
+cle = "coollibri"
+nom = "CoolLibri"
+
+# CoolLibri ne module pas la reliure selon l'épaisseur et ne distingue pas la marge
+# intérieure de l'extérieure : 20 mm sur les quatre côtés, sans variation selon la
+# pagination. La composition est donc symétrique, contrairement à tous les autres POD.
+# Tranche unique, bornée par les paginations admises en dos carré collé.
+
+[[format]]
+cle = "110x170"
+nom = "11 × 17 cm"
+mm = { largeur = 110.0, hauteur = 170.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+
+[[format]]
+cle = "148x210"
+nom = "A5"
+mm = { largeur = 148.0, hauteur = 210.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+
+[[format]]
+cle = "160x240"
+nom = "16 × 24 cm"
+mm = { largeur = 160.0, hauteur = 240.0 }
+marges = { haut = 20.0, bas = 20.0, exterieur = 20.0 }
+gouttieres = [ { de = 60, a = 700, mm = 20.0 } ]
+source = "gabarits Word officiels, FAQ « 2 cm de marges tout autour »"
+
+[[reliure]]
+cle = "broche"
+nom = "Broché — dos carré collé"
+geometrie = "dos-carre-colle"
+pages = { min = 60, max = 700 }
+# Aucune règle de parité relevée chez CoolLibri ; « paire » est ce que la composition fait
+# partout.
+parite = "paire"
+source = "pagination admise en dos carré collé, selon le papier"
+
+# Un seul « papier » en table, qui n'en est pas un : il porte l'absence de formule. Au-delà
+# de 180 pages, CoolLibri prévient lui-même que l'épaisseur peut changer — reprendre le dos
+# affiché à l'étape « couverture et dos » avant de générer le package.
+[[papier]]
+cle = "mesure"
+nom = "Dos relevé sur le gabarit"
+teinte = "#ffffff"
+dos = { forme = "mesure" }
+source = "formule publiée sans la « main » des papiers : le dos se relève au parcours en ligne"

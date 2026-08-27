@@ -279,7 +279,7 @@ fn romain(s: &str) -> Option<u32> {
 /// Liste **fermée** : c'est elle qui permet d'admettre un titre non numéroté sans
 /// rouvrir le format. `## Chapitre premier` doit rester une erreur.
 const LIMINAIRES: [&str; 3] = ["Préface", "Avant-propos", "Prologue"];
-const ANNEXES: [&str; 3] = ["Épilogue", "Postface", "Remerciements"];
+const ANNEXES: [&str; 4] = ["Épilogue", "Postface", "Remerciements", "Biographie"];
 
 /// Un titre → la pièce qu'il nomme, s'il en nomme une.
 ///
@@ -862,6 +862,21 @@ mod tests {
 
         let err = decoupe("## Preface\n\nA.\n\n## 01 - Un\n\nB.\n", None).unwrap_err();
         assert!(err.contains("NN - Titre"), "{err}");
+    }
+
+    /// La présentation de l'auteur ferme le livre : elle n'est pas un chapitre, et rien
+    /// du corps ne peut la suivre. Placée avant les chapitres elle serait un liminaire
+    /// silencieux — une page d'auteur composée à l'ouverture du livre, découverte au
+    /// tirage.
+    #[test]
+    fn une_biographie_est_une_annexe_qui_ferme_le_livre() {
+        let p = decoupe("## 01 - Un\n\nA.\n\n## Biographie\n\nB.\n", None).unwrap();
+        assert_eq!(p[1].sorte, Sorte::Annexe);
+        assert_eq!(p[1].titre, "Biographie");
+        assert!(!p[1].est_chapitre(), "une biographie n'est pas un chapitre");
+
+        let err = decoupe("## Biographie\n\nA.\n\n## 01 - Un\n\nB.\n", None).unwrap_err();
+        assert!(err.contains("ferme le livre"), "{err}");
     }
 
     /// « Avant-propos » porte un tiret : reconnu après le découpage « NN - Titre », il

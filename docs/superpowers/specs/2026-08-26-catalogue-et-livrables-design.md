@@ -64,31 +64,31 @@ s'écrit pas ; seules les exceptions se déclarent.
 ```toml
 # pods/bod.toml
 cle = "bod"
-nom = "BoD (Books on Demand)"
+nom = "BoD"
 # Publié dans le guide de maquette, commun à tous ses formats.
 fond_perdu = 5.0
 
 [[format]]
 cle = "135x215"
 nom = "13,5 × 21,5 cm"
-mm = [135.0, 215.0]
+mm = { largeur = 135.0, hauteur = 215.0 }
 marges = { haut = 18.8, bas = 28.0, exterieur = 15.0 }
-# BoD ne module pas la reliure selon l'épaisseur : tranche unique.
-gouttieres = [[24, 900, 20.0]]
-source = "modèle Word « Roman » 13,5 × 21,5"
+# BoD ne module pas la marge de reliure selon l'épaisseur : tranche unique.
+gouttieres = [ { de = 24, a = 900, mm = 20.0 } ]
+source = "modèle Word « Roman A » 13,5 × 21,5"
 
 [[reliure]]
 cle = "broche"
 nom = "Broché — dos carré collé"
 geometrie = "dos-carre-colle"
-pages = [24, 900]
+pages = { min = 24, max = 900 }
 parite = "paire"
 source = "validation du calculateur officiel"
 
 [[reliure]]
 cle = "rigide"
 nom = "Couverture rigide"
-non_outille = "géométrie du casewrap non relevée : rempli, mors, épaisseur des cartons"
+non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
 
 [[finition]]
 cle = "mat"
@@ -98,23 +98,43 @@ nom = "Pelliculage mat"
 cle = "creme-90"
 nom = "Crème 90 g"
 teinte = "#f7f0e0"
-dos = { multiplie = 0.0675, plus = 0.6 }
-source = "calculateur officiel, relevé sur 4 points — 280 p → 19,5 mm"
+dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
+source = "calculateur officiel, relevé sur 3 points — 280 p → 19,5 mm"
+
+[[papier]]
+cle = "photo-brillant-130"
+nom = "Photo brillant 130 g"
+teinte = "#ffffff"
+dos = { forme = "multiplie", par = 0.0505, plus = 0.6 }
+# Plafonne plus bas que la reliure : 868 pages contre les 900 admis en broché.
+pages = { min = 24, max = 868 }
+source = "calculateur officiel — plafond à 868 pages"
 ```
+
+Les tables sont **nommées et non positionnelles** — `largeur`/`hauteur`, `de`/`a`/`mm`,
+`min`/`max` — parce que ces fichiers s'éditent à la main : une largeur prise pour une
+hauteur donne un livre à l'italienne que rien ne rattrape avant l'aperçu de la planche.
 
 **La pagination admise vit sur la reliure, jamais sur le format** : c'est elle qui la
 détermine — TheBookEdition accepte 40 à 750 pages en dos carré collé et 24 à 300 en rigide,
 au même format. Les tranches de `gouttieres` du format ne sont que des tranches de marge
 intérieure ; hors tranche, on refuse plutôt qu'extrapoler, comme aujourd'hui.
 
+**Le papier peut la resserrer, jamais l'élargir.** `Papier.pages` est optionnel et porte un
+plafond propre au papier, pour la raison que l'imprimeur choisit de lui donner — pas
+nécessairement l'épaisseur : BoD plafonne son photo brillant 130 g à 868 pages là où son
+broché va à 900, sans publier la cause de cette valeur, et le photo brillant est au
+contraire le plus mince des quatre papiers de sa table. Les deux bornes se **croisent** :
+le livrable admet ce que la reliure et le papier admettent tous deux.
+
 Trois règles d'écriture, qui prolongent celle qui tient déjà la table :
 
 - **`source` dit d'où vient le chiffre.** Les commentaires de provenance de `providers.rs`
   descendent ici ; ils ne doivent pas rester derrière.
-- **`non_outille` décrit notre état, pas celui du POD.** « géométrie non relevée » se
-  vérifie ; « BoD ne publie pas son rempli » serait une affirmation sur autrui qu'on n'a pas
-  faite. La nuance compte : la première phrase vieillit bien, la seconde devient un mensonge
-  le jour où on regarde vraiment.
+- **`non_outille` décrit notre état, pas celui du POD.** « planche ne sait pas composer une
+  couverture rigide » se vérifie ; « BoD ne publie pas son rempli » serait une affirmation
+  sur autrui qu'on n'a pas faite. La nuance compte : la première phrase vieillit bien, la
+  seconde devient un mensonge le jour où on regarde vraiment.
 - **Une valeur d'énumération inconnue est refusée**, jamais ignorée. `geometrie` n'admet
   aujourd'hui que `dos-carre-colle`, `parite` que `paire` — les seules que le code sache
   appliquer. Un fichier qui annoncerait `parite = "multiple-12-moins-1"` serait refusé
@@ -142,10 +162,12 @@ catalogue amputé sans savoir pourquoi.
 **Un fichier embarqué fautif est un bug de compilation logique**, pas un cas d'usage : il
 est attrapé par un test qui les charge tous, et le chargement peut alors échouer bruyamment.
 
-Le catalogue est chargé une fois dans un `OnceLock`. C'est ce qui garde valides les deux
-seules signatures `&'static Provider` hors tests — `commands.rs:467` et `commands.rs:1890` :
-le reste du code prend déjà des références ordinaires. Le refactor est plus superficiel
-qu'il n'en a l'air. `providers.rs` devient `catalogue.rs`.
+Le catalogue est chargé une fois dans un `OnceLock`. Les deux seules signatures
+`&'static Provider` hors tests étaient celles de `vise` et de `papier` (`commands.rs:479`
+et `1904` à l'époque — la spec avait écrit « couple », 467 et 1890) ; le lot 2 les a
+retirées pour neuf esperluettes et deux `clone()`, comme la reconnaissance l'avait mesuré
+(verdict 1c) : le reste du code prenait déjà des références ordinaires. Le refactor était
+plus superficiel qu'il n'en avait l'air. `providers.rs` devient `catalogue.rs`.
 
 ## 4. Le livrable
 
@@ -157,8 +179,11 @@ Conséquence assumée : deux livrables qui ne différeraient que par la finition
 est portée par le livrable et paraît au récapitulatif : c'est une donnée de commande, pas de
 fabrication.
 
-Le répertoire de package suit cette identité : `bod-135x215-broche-creme90/`, et les
-fichiers qu'il porte de même. Les relevés — dos et fond perdu, chez les POD qui ne les
+Le répertoire de package suit cette identité : `bod-135x215-broche-creme-90/`, et les
+fichiers qu'il porte de même — les quatre clés jointes par des tirets, **telles quelles**,
+jamais transformées ni re-découpées : le séparateur vit déjà dans les valeurs
+(`creme-90`), et une clé se fabrique et se compare, elle ne se parse pas (arbitrage du
+26/08). Les relevés — dos et fond perdu, chez les POD qui ne les
 publient pas — restent sur le livrable : ils dépendent du papier et de la pagination.
 
 **Migration.** Les quatorze clés actuelles se convertissent sans ambiguïté : `bod` → POD `bod`,
@@ -186,12 +211,53 @@ n'a jamais dépendu du papier.
 ## 6. L'écran Livraison
 
 À l'ajout, deux listes en cascade : le POD, puis **ses** formats. Une fois la ligne posée,
-trois réglages dessus : reliure, finition, papier, chacun limité à ce que ce POD offre pour
-ce format.
+trois réglages dessus : reliure, finition, papier, chacun limité à ce que ce POD offre.
+
+*Écrit « pour ce format », corrigé au lot 3 : reliures, finitions et papiers vivent sur le
+POD et jamais sous un format — c'est le lot 1 qui l'a voulu, « un arbre POD > format >
+reliure > papier aurait obligé à recopier les quatre papiers d'un POD sous chacun de ses
+formats ». Aucune exception par format n'est déclarable, et la phrase promettait donc plus
+que le modèle ne porte. Le jour où un POD n'offrira un papier que sous l'un de ses formats,
+ce sera un chantier de catalogue, pas d'écran.*
+
+**Le POD et le format ne se règlent pas** : ils se choisissent à l'ajout, et les changer
+sur place laisserait le livrable sous une pagination qui n'est plus la sienne — retirer
+puis ajouter le dit, et le fait. La reliure, elle, **se règle**, et emporte le gabarit avec
+elle : le livrable retombe sur un gabarit sans mesure et recompose, ce qui est précisément
+ce qu'une reliure exige, sa pagination admise et sa parité n'étant pas celles de la
+précédente. *Le lot 2 avait verrouillé le gabarit entier par prudence ; c'est ce § 6 qui
+l'emporte, arbitré le 26/08.*
+
+**La table plate porte une entrée par POD × format × reliure composable.** Elle n'en portait
+qu'une par POD × format, sur la première reliure outillée : tant que la reliure était figée
+c'était sans conséquence, mais une reliure réglable produit alors un gabarit que la table
+ignore, et le front dégrade en silence — ligne intitulée par sa clé brute, note de format
+disparue, relevé de fond perdu jamais proposé. *Corrigé au lot 3, sur une trouvaille de
+revue : aucun POD fourni n'ayant deux reliures composables, le cas ne se rencontrait qu'avec
+un fichier déposé sur le poste.*
 
 Une reliure non outillée paraît **grisée, avec sa raison en clair sous elle**. C'est la
 différence entre « ce POD ne le fait pas » et « l'application ne le compose pas », et elle
-doit se lire à l'écran, pas dans un document à côté.
+doit se lire à l'écran, pas dans un document à côté. *Le refus, lui, ne dépend pas de
+l'écran : `catalogue::resout` le rend depuis le lot 2, première instruction des commandes
+qui posent ou règlent un livrable. Le grisé n'est que la lecture de ce refus avant le clic.*
+
+**La finition n'a de contrôle que chez un POD qui en déclare.** Aucun des six fournis n'en
+déclare aujourd'hui : un contrôle vide se lirait comme un choix qu'on n'a pas su faire,
+alors qu'il n'y en avait aucun à faire. C'est le lot 4 qui les relèvera.
+
+**Le libellé d'un livrable nomme sa reliure là où elle distingue** — chez un POD qui en
+offre plusieurs de composables, et là seulement. Le pointeur du pied et les comptes rendus
+de package ne portent aucun contrôle : ce qui sépare deux livrables doit s'y lire, ou ne
+s'y lit pas. Ailleurs la reliure ne distingue rien et coûte quatre tirets cadratins à lire.
+*Ajouté au lot 3 : la spec ne parlait que de la ligne, où les axes se lisent dans leurs
+propres sélecteurs.*
+
+**Le relevé de dos suit le papier retenu**, jamais le papier d'office du POD. Un POD peut
+publier une formule pour l'un de ses papiers et n'en publier aucune pour l'autre ; c'est le
+papier de la ligne qui décide si le dos se calcule ou se relève. *Le lot 2 tranchait sur le
+papier d'office — exact par accident de données, aucun POD fourni ne mélangeant les deux
+formes.*
 
 Le reste de l'étape ne change pas : les relevés naissent vides, le dernier livrable ne se
 retire pas, et chaque package généré affiche sa planche en vignette.
@@ -223,6 +289,21 @@ les charge tous, et `cargo test` est exigé avant commit.
 est incompatible avec la parité paire que la composition impose partout. Le fichier écrira
 `parite = "paire"`, qui est ce que l'application fait, et la réserve reste au COOKBOOK. Le
 fichier ne doit pas annoncer une règle que le code n'applique pas.
+
+**Un gabarit réécrit sur le poste ne périme pas les mesures déjà prises.** `Destinataire.compose`
+porte l'invariant « une mesure présente vaut toujours, et ce qui pourrait la périmer l'efface
+à la source » ; mais `Livraison::normalise` n'efface une mesure que si le **papier** a disparu.
+Réécrire `<config>/pods/bod.toml` avec d'autres marges, une autre gouttière ou une autre
+formule de dos, sans toucher aux clés, laisse la mesure d'hier en place. Portée réelle,
+vérifiée : le package, lui, **recompose** — `package::composer_interieur`, appelé par
+`lot` une fois par gabarit, repasse par `interieur::converge` avec le gabarit courant —,
+donc aucune couverture fausse ne part à l'impression. Ce qui
+traverse est le **dos affiché** et le placement des envois. C'est la politique d'invalidation
+des mesures qu'il faut reprendre, pas le catalogue : le lot 2 la déplace déjà sous la clé
+(POD, format, reliure), c'est là qu'elle se traite. **Fermé par le lot 2** : la mesure
+porte l'empreinte de ce qui pagine (format, marges, gouttières), comparée une fois à
+l'ouverture — un gabarit réécrit périme la mesure ; le dos affiché, lui, se recalcule à
+chaque vue depuis la formule du papier, et se corrige donc tout seul.
 
 **Un `.ozalid` converti ne se relit plus par l'ancienne version.** C'est le cas de toute
 migration ; il est acceptable ici parce qu'aucune version n'est diffusée hors du poste.
@@ -271,12 +352,11 @@ Livraison continue d'afficher sa liste, construite depuis le nouveau catalogue.
 **Lot 2 — Le livrable.** L'identité à quatre axes, le `.ozalid` migré, la mesure rangée sous
 le gabarit d'intérieur, les noms de packages, les commandes `livrable_*`.
 
-**Lot 3 — La cascade.** L'écran Livraison : POD puis format à l'ajout, reliure, finition et
+**Lot 3 — La cascade.** ✅ *Fait le 26/08/2026.* L'écran Livraison : POD puis format à l'ajout, reliure, finition et
 papier sur la ligne, et le grisé qui dit pourquoi.
 
-**Lot 4 — BoD complété.** Tous ses formats, papiers et reliures, chacun avec sa `source`
-relevée dans ses guides — le comparatif en annonce 10 formats et 4 papiers, à vérifier chez
-BoD même. Le COOKBOOK suit.
+**Lot 4 — BoD complété.** ✅ *Fait le 27/08/2026.* Tous ses formats, papiers et reliures,
+chacun avec sa `source` relevée dans ses guides. Le COOKBOOK suit.
 
 ## Hors périmètre
 

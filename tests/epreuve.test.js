@@ -9,9 +9,9 @@ const assert = require('node:assert');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 
 const PROJET = {
@@ -31,8 +31,12 @@ const PROJET = {
   interieur: { police: 'Alegreya' },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
   livraison: {
-    destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-    courant: 'lulu',
+    livrables: [{
+      cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+      pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+      finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+    }],
+    courant: 'lulu-108x175-broche-standard',
   },
 };
 
@@ -40,6 +44,14 @@ const PROJET = {
 function faux(providers, sur = {}) {
   return async (cmd, args) => {
     if (cmd === 'providers_liste') return providers;
+    if (cmd === 'pods_liste') return [{
+      cle: 'lulu', nom: 'Lulu',
+      formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+      reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+      finitions: [],
+      papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+    }];
+    if (cmd === 'catalogue_refus') return [];
     if (cmd === 'polices_liste') return ['Bodoni Moda', 'Archivo', 'Spectral'];
     if (cmd === 'polices_texte_liste') return ['EB Garamond', 'Alegreya', 'Cardo'];
     if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -60,7 +72,7 @@ function faux(providers, sur = {}) {
     // remonterait une erreur dans l'entête.
     //
     // La mesure **doit** entrer dans le projet rendu, comme le Rust le fait : la veille
-    // relance tant que le destinataire visé n'en porte pas, et une composition qui
+    // relance tant que le livrable visé n'en porte pas, et une composition qui
     // réussirait sans rien déposer tournerait en boucle.
     if (cmd === 'composer') {
       const mesure = { pages: 262, gouttiere: 25, blanche: true, dos: 16.513 };
@@ -74,8 +86,8 @@ function faux(providers, sur = {}) {
           livraison: {
             ...PROJET.livraison,
             deja_compose: true,
-            destinataires: PROJET.livraison.destinataires.map((d) => (
-              d.provider === PROJET.livraison.courant ? { ...d, compose: mesure } : d
+            livrables: PROJET.livraison.livrables.map((d) => (
+              d.cle === PROJET.livraison.courant ? { ...d, compose: mesure } : d
             )),
           },
         },
@@ -157,7 +169,7 @@ test('une police refusée est dite, et le panneau revient au projet', async () =
 /* ---------- épreuve ---------- */
 
 /**
- * L'épreuve ne dépend d'aucune pagination ni d'aucun prestataire : elle doit pouvoir
+ * L'épreuve ne dépend d'aucune pagination ni d'aucun imprimeur : elle doit pouvoir
  * être tirée dès qu'un manuscrit est là, sans intérieur composé au préalable.
  */
 test('l\'épreuve se tire sans intérieur composé', async () => {

@@ -10,7 +10,7 @@
  *
  * Rappel qui vaut pour tout ce fichier : les tailles et écarts sont en pourcentage de
  * la largeur de couverture, jamais en mm. C'est ce qui rend la maquette portable d'un
- * format à l'autre, donc le choix du prestataire repoussable à la fin.
+ * format à l'autre, donc le choix de l'imprimeur repoussable à la fin.
  */
 
 const CASSES = [['telle', 'Telle quelle'], ['capitales', 'Capitales']];
@@ -675,7 +675,7 @@ function demanderApercu() {
 }
 
 /**
- * Dos à passer à l'aperçu : celui que le destinataire visé porte, et rien d'autre.
+ * Dos à passer à l'aperçu : celui que le livrable visé porte, et rien d'autre.
  *
  * Il n'y a plus rien à comparer ici, et c'est tout l'objet du dispositif : une mesure
  * enregistrée vaut toujours. Les quatre causes qui la déplaçaient — le gabarit, le
@@ -684,7 +684,7 @@ function demanderApercu() {
  * elles ; le livre, cinquième cause, lui échappait entièrement.
  */
 function dosCourant() {
-  return destinataireCourant()?.compose?.dos ?? null;
+  return livrableCourant()?.compose?.dos ?? null;
 }
 
 /**
@@ -747,7 +747,7 @@ function poserRatio() {
  *
  * Des fractions, pas des millimètres : l'aperçu s'affiche à la taille que la fenêtre lui
  * laisse, et seules des proportions y survivent. Elles ne se recalculent pas ici — ce
- * serait redire la règle qui choisit entre le fond perdu publié par le prestataire et
+ * serait redire la règle qui choisit entre le fond perdu publié par l'imprimeur et
  * celui relevé sur son gabarit, et refaire le calcul de dos que la pagination commande.
  */
 function poserReperes(reperes) {
@@ -772,7 +772,7 @@ function rendreReperes() {
  *
  * Rien à recomposer : l'habillage est posé **sur** l'image, pas dedans. C'est ce qui
  * rend la bascule instantanée — et ce qui garantit qu'aucun repère ne peut se glisser
- * dans le PDF remis au prestataire.
+ * dans le PDF remis à l'imprimeur.
  */
 function basculerReperes() {
   reperesVisibles = !reperesVisibles;
@@ -791,7 +791,7 @@ async function rendreApercu() {
   }
   $('etatApercu').textContent = 'composition de l\'aperçu…';
   try {
-    // Ni gabarit ni fond perdu à passer : ils viennent du destinataire visé, que le
+    // Ni gabarit ni fond perdu à passer : ils viennent du livrable visé, que le
     // Rust lit dans le projet.
     poserApercu(await invoke('couverture_apercu', { face, dosMm: dosCourant() }));
     $('etatApercu').textContent = '';
@@ -828,10 +828,10 @@ const REGLAGES = {
   },
 };
 
-/** Le format du destinataire visé, en millimètres — l'échelle de tout ce qui suit. */
+/** Le format du livrable visé, en millimètres — l'échelle de tout ce qui suit. */
 function formatCourant() {
-  const d = destinataireCourant();
-  const p = providers.find((x) => x.cle === d?.provider);
+  const d = livrableCourant();
+  const p = providers.find((x) => x.cle === d?.gabarit);
   return p ? { largeur: p.largeur, hauteur: p.hauteur } : null;
 }
 

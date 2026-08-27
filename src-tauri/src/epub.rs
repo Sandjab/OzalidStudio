@@ -1,7 +1,7 @@
 //! Le livre en EPUB 3 : une archive, et rien d'autre.
 //!
 //! Ce module ne touche pas au disque, n'appelle pas Typst et ne connaît aucun
-//! prestataire : il reçoit des chapitres et des octets, il rend des octets. C'est ce
+//! POD : il reçoit des chapitres et des octets, il rend des octets. C'est ce
 //! qui le rend éprouvable en entier sans `fonts/`, sans sidecar et sans répertoire
 //! temporaire.
 //!

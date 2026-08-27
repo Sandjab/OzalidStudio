@@ -3,14 +3,14 @@
 //! C'est la vérification qu'aucun test ne peut faire : le cadre, la position du bloc
 //! titre, le voile. À rejouer après toute modification du moteur de couverture.
 //!
-//! Usage : cargo run --example maquette -- <projet.ozalid> <prestataire> <sortie>
+//! Usage : cargo run --example maquette -- <projet.ozalid> <clé de gabarit> <sortie>
 
 use std::path::{Path, PathBuf};
 
+use ozalid_lib::catalogue;
 use ozalid_lib::couverture::{self, Ressource};
 use ozalid_lib::maquettes;
 use ozalid_lib::projet::Projet;
-use ozalid_lib::providers;
 use ozalid_lib::typst::Typst;
 
 fn main() -> Result<(), String> {
@@ -18,12 +18,26 @@ fn main() -> Result<(), String> {
     let (ozalid, cle, sortie) = match (args.next(), args.next(), args.next()) {
         (Some(a), Some(b), Some(c)) => (a, b, c),
         _ => {
-            eprintln!("usage : maquette <projet.ozalid> <prestataire> <répertoire de sortie>");
+            eprintln!("usage : maquette <projet.ozalid> <clé de gabarit> <répertoire de sortie>");
             std::process::exit(2);
         }
     };
 
-    let pr = providers::provider(&cle).ok_or_else(|| format!("prestataire inconnu : {cle}"))?;
+    let pr = catalogue::providers()
+        .iter()
+        .find(|p| p.cle == cle)
+        .unwrap_or_else(|| {
+            eprintln!("clé de gabarit inconnue : {cle}");
+            eprintln!(
+                "gabarits : {}",
+                catalogue::providers()
+                    .iter()
+                    .map(|p| p.cle.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            std::process::exit(2);
+        });
     let projet = Projet::ouvrir(Path::new(&ozalid))?;
     let dossier = PathBuf::from(&sortie);
     std::fs::create_dir_all(&dossier).map_err(|e| format!("{sortie} : {e}"))?;

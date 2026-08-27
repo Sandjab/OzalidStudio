@@ -11,9 +11,9 @@ const assert = require('node:assert');
 const { charge } = require('./dom_shim');
 
 const LULU = {
-  cle: 'lulu', libelle: 'Lulu — poche 108 × 175',
-  largeur: 108, hauteur: 175, fond_perdu: 3.175, dos_publie: true,
-  papiers: [{ cle: 'standard', libelle: 'Papier standard' }],
+  cle: 'lulu-108x175-broche', pod: 'lulu', format: '108x175', reliure: 'broche',
+  libelle: 'Lulu — poche 108 × 175',
+  largeur: 108, hauteur: 175, fond_perdu: 3.175,
 };
 
 function projet(sur = {}) {
@@ -34,8 +34,12 @@ function projet(sur = {}) {
     interieur: { police: 'EB Garamond' },
     envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
     livraison: {
-      destinataires: [{ provider: 'lulu', papier: 'standard', dos_mm: null, fond_perdu_mm: null }],
-      courant: 'lulu',
+      livrables: [{
+        cle: 'lulu-108x175-broche-standard', gabarit: 'lulu-108x175-broche',
+        pod: 'lulu', format: '108x175', reliure: 'broche', papier: 'standard',
+        finition: null, dos_mm: null, fond_perdu_mm: null, compose: null,
+      }],
+      courant: 'lulu-108x175-broche-standard',
     },
     ...sur,
   };
@@ -48,6 +52,14 @@ function atelier({ garde = 'ignorer', recents = [], sur = {} } = {}) {
     appels.push([cmd, args]);
     switch (cmd) {
       case 'providers_liste': return [LULU];
+      case 'pods_liste': return [{
+        cle: 'lulu', nom: 'Lulu',
+        formats: [{ cle: '108x175', nom: 'poche 108 × 175' }],
+        reliures: [{ cle: 'broche', nom: 'Broché — dos carré collé', non_outille: null }],
+        finitions: [],
+        papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
+      }];
+      case 'catalogue_refus': return [];
       case 'polices_liste': return ['Bodoni Moda'];
       case 'polices_texte_liste': return ['EB Garamond'];
       case 'jetons_liste': return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];

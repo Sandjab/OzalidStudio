@@ -18,6 +18,7 @@ function h(tag, texte, classe) {
 
 let projet = null;
 let providers = [];
+let pods = [];
 let polices = [];
 /**
  * Les mains embarquées avec l'application.
@@ -226,7 +227,7 @@ function allerA(cle) {
  * ce qui a déjà fait mentir deux fois la liste des jetons recopiée dans le HTML.
  */
 function dosPerime(p) {
-  return p.livraison.deja_compose && !destinataireCourant()?.compose;
+  return p.livraison.deja_compose && !livrableCourant()?.compose;
 }
 
 /**
@@ -250,6 +251,7 @@ function dosPerime(p) {
 function etatEtapes(p) {
   const attendu = p.livre.chapitres;
   const ecart = attendu !== null && attendu !== undefined && attendu !== p.chapitres_trouves;
+  const elagues = (p.elagues ?? []).length;
   return {
     livre: {
       sous: ecart
@@ -262,8 +264,20 @@ function etatEtapes(p) {
       alerte: !p.couverture,
     },
     // Rien de vrai à dire avant qu'un package n'ait été généré, et le pied porte déjà
-    // le dos : mieux vaut se taire que meubler.
-    livraison: { sous: '', alerte: false },
+    // le dos : mieux vaut se taire que meubler. Reste une chose vraie, et une seule :
+    // l'ouverture a retiré un livrable. La boîte qui le nomme vit dans la Livraison,
+    // l'application ouvre sur le Livre, et personne ne va vérifier une liste qu'il ne
+    // sait pas amputée — le témoin est le seul signe qui y mène.
+    //
+    // Le compte avec lui, jamais le point seul : les deux autres onglets qui s'allument
+    // pairent toujours le témoin avec un mot — « 12 chapitres, 14 attendus », « aucune
+    // maquette » —, et un point nu dirait où aller sans dire quoi. Rien à élaguer, rien
+    // à dire : la chaîne vide reprend la main, et l'objection d'origine tient toujours.
+    livraison: {
+      sous: elagues ? `${elagues} livrable${elagues > 1 ? 's' : ''} `
+        + `retiré${elagues > 1 ? 's' : ''}` : '',
+      alerte: elagues > 0,
+    },
     // Le compte des envois est la seule chose vraie que le projet porte ici ; zéro
     // n'est pas une anomalie, donc pas un mot et jamais de témoin.
     envois: {
@@ -327,7 +341,7 @@ function alerter(message) {
 /**
  * Le pied : pour qui l'on regarde, et ce que vaut le dos.
  *
- * Le destinataire visé s'y choisit, une fois pour toute la fenêtre — c'est le pointeur
+ * Le livrable visé s'y choisit, une fois pour toute la fenêtre — c'est le pointeur
  * de la spec, et il est ici plutôt qu'à l'étape Livraison parce qu'on en change en
  * réglant la couverture, sans avoir à quitter ce qu'on regarde.
  *
@@ -341,7 +355,7 @@ function alerter(message) {
  *   l'onglet Intérieur, descendu ici avec l'étape qui a disparu. Il tenait sa place de
  *   ce qu'on allait y réparer ; il tient celle-ci de ce que le pied portait déjà le
  *   dos, et de ce qu'on ne quitte pas la Couverture pour aller lire un onglet.
- * - **relevé sur le gabarit** : chez un prestataire qui ne publie pas de formule, il n'y
+ * - **relevé sur le gabarit** : chez un imprimeur qui ne publie pas de formule, il n'y
  *   a jamais rien à composer, et « non composé » ferait recomposer en boucle un livre
  *   dont la pagination est déjà juste. Ce qui manque est un relevé, pas un calcul —
  *   c'est le vocabulaire que `noteFormat` emploie déjà pour le fond perdu.
@@ -353,11 +367,11 @@ function alerter(message) {
  * pareil, et le second passerait pour un projet neuf.
  */
 function majPied() {
-  // Le prestataire, pas seulement le projet : un démarrage qui n'a pas pu lire les
+  // Le gabarit, pas seulement le projet : un démarrage qui n'a pas pu lire les
   // gabarits laisse la liste vide, et le premier projet ouvert ferait lever le pied
   // au lieu de dire ce qu'il sait — c'est-à-dire rien.
   const p = projet ? providerCourant() : null;
-  const sel = $('inDestinataire');
+  const sel = $('inLivrable');
   $('visee').hidden = !p;
   if (!p) {
     sel.replaceChildren();
@@ -365,8 +379,8 @@ function majPied() {
     return;
   }
   sel.replaceChildren();
-  for (const d of projet.livraison.destinataires) {
-    sel.append(new Option(libelleProvider(d.provider), d.provider));
+  for (const d of projet.livraison.livrables) {
+    sel.append(new Option(libelleLivrable(d), d.cle));
   }
   sel.value = projet.livraison.courant;
 
@@ -383,7 +397,7 @@ function majPied() {
   const perime = dosPerime(projet);
   const dos = dosCourant();
   const etat = perime ? 'dos périmé'
-    : !p.dos_publie ? 'dos relevé sur le gabarit'
+    : !papierCourant()?.dos_publie ? 'dos relevé sur le gabarit'
       : dos === null ? 'dos non composé'
         : `dos ${nb(dos, 1)} mm`;
   $('piedDos').textContent = `· ${etat}`;
@@ -391,9 +405,9 @@ function majPied() {
 
   // Les chiffres ne paraissent qu'avec une mesure, et un dos périmé n'en a pas : c'est
   // sa définition même — `dosPerime` est vrai quand le livre a été composé et que la
-  // mesure du destinataire visé a disparu. Il n'y a donc pas de second garde à écrire
+  // mesure du livrable visé a disparu. Il n'y a donc pas de second garde à écrire
   // ici, et le pied ne peut pas donner à lire 264 pages sous un « dos périmé ».
-  const mesure = destinataireCourant()?.compose;
+  const mesure = livrableCourant()?.compose;
   if (!mesure) return;
 
   $('piedMesure').textContent =
@@ -448,10 +462,15 @@ function lienFichier(chemin, libelle) {
   return a;
 }
 
-/* ---------- prestataires ---------- */
+/* ---------- catalogue ---------- */
 
 async function chargerProviders() {
   providers = await invoke('providers_liste');
+  // L'arbre du catalogue : ce que chaque POD offre. La table plate ci-dessus reste la
+  // seule à savoir dire un format en millimètres et un fond perdu effectif ; celle-ci
+  // est la seule à savoir dire ce qu'on a le droit de choisir.
+  pods = await invoke('pods_liste');
+  await afficherRefusCatalogue();
   polices = await invoke('polices_liste');
   for (const p of await invoke('polices_texte_liste')) {
     $('inPoliceInterieur').append(new Option(p, p));
@@ -475,24 +494,68 @@ async function chargerProviders() {
 }
 
 /**
- * Le gabarit du destinataire visé, tel que la table le décrit.
+ * Le gabarit du livrable visé, tel que la table le décrit.
+ *
+ * La jointure passe par `gabarit` et non par la clé du livrable : le papier fait partie
+ * de l'identité, jamais du gabarit — deux livrables qui ne diffèrent que par lui
+ * partagent la même ligne de table, et c'est tout l'objet du lot.
  *
  * Le projet ne porte que des clés ; le format, le fond perdu et les papiers viennent
  * de la table, jamais du document — c'est ce qui permet à un `.ozalid` de suivre un
- * prestataire qui change son guide.
+ * imprimeur qui change son guide.
  */
 function providerCourant() {
-  return providers.find((p) => p.cle === projet?.livraison.courant);
+  const d = livrableCourant();
+  return providers.find((p) => p.cle === d?.gabarit);
 }
 
-/** Le destinataire visé : son papier et ses relevés. */
-function destinataireCourant() {
-  return projet?.livraison.destinataires.find((d) => d.provider === projet.livraison.courant);
+/**
+ * Le papier du livrable visé, tel que le catalogue le décrit.
+ *
+ * L'arbre et non la table plate : c'est le papier retenu qui dit si le dos se calcule,
+ * et la projection ne connaît que celui d'office de son POD.
+ */
+function papierCourant() {
+  const d = livrableCourant();
+  return pods.find((p) => p.cle === d?.pod)?.papiers.find((pa) => pa.cle === d?.papier);
+}
+
+/** Le livrable visé : son papier, sa finition et ses relevés. */
+function livrableCourant() {
+  return projet?.livraison.livrables.find((d) => d.cle === projet.livraison.courant);
 }
 
 /** Le libellé d'un gabarit, ou sa clé si la table ne le connaît plus. */
 function libelleProvider(cle) {
   return providers.find((p) => p.cle === cle)?.libelle ?? cle;
+}
+
+/**
+ * Le libellé d'un livrable : son gabarit, son papier, et sa reliure quand elle distingue.
+ *
+ * Le pied et les comptes rendus de package ne portent aucun contrôle : ce qui sépare deux
+ * livrables doit s'y lire dans le libellé, ou ne s'y lit pas. Le papier y est donc
+ * toujours — deux livrables d'un même gabarit ne diffèrent que par lui.
+ *
+ * La reliure, elle, n'y paraît **que chez un POD qui en offre plusieurs de composables**.
+ * Ailleurs elle ne distingue rien, et elle coûte cher à lire : « Broché — dos carré
+ * collé » porte déjà son propre tiret cadratin, et l'ajouter d'office donnerait « Lulu —
+ * poche 108 × 175 — Broché — dos carré collé — Papier standard », quatre tirets pour une
+ * information qu'aucun choix n'accompagne. Un libellé dit ce qui distingue, pas tout ce
+ * qu'on sait de la chose.
+ *
+ * Reliure et papier viennent de l'arbre, seul à porter l'offre du POD ; le nom du gabarit
+ * reste à la table plate, seule à composer « POD — format ».
+ */
+function libelleLivrable(d) {
+  const p = providers.find((x) => x.cle === d.gabarit);
+  const pod = pods.find((x) => x.cle === d.pod);
+  const papier = pod?.papiers.find((x) => x.cle === d.papier)?.libelle ?? d.papier;
+  const plusieurs = (pod?.reliures ?? []).filter((r) => r.non_outille === null).length > 1;
+  const reliure = plusieurs
+    ? ` — ${pod.reliures.find((x) => x.cle === d.reliure)?.nom ?? d.reliure}`
+    : '';
+  return `${p?.libelle ?? d.gabarit}${reliure} — ${papier}`;
 }
 
 /* ---------- projet ---------- */
@@ -527,7 +590,7 @@ function afficherProjet(p) {
   // Lu dans la mesure du projet, jamais dans le retour de `composer` : un PDF composé
   // dans une écriture de repli ne redevient pas juste en refermant le livre, et cette
   // phrase doit être là à la réouverture. Le pied n'en porte que le signe.
-  const repli = destinataireCourant()?.compose?.polices_introuvables ?? [];
+  const repli = livrableCourant()?.compose?.polices_introuvables ?? [];
   $('repliPolices').textContent = repli.length
     ? `Police introuvable, composé dans une écriture de repli : ${repli.join(', ')}.`
       + ' Le PDF ne suit pas la maquette.'
@@ -565,7 +628,8 @@ function afficherProjet(p) {
   // à l'endroit où le manque se voit.
   if (p.couverture) afficherCouverture(p.couverture);
   else poserDisposition(false);
-  afficherDestinataires();
+  afficherLivrables();
+  majElagues(p);
   afficherEnvois();
   demanderApercu();
   majPied();
@@ -574,7 +638,7 @@ function afficherProjet(p) {
 }
 
 /**
- * Recompose de soi-même quand la mesure du destinataire visé vient d'être périmée.
+ * Recompose de soi-même quand la mesure du livrable visé vient d'être périmée.
  *
  * Deux conditions, et il faut les deux.
  *
@@ -596,7 +660,11 @@ function veiller() {
     veilleSuspendue = false;
     return;
   }
-  if (!(consenti || projet?.livraison.deja_compose) || destinataireCourant()?.compose) return;
+  // Un `courant` qui ne désigne rien n'arme jamais la veille : recomposer sans livrable
+  // boucle sans fin et sans erreur (reconnaissance § 6). Le Rust garantit l'invariant ;
+  // cette garde le tient si un état transitoire le casse.
+  const c = livrableCourant();
+  if (!(consenti || projet?.livraison.deja_compose) || !c || c.compose) return;
   clearTimeout(attenteComposition);
   attenteComposition = setTimeout(() => recomposer(false), DELAI_COMPOSITION);
 }
@@ -618,7 +686,12 @@ async function recomposer(force) {
   // l'employer désarme la veille plutôt que de faire recalculer à l'identique ce que le
   // clic vient d'obtenir. `force` couvre le seul cas où la mesure présente ne vaut
   // rien — celui d'une reprise, expliqué plus bas.
-  if (!force && destinataireCourant()?.compose) return;
+  // Deux causes de ne rien faire, et il faut les distinguer : la mesure est là — il n'y
+  // a rien à recalculer — ou le pointeur ne désigne aucun livrable, et recomposer
+  // boucle alors sans fin (même garde que `veiller`). Un `?? true` les confondrait avec
+  // une mesure absente, qui est justement le seul cas où il faut composer.
+  const c = livrableCourant();
+  if (!force && (!c || c.compose)) return;
   compositionEnCours = true;
   try {
     await composer();
@@ -737,7 +810,7 @@ function oublierLaComposition() {
  * Efface ce que le projet précédent avait laissé à l'écran.
  *
  * Ses sorties de composition d'abord, puis ce qui n'appartient qu'à lui : l'étape où
- * l'on était, ses destinataires, ses envois, sa couverture. C'est ce partage qui sépare
+ * l'on était, ses livrables, ses envois, sa couverture. C'est ce partage qui sépare
  * les deux fonctions — remplacer le texte d'un livre n'est pas en ouvrir un autre.
  */
 function oublierLesSorties() {
@@ -753,9 +826,9 @@ function oublierLesSorties() {
   // regardait. Rester sur la Livraison en ouvrant un autre livre donnerait à lire ses
   // packages sous le titre du nouveau.
   etape = 'livre';
-  // La liste des destinataires appartient au projet, pas à l'écran : sans projet, elle
+  // La liste des livrables appartient au projet, pas à l'écran : sans projet, elle
   // n'a personne à nommer, et `afficherProjet` la refait entièrement pour le suivant.
-  $('destinataires').replaceChildren();
+  $('livrables').replaceChildren();
   // Les envois de même : ce sont les mots écrits pour les lecteurs du livre A, et
   // l'aperçu de page de titre qui va avec. L'image proposée par le modèle s'en va avec
   // eux : le Rust l'a oubliée en posant l'autre projet, et laisser « Retenir » allumé
@@ -980,7 +1053,7 @@ async function majLivre() {
  * l'épreuve, ni les envois — et rien dans le panneau ne permettrait de s'en apercevoir,
  * le gabarit, le papier et la police, eux, n'ayant pas bougé.
  *
- * Les sorties, et elles seules : le projet est le même, avec ses destinataires, ses
+ * Les sorties, et elles seules : le projet est le même, avec ses livrables, ses
  * envois à écrire et l'étape où l'on travaillait.
  *
  * Périmé sans regarder si le texte a réellement changé : réimporter un manuscrit
@@ -1080,7 +1153,7 @@ async function chargerEcriture(famille) {
 /*
  * Aucun panneau de compte rendu ici, et c'est le fait de ce lot.
  *
- * Ce que la composition mesure entre dans le projet, chez le destinataire visé, et le
+ * Ce que la composition mesure entre dans le projet, chez le livrable visé, et le
  * pied le relit de là — comme le dos le faisait déjà seul. `Composition` porte les mêmes
  * chiffres en copie de lecture ; l'écran ne s'en sert plus, et `afficherProjet` suffit.
  * C'est ce qui fait tenir la légende après une réouverture, là où un panneau rempli
@@ -1091,7 +1164,7 @@ async function chargerEcriture(famille) {
  */
 
 /**
- * Compose l'intérieur pour le destinataire visé.
+ * Compose l'intérieur pour le livrable visé.
  *
  * Plus personne ne l'appelle depuis un bouton : elle part du chargement d'un manuscrit,
  * puis de la veille. Son compte rendu est donc une **légende** et non l'attente d'un
@@ -1115,7 +1188,7 @@ async function composer() {
   try {
     const c = await invoke('composer');
     // Le dos sort de la pagination qu'on vient de mesurer, et c'est le projet qui le
-    // retient désormais, chez le destinataire pour qui il vaut. L'interface n'en garde
+    // retient désormais, chez le livrable pour qui il vaut. L'interface n'en garde
     // aucune copie : elle le relit là où il est enregistré, comme tout le reste — et
     // depuis ce lot, les pages, les chapitres, la gouttière et le repli avec.
     afficherProjet(c.projet);
@@ -1248,22 +1321,35 @@ $('btPackager').addEventListener('click', packager);
 $('btEbooks').addEventListener('click', ebooks);
 $('btEpreuve').addEventListener('click', epreuve);
 $('inPoliceInterieur').addEventListener('change', majInterieur);
-// Changer de destinataire déplace le format de l'aperçu et l'épaisseur du dos : c'est
+// Changer de livrable déplace le format de l'aperçu et l'épaisseur du dos : c'est
 // le projet qui les porte, et `afficherProjet` suffit à les remettre d'accord.
 // Les vignettes du rail, elles, ne sont pas dans le projet : ce sont les pages d'une
-// pagination, et deux destinataires n'ont pas les mêmes. Elles se périment donc ici, et
-// non dans `composer` seul — revenir à un destinataire déjà mesuré ne recompose rien, et
+// pagination, et deux livrables n'ont pas les mêmes. Elles se périment donc ici, et
+// non dans `composer` seul — revenir à un livrable déjà mesuré ne recompose rien, et
 // le rail garderait les pages du précédent.
-$('inDestinataire').addEventListener('change', () => tente(async () => {
-  afficherProjet(await invoke('destinataire_viser', {
-    providerCle: $('inDestinataire').value,
-  }));
+$('inLivrable').addEventListener('change', () => tente(async () => {
+  afficherProjet(await invoke('livrable_viser', { cle: $('inLivrable').value }));
   oublierPages();
 }));
-$('btAjouterDestinataire').addEventListener('click', () => tente(async () =>
-  afficherProjet(await invoke('destinataire_ajouter', {
-    providerCle: $('inAjoutDestinataire').value,
-  }))));
+// La cascade parle en POD puis en format ; la reliure et le papier d'office viennent du
+// catalogue, et se règlent ensuite sur la ligne. C'est le Rust qui refuse le vrai
+// doublon.
+$('inAjoutPod').addEventListener('change', afficherFormatsDuPod);
+$('btAjouterLivrable').addEventListener('click', () => tente(async () => {
+  const p = pods.find((x) => x.cle === $('inAjoutPod').value);
+  // La première reliure **composable** : une reliure grisée porte une raison de ne pas
+  // l'être, et le Rust la refuserait en la citant. Proposer d'office ce qu'on sait
+  // refuser serait un piège tendu au premier clic.
+  const reliure = p.reliures.find((r) => r.non_outille === null);
+  afficherProjet(await invoke('livrable_ajouter', {
+    fabrication: {
+      pod: p.cle,
+      format: $('inAjoutFormat').value,
+      reliure: reliure.cle,
+      papier: p.papiers[0].cle,
+    },
+  }));
+}));
 $('btEnvoyer').addEventListener('click', envoyer);
 // Un envoi neuf n'a pas encore de mot : c'est le nom qui l'ouvre, et le mot se saisit
 // dans la ligne. Un dédicataire vide n'ajoute rien plutôt que d'ajouter un anonyme.
