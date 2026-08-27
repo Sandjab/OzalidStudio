@@ -42,6 +42,6 @@ anglais conservés tels quels (`fond perdu` reste `fond perdu`, mais `viewport`,
   bien : cargo juge le binaire à jour si leur date précède les artefacts, et fait
   tourner l'**ancien** catalogue contre les nouveaux tests. Le symptôme n'est pas une
   interface périmée mais un écart de valeur — `left: 18.75, right: 18.8` —, c'est-à-dire
-  la signature exacte d'une pagination qui aurait bougé. Devant un tel écart, faire
-  d'abord `touch src-tauri/pods/*.toml src-tauri/maquettes/*.maquette
-  src-tauri/src/lib.rs` et relancer, avant de conclure à une régression du témoin.
+  la signature exacte d'une pagination qui aurait bougé. Devant un tel écart, relancer
+  d'abord après un `touch` des deux répertoires et de `src-tauri/src/lib.rs`, avant de
+  conclure à une régression du témoin.

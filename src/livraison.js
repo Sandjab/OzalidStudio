@@ -95,7 +95,7 @@ function majElagues(vue) {
  * Une ligne par livrable : ses trois réglages — reliure, finition, papier —, le format
  * de son gabarit, et les relevés que les imprimeurs à gabarit exigent — dos et fond
  * perdu, qu'eux seuls ne publient pas. Plus de cases à cocher : être dans la liste *est*
- * le fait d'être livrable, et il n'est plus désigné deux fois.
+ * le fait d'être livrable, et rien ne le désigne deux fois.
  *
  * Les trois réglages se construisent sur l'**arbre** du catalogue, seul à savoir ce que
  * ce POD offre ; la table plate ne sert plus qu'au format et au fond perdu, qu'elle
