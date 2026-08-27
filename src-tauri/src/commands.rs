@@ -1399,6 +1399,9 @@ pub struct Resultat {
     /// L'identité du livrable, à quatre axes : c'est elle qui nomme son répertoire.
     pub cle: String,
     pub libelle: String,
+    /// La finition retenue, sous son nom d'imprimeur. Absente le plus souvent : c'est
+    /// le cas courant, et l'écran ne montre pas une ligne vide.
+    pub finition: Option<String>,
     pub package: Option<package::Package>,
     /// La planche du package, en PNG, prête à poser dans une balise `img`.
     ///
@@ -1406,6 +1409,20 @@ pub struct Resultat {
     /// c'est déjà par une donnée en clair que l'aperçu de la Couverture voyage.
     pub vignette: Option<String>,
     pub erreur: Option<String>,
+}
+
+/// Le nom d'imprimeur de la finition retenue, tel que le récapitulatif la porte.
+///
+/// La clé du `.ozalid` ne se montre pas : c'est « Pelliculage mat » qu'on coche sur un
+/// bon de commande, pas « mat ». À défaut de nom — un POD inconnu, une finition que le
+/// catalogue ne porte plus et que `normalise` n'élague pas —, la clé telle quelle : un
+/// mot brut se lit encore, une ligne absente ne se lit pas.
+fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<String> {
+    let cle = livrable.finition.as_deref()?;
+    Some(
+        pod.and_then(|p| p.finitions.iter().find(|f| f.cle == cle))
+            .map_or_else(|| cle.to_owned(), |f| f.nom.clone()),
+    )
 }
 
 /// Génère le package de chaque livrable du livre, chacun dans son répertoire.
@@ -1443,15 +1460,17 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
             // Le POD est le seul axe qui puisse encore se nommer quand la résolution
             // échoue sur un autre : afficher la clé à quatre segments en gros titre
             // serait un recul devant « BoD ».
-            Err(e) => Err(Resultat {
-                cle: d.cle(),
-                libelle: catalogue::pod(&d.fabrication.pod)
-                    .map(|p| p.nom.clone())
-                    .unwrap_or_else(|| d.cle()),
-                package: None,
-                vignette: None,
-                erreur: Some(e),
-            }),
+            Err(e) => {
+                let pod = catalogue::pod(&d.fabrication.pod);
+                Err(Resultat {
+                    cle: d.cle(),
+                    libelle: pod.map(|p| p.nom.clone()).unwrap_or_else(|| d.cle()),
+                    finition: nom_finition(d, pod),
+                    package: None,
+                    vignette: None,
+                    erreur: Some(e),
+                })
+            }
         });
     }
 
@@ -1466,28 +1485,38 @@ pub fn packager(atelier: State<Atelier>) -> Result<Vec<Resultat>, String> {
         .collect();
     let mut paquets = package::lot(&o.projet, &cibles, &racine, &typst).into_iter();
 
+    // `zip` sur les livrables : `etapes` a été poussée dans leur ordre, et la finition
+    // ne voyage pas dans la `Cible` — elle ne fabrique rien, aucun octet du PDF ni aucun
+    // nom de fichier n'en dépend. Elle se commande, et le récapitulatif est le seul
+    // endroit où elle peut être lue.
     let sorties = etapes
         .into_iter()
-        .map(|etape| match etape {
+        .zip(&livrables)
+        .map(|(etape, d)| match etape {
             Err(r) => r,
-            Ok(cible) => match paquets.next().expect("un résultat par cible envoyée à lot") {
-                Ok(p) => Resultat {
-                    cle: cible.cle,
-                    libelle: cible.pr.libelle,
-                    // La vignette manquante ne perd pas le package : les PDF sont
-                    // écrits, et c'est eux que l'imprimeur reçoit.
-                    vignette: donnee_png(Path::new(&p.vignette)).ok(),
-                    package: Some(p),
-                    erreur: None,
-                },
-                Err(e) => Resultat {
-                    cle: cible.cle,
-                    libelle: cible.pr.libelle,
-                    package: None,
-                    vignette: None,
-                    erreur: Some(e),
-                },
-            },
+            Ok(cible) => {
+                let finition = nom_finition(d, catalogue::pod(&d.fabrication.pod));
+                match paquets.next().expect("un résultat par cible envoyée à lot") {
+                    Ok(p) => Resultat {
+                        cle: cible.cle,
+                        libelle: cible.pr.libelle,
+                        finition,
+                        // La vignette manquante ne perd pas le package : les PDF sont
+                        // écrits, et c'est eux que l'imprimeur reçoit.
+                        vignette: donnee_png(Path::new(&p.vignette)).ok(),
+                        package: Some(p),
+                        erreur: None,
+                    },
+                    Err(e) => Resultat {
+                        cle: cible.cle,
+                        libelle: cible.pr.libelle,
+                        finition,
+                        package: None,
+                        vignette: None,
+                        erreur: Some(e),
+                    },
+                }
+            }
         })
         .collect();
     Ok(sorties)
@@ -2528,6 +2557,42 @@ nom = "Pelliculage mat"
 
         // Aucune finition n'est le cas courant : rien à vérifier, rien à refuser.
         assert_eq!(reglage_refuse(&place, &place, &pod), None);
+    }
+
+    /// La finition ne fabrique rien : elle ne change pas un octet du PDF, aucun nom de
+    /// fichier ne la porte, et c'est pour ça que deux livrables ne se distinguent pas
+    /// par elle. Mais elle **se commande**, et le récapitulatif est ce qu'on emporte
+    /// chez l'imprimeur : muet, il fait commander un livre sans le pelliculage qu'on
+    /// venait de cocher. C'est la promesse que `Livrable` écrit depuis le lot 2 — « la
+    /// finition qui paraîtra au récapitulatif » —, invérifiable tant qu'aucun POD n'en
+    /// déclarait, et fausse depuis que BoD en déclare trois.
+    ///
+    /// Le **nom**, jamais la clé : c'est « Pelliculage mat » qui se commande, pas
+    /// « mat ».
+    #[test]
+    fn le_recapitulatif_nomme_la_finition_retenue() {
+        let pod = pod_a_finition();
+        let mut l = Livrable::pour(fabrication("essai", "6x9", "broche", "creme"));
+
+        assert_eq!(
+            nom_finition(&l, Some(&pod)),
+            None,
+            "aucune finition retenue : rien à écrire au récapitulatif"
+        );
+
+        l.finition = Some("mat".into());
+        assert_eq!(
+            nom_finition(&l, Some(&pod)).as_deref(),
+            Some("Pelliculage mat")
+        );
+
+        // Une finition que le catalogue ne porte plus : `normalise` ne l'élague pas
+        // encore, et le POD peut lui-même avoir disparu. La clé brute se lit toujours
+        // — une ligne absente, elle, ne se lit pas du tout, et c'est justement le
+        // silence qu'on répare ici.
+        l.finition = Some("velours".into());
+        assert_eq!(nom_finition(&l, Some(&pod)).as_deref(), Some("velours"));
+        assert_eq!(nom_finition(&l, None).as_deref(), Some("velours"));
     }
 
     /// La vue que le front lit : deux papiers du même gabarit **partagent** la mesure —

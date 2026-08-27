@@ -340,6 +340,13 @@ function afficherPackages(resultats) {
       for (const [k, v] of [
         ['Pages', `${p.pages}${p.blanche ? ' (blanche de parité)' : ''}`],
         ['Papier', p.papier],
+        // Après le papier — l'autre chose qu'on choisit sans qu'un octet du PDF change,
+        // et qui se commande quand même. La grille alterne les colonnes, les deux ne
+        // sont donc pas voisines à l'écran : c'est l'ordre de lecture qui les tient
+        // ensemble. Elle ne paraît que là où il y en a une, comme le contrôle de la
+        // ligne du livrable, où « aucune » est le cas courant et où une entrée vide se
+        // lirait comme un réglage manqué.
+        ...(r.finition ? [['Finition', r.finition]] : []),
         ['Gouttière', `${nb(p.gouttiere, 1)} mm`],
         ['Dos', `${nb(p.dos)} mm`],
         ['Planche', `${nb(p.planche[0])} × ${nb(p.planche[1])} mm, `

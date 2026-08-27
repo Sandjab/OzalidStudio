@@ -791,6 +791,41 @@ test('un package affiche le dos, la planche et les fichiers produits', async () 
 });
 
 /**
+ * La finition ne change pas un octet du PDF — c'est bien pour ça qu'elle ne distingue
+ * pas deux livrables, et qu'aucun nom de fichier ne la porte. Mais elle **se commande**,
+ * et ce compte rendu est ce qu'on emporte chez l'imprimeur : muet, il fait commander un
+ * livre sans le pelliculage qu'on venait de cocher.
+ *
+ * Elle se lit à côté du papier, l'autre chose qu'on choisit sans que le PDF change.
+ */
+test('le compte rendu d\'un package porte la finition retenue', async () => {
+  const { els } = await ouvre([LULU], {
+    packager: () => [{
+      cle: 'lulu-108x175-broche-standard',
+      libelle: 'Lulu',
+      finition: 'Pelliculage mat',
+      package: paquet(),
+      vignette: null,
+      erreur: null,
+    }],
+  });
+  await els.get('btPackager').declenche('click');
+
+  assert.deepStrictEqual(
+    els.get('packages').textes('dt'),
+    ['Pages', 'Papier', 'Finition', 'Gouttière', 'Dos', 'Planche'],
+  );
+  assert.deepStrictEqual(els.get('packages').textes('dd'), [
+    '262 (blanche de parité)',
+    'Papier standard',
+    'Pelliculage mat',
+    '25,0 mm',
+    '16,51 mm',
+    '238,86 × 181,35 mm, fond perdu 3,175 mm',
+  ]);
+});
+
+/**
  * Le répertoire une fois, les noms ensuite. Ce n'est pas de la cosmétique : le compte
  * rendu de deux livrables ne tient dans la fenêtre que si le chemin du projet n'y
  * est pas écrit quatre fois. Ce que le test protège, c'est que les noms de fichiers

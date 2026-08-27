@@ -1205,11 +1205,25 @@ dix formats** pour regarder les images. Aucune n'était visible depuis une tâch
    part** que le catalogue vit dans `src-tauri/pods/*.toml` et se surcharge par
    `<config>/pods/`. Le livrable central de quatre lots y est invisible. La tâche 6 est
    passée sur ces lignes pour le seul renommage sans voir ce qu'elles décrivaient.
+
+   **Réglée le 27/08/2026.** La table des modules nomme `catalogue` et dit ce qu'il
+   porte ; un paragraphe sous la table dit où le catalogue vit — les six fichiers de
+   `src-tauri/pods/*.toml` incorporés au binaire, les surcharges de `<config>/pods/`,
+   leur ordre de lecture et le sort d'un fichier refusé. La table gagne au passage le
+   module `gabarit`, qui n'y avait jamais figuré depuis le premier commit du dépôt.
 5. **La finition ne paraît nulle part au compte rendu.** `projet.rs` promet « la finition qui
    paraîtra au récapitulatif » ; `Resultat.libelle` ne porte que « BoD — 13,5 × 21,5 cm ».
    La phrase était invérifiable avant ce lot — aucun POD ne déclarait de finition. Elle est
    fausse depuis qu'on en règle une : l'utilisateur coche « Pelliculage en relief », génère,
    et le compte rendu qu'il emporte chez l'imprimeur n'en dit rien.
+
+   **Réglée le 27/08/2026.** `Resultat` porte une `finition`, sous son nom d'imprimeur
+   et non sous sa clé, résolue par `nom_finition` — la clé brute à défaut de nom, plutôt
+   qu'une ligne absente. Le compte rendu la donne à lire à côté du papier, et seulement
+   là où il y en a une, comme la ligne du livrable le fait déjà. Un livrable dont la
+   résolution échoue la porte aussi : elle se commande même quand rien ne se compose.
+   La dette 6 reste entière — une finition disparue du catalogue s'affichera sous sa
+   clé, faute d'être élaguée.
 6. **`normalise` élague quatre axes sur cinq.** `resout` ne connaît que POD × format ×
    reliure × papier : une finition disparue du catalogue survit en silence à l'ouverture,
    alors que `reglage_refuse` interdit de la **poser**. Contrôle à l'écriture, aucun à la

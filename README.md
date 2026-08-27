@@ -310,9 +310,10 @@ résultats. Tout le reste est testable sans fenêtre.
 
 | Module | Rôle |
 |---|---|
-| `providers` | Table **unique** des gabarits : format, marges, gouttières, fond perdu, formule de dos |
+| `catalogue` | Le catalogue des POD, un fichier TOML par imprimeur : ses formats, reliures, finitions et papiers, sa formule de dos et son fond perdu — et la vue plate des gabarits qui en découle |
 | `manuscrit` | Markdown → chapitres → contenu Typst, avec refus explicite du non composable |
 | `projet` | Le `.ozalid` : lecture, écriture, identité du livre |
+| `gabarit` | Les jetons `%CLE%` des champs libres, substitués à la composition et jamais à la saisie |
 | `png` | Lecture du bloc de réglages qu'`index.html` écrit dans ses PNG |
 | `import` | Un `livre.toml` et un PNG de l'atelier → un projet et sa maquette |
 | `image` | Dimensions naturelles d'une image, et cadrage dans une zone |
@@ -333,7 +334,16 @@ résultats. Tout le reste est testable sans fenêtre.
 | `menu` | Le menu natif : il demande, il n'agit pas — l'interface exécute |
 | `commands` | Frontière avec l'interface, et projet ouvert |
 
-`providers` fusionne les deux tables historiques du projet — celle d'`index.html`
+Le catalogue vit dans des **fichiers de données**, un par imprimeur. Les six fournis
+sont dans `src-tauri/pods/*.toml`, incorporés au binaire par `include_str!` : aucun
+chemin à résoudre, aucun mode dégradé, aucun écart entre développement et livraison.
+Le poste en dépose d'autres dans `<config>/pods/`, à côté de `preferences.toml`, lus
+dans l'ordre du nom de fichier — un fichier y remplace le fourni de même clé, ou ajoute
+un imprimeur que le binaire ne connaît pas. Un fichier refusé — TOML illisible, valeur
+impossible, clé en double — n'empêche pas le démarrage : il est écarté, et l'écran dit
+lequel et pourquoi.
+
+`catalogue` fusionne les deux tables historiques du projet — celle d'`index.html`
 pour la couverture, celle de `gen_interieur.py` pour l'intérieur — qui décrivaient
 les mêmes imprimeurs sans jamais se recouper.
 
