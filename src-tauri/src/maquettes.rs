@@ -912,10 +912,17 @@ mod tests {
     /// deux ne varient donc pas ensemble d'un format à l'autre, et un pied qui dégage le
     /// filet en poche peut le traverser en A4.
     ///
-    /// La maquette Filets porte 13,5 % et non les 11 % du CSS de l'atelier : c'est le
-    /// seul écart assumé vis-à-vis d'`index.html`, qui a le défaut et ne l'a pas vu.
-    /// L'archive porte la valeur, ce test la borne sur tous les formats de la table —
-    /// c'est ici, et nulle part ailleurs, que la raison de ce 13,5 est écrite.
+    /// La maquette Filets porte 17,5 %, et non les 11 % du CSS de l'atelier : c'est le
+    /// seul écart assumé vis-à-vis d'`index.html`, qui a le défaut et ne l'a pas vu. Ce
+    /// n'est pas non plus un choix esthétique — c'est le minimum qui dégage le filet sur
+    /// toute la table, imposé par le 21 × 15 de BoD (lot 4), le format le plus
+    /// contraignant : au-delà du seuil de sécurité que ce test vérifie, il ne reste que
+    /// 0,28 mm de marge sur ce format-là. Sur les formats hauts, à l'inverse, ce même
+    /// pourcentage est déjà large — 17,5 % d'un 21 × 29,7 met le pied à plus de 50 mm du
+    /// bas. L'archive porte la valeur, ce test la borne sur tous les formats de la
+    /// table — c'est ici, et nulle part ailleurs, que la raison de ce 17,5 est écrite :
+    /// ne pas la baisser sans refaire ce calcul, la marge sur le 21 × 15 ne le supporte
+    /// pas.
     #[test]
     fn le_pied_editeur_ne_traverse_jamais_le_cadre() {
         let cv = fournie("filets");
