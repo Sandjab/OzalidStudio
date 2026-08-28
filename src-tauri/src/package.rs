@@ -1532,6 +1532,7 @@ mod tests {
     fn livre_d_essai() -> crate::projet::Livre {
         crate::projet::Livre {
             isbn: String::new(),
+            depot_legal: String::new(),
             titre: "Essai".into(),
             titre_page: "%TITRE%".into(),
             auteur: "Autrice".into(),

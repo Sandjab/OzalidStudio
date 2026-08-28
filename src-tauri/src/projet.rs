@@ -113,6 +113,16 @@ pub struct Livre {
     /// tirage. Voir `crate::ean`.
     #[serde(default)]
     pub isbn: String,
+    /// Le dépôt légal, tel qu'il paraît sur la page de mentions : « septembre 2026 ».
+    ///
+    /// **Saisi, jamais dérivé de l'année courante.** C'est la date d'un acte
+    /// administratif, pas celle de la compilation, et un défaut calculé se lirait comme
+    /// une mesure — le même argument qui interdit de préremplir un fond perdu relevé.
+    ///
+    /// Vide est le cas courant : un tirage privé ne dépose rien, et le pavé de copyright
+    /// saute la ligne devenue vide.
+    #[serde(default)]
+    pub depot_legal: String,
     /// Contrôle d'intégrité facultatif : il n'a de sens qu'au gel du manuscrit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chapitres: Option<u32>,
@@ -181,6 +191,7 @@ impl Livre {
         Self {
             titre: "Titre".into(),
             isbn: String::new(),
+            depot_legal: String::new(),
             titre_page: titre_page_defaut(),
             auteur: "Auteur".into(),
             genre: genre_defaut(),
@@ -1131,6 +1142,23 @@ auteur = "Ivan Pjig"
         assert_eq!(m.livre.titre_page(), "Les Heures creuses");
     }
 
+    /// Le dépôt légal est saisi, et un `.ozalid` d'avant ce lot n'en porte pas. Il doit
+    /// s'ouvrir avec un champ vide plutôt que d'être refusé : `VERSION` ne bouge pas, donc
+    /// rien ne migre, donc c'est `serde` qui doit tenir l'absence.
+    #[test]
+    fn un_projet_sans_depot_legal_s_ouvre_avec_un_champ_vide() {
+        let toml = r#"
+[ozalid]
+version = 5
+
+[livre]
+titre = "Les Heures creuses"
+auteur = "Ivan Pjig"
+"#;
+        let m: Metadonnees = toml::from_str(toml).expect("projet sans dépôt légal refusé");
+        assert_eq!(m.livre.depot_legal, "");
+    }
+
     /// Un titre de page saisi à la main, avec ses sauts de ligne voulus, ne doit pas
     /// être touché par la substitution.
     #[test]
@@ -1618,6 +1646,7 @@ dos = 7.21
     fn livre() -> Livre {
         Livre {
             isbn: String::new(),
+            depot_legal: String::new(),
             titre: "Les Heures creuses".into(),
             titre_page: "Les Heures\ncreuses".into(),
             auteur: "Ivan Pjig".into(),

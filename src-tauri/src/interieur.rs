@@ -701,6 +701,7 @@ mod tests {
     fn livre() -> Livre {
         Livre {
             isbn: String::new(),
+            depot_legal: String::new(),
             titre: "Les Heures creuses".into(),
             titre_page: "Les Heures\ncreuses".into(),
             auteur: "Ivan Pjig".into(),
