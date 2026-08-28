@@ -1398,7 +1398,13 @@ pub fn corps_quatre(
     let pad = q.pad_x / 100.0 * fw;
     // Le seul texte que la maquette porte encore, et le seul endroit où la substitution
     // la sert : une 4ème générique se résout pour chaque livre où on la charge.
-    let resume = crate::gabarit::substituer(&q.texte, livre);
+    let resume = crate::gabarit::substituer(
+        &q.texte,
+        &crate::gabarit::Contexte {
+            livre,
+            imprimeur: None,
+        },
+    );
     let tete = bloc_tete_quatre(livre, &q.tete, fw);
     // Un seul bloc pour la tête et le texte : ils se suivent sur la page, et deux
     // placements séparés auraient demandé deux hauteurs à tenir d'accord à la main.
@@ -1431,12 +1437,16 @@ pub fn corps_quatre(
     if q.pied_actif {
         // La collection est une clé, littérale ; la mention et le prix sont des champs
         // libres, donc substitués.
-        let lignes: Vec<String> = [livre.mention(), livre.collection.clone(), livre.prix()]
-            .iter()
-            .map(|v| v.trim())
-            .filter(|v| !v.is_empty())
-            .map(|v| format!("#{}", q.style_pied.applique(fw, v)))
-            .collect();
+        let lignes: Vec<String> = [
+            livre.mention(None),
+            livre.collection.clone(),
+            livre.prix(None),
+        ]
+        .iter()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .map(|v| format!("#{}", q.style_pied.applique(fw, v)))
+        .collect();
         if !lignes.is_empty() {
             c.push_str(&format!(
                 "#place(bottom + left, dx: {}, dy: -{}, block(width: {})[\n\

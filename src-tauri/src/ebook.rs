@@ -233,7 +233,11 @@ fn taille(chemin: &Path) -> u64 {
 /// lui — et c'est exactement l'endroit où un oubli enverrait un `%AUTEUR%` dans le
 /// fichier du lecteur.
 fn libres(livre: &crate::projet::Livre) -> (String, String, Option<String>) {
-    (livre.titre_page(), livre.copyright(), livre.dedicace())
+    (
+        livre.titre_page(None),
+        livre.copyright(None),
+        livre.dedicace(None),
+    )
 }
 
 #[cfg(test)]

@@ -580,7 +580,7 @@ couverture = "in/covers/LHC-Photo.png"
     fn un_livre_toml_complet_donne_identite_et_designations() {
         let (l, d) = lire_livre_toml(TOML).unwrap();
         assert_eq!(l.titre, "Les Heures creuses");
-        assert_eq!(l.titre_page(), "Les Heures\ncreuses");
+        assert_eq!(l.titre_page(None), "Les Heures\ncreuses");
         assert_eq!(l.chapitres, Some(64));
         assert!(l.copyright.contains("Tous droits réservés"));
         assert_eq!(d.manuscrit, "in/texts/WIP7.md");

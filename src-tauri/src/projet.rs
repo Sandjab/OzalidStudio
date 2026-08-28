@@ -207,23 +207,47 @@ impl Livre {
     }
 
     /// Titre tel qu'il doit paraître sur la page de titre, jetons résolus.
-    pub fn titre_page(&self) -> String {
-        crate::gabarit::substituer(&self.titre_page, self)
+    pub fn titre_page(&self, imprimeur: Option<&str>) -> String {
+        crate::gabarit::substituer(
+            &self.titre_page,
+            &crate::gabarit::Contexte {
+                livre: self,
+                imprimeur,
+            },
+        )
     }
 
     /// Le copyright, jetons résolus.
-    pub fn copyright(&self) -> String {
-        crate::gabarit::substituer(&self.copyright, self)
+    pub fn copyright(&self, imprimeur: Option<&str>) -> String {
+        crate::gabarit::substituer(
+            &self.copyright,
+            &crate::gabarit::Contexte {
+                livre: self,
+                imprimeur,
+            },
+        )
     }
 
     /// Le prix, jetons résolus.
-    pub fn prix(&self) -> String {
-        crate::gabarit::substituer(&self.prix, self)
+    pub fn prix(&self, imprimeur: Option<&str>) -> String {
+        crate::gabarit::substituer(
+            &self.prix,
+            &crate::gabarit::Contexte {
+                livre: self,
+                imprimeur,
+            },
+        )
     }
 
     /// La mention légale, jetons résolus.
-    pub fn mention(&self) -> String {
-        crate::gabarit::substituer(&self.mention, self)
+    pub fn mention(&self, imprimeur: Option<&str>) -> String {
+        crate::gabarit::substituer(
+            &self.mention,
+            &crate::gabarit::Contexte {
+                livre: self,
+                imprimeur,
+            },
+        )
     }
 
     /// La dédicace, jetons résolus, si elle n'est pas que du blanc.
@@ -232,8 +256,14 @@ impl Livre {
     /// ajouterait sinon deux pages au livre, donc du dos, sans que rien ne se voie à
     /// l'écran. Il vient **après** la substitution, pour qu'un jeton dont la clé est
     /// vide ne compose pas davantage.
-    pub fn dedicace(&self) -> Option<String> {
-        let d = crate::gabarit::substituer(&self.dedicace, self);
+    pub fn dedicace(&self, imprimeur: Option<&str>) -> Option<String> {
+        let d = crate::gabarit::substituer(
+            &self.dedicace,
+            &crate::gabarit::Contexte {
+                livre: self,
+                imprimeur,
+            },
+        );
         let d = d.trim();
         (!d.is_empty()).then(|| d.to_string())
     }
@@ -1139,7 +1169,7 @@ auteur = "Ivan Pjig"
 "#;
         let m: Metadonnees = toml::from_str(toml).expect("projet sans titre_page refusé");
         assert_eq!(m.livre.titre_page, "%TITRE%");
-        assert_eq!(m.livre.titre_page(), "Les Heures creuses");
+        assert_eq!(m.livre.titre_page(None), "Les Heures creuses");
     }
 
     /// Le dépôt légal est saisi, et un `.ozalid` d'avant ce lot n'en porte pas. Il doit
@@ -1166,7 +1196,7 @@ auteur = "Ivan Pjig"
         let mut l = Livre::vide();
         l.titre = "Les Heures creuses".into();
         l.titre_page = "Les Heures\ncreuses".into();
-        assert_eq!(l.titre_page(), "Les Heures\ncreuses");
+        assert_eq!(l.titre_page(None), "Les Heures\ncreuses");
     }
 
     /// Une dédicace peut citer le livre. Le rognage et le filtre du blanc restent en
@@ -1177,12 +1207,12 @@ auteur = "Ivan Pjig"
         let mut l = Livre::vide();
         l.auteur = "Ivan Pjig".into();
         l.dedicace = "  Pour %AUTEUR%.  ".into();
-        assert_eq!(l.dedicace().as_deref(), Some("Pour Ivan Pjig."));
+        assert_eq!(l.dedicace(None).as_deref(), Some("Pour Ivan Pjig."));
 
         l.auteur = String::new();
         l.dedicace = "  %AUTEUR%  ".into();
         assert_eq!(
-            l.dedicace(),
+            l.dedicace(None),
             None,
             "une clé vide ne doit pas coûter deux pages"
         );
@@ -1197,8 +1227,8 @@ auteur = "Ivan Pjig"
         l.prix = "18 € — %COLLECTION%".into();
         l.mention = "%EDITEUR%".into();
         l.editeur = "Ozalid".into();
-        assert_eq!(l.prix(), "18 € — Les Heures");
-        assert_eq!(l.mention(), "Ozalid");
+        assert_eq!(l.prix(None), "18 € — Les Heures");
+        assert_eq!(l.mention(None), "Ozalid");
     }
 
     /// Les cinq champs sont facultatifs dans le TOML : `VERSION` monte pour ce qui
@@ -1621,7 +1651,7 @@ dos = 7.21
         assert!(l.prix.is_empty());
         assert!(l.mention.is_empty());
         assert!(l.dedicace.is_empty());
-        assert_eq!(l.dedicace(), None);
+        assert_eq!(l.dedicace(None), None);
     }
 
     /// Le copyright cite l'auteur et porte l'année de création — figée, pas un jeton :
@@ -1639,8 +1669,8 @@ dos = 7.21
         assert_eq!(l.copyright.lines().count(), 3);
 
         l.auteur = "Ivan Pjig".into();
-        assert!(l.copyright().starts_with("© Ivan Pjig, 2"));
-        assert!(!l.copyright().contains('%'));
+        assert!(l.copyright(None).starts_with("© Ivan Pjig, 2"));
+        assert!(!l.copyright(None).contains('%'));
     }
 
     fn livre() -> Livre {
@@ -1729,7 +1759,7 @@ dos = 7.21
             .insert("couverture.jpg".into(), vec![0xFF, 0xD8, 0xFF]);
 
         let r = aller_retour(&p);
-        assert_eq!(r.meta.livre.titre_page(), "Les Heures\ncreuses");
+        assert_eq!(r.meta.livre.titre_page(None), "Les Heures\ncreuses");
         assert_eq!(r.meta.livre.chapitres, Some(64));
         assert_eq!(r.meta.livre.copyright, p.meta.livre.copyright);
         assert_eq!(
@@ -1738,7 +1768,7 @@ dos = 7.21
         );
         assert_eq!(r.meta.interieur.police, "Cardo");
         assert_eq!(
-            r.meta.livre.dedicace().as_deref(),
+            r.meta.livre.dedicace(None).as_deref(),
             Some("À M., qui a tenu la lampe.")
         );
         assert_eq!(r.texte, p.texte);
@@ -2483,7 +2513,7 @@ auteur = "Ivan Pjig"
         let m: Metadonnees = toml::from_str(toml).expect("projet sans dédicace refusé");
         assert!(m.livre.dedicace.is_empty());
         assert_eq!(
-            m.livre.dedicace(),
+            m.livre.dedicace(None),
             None,
             "aucune page ne doit être composée"
         );
@@ -2883,12 +2913,16 @@ auteur = "Ivan Pjig"
     #[test]
     fn une_dedicace_de_blanc_equivaut_a_pas_de_dedicace() {
         let mut l = livre();
-        assert_eq!(l.dedicace(), None);
+        assert_eq!(l.dedicace(None), None);
         l.dedicace = "   \n  ".into();
-        assert_eq!(l.dedicace(), None, "du blanc a été pris pour une dédicace");
+        assert_eq!(
+            l.dedicace(None),
+            None,
+            "du blanc a été pris pour une dédicace"
+        );
         l.dedicace = "  À M.  ".into();
         assert_eq!(
-            l.dedicace().as_deref(),
+            l.dedicace(None).as_deref(),
             Some("À M."),
             "les bords doivent être rognés"
         );

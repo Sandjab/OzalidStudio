@@ -564,7 +564,7 @@ fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
         int.page_titre_auteur,
         majuscules(&livre.auteur),
         int.page_titre_titre,
-        majuscules(&livre.titre_page().replace('\n', "\u{1}")).replace('\u{1}', r" \ "),
+        majuscules(&livre.titre_page(None).replace('\n', "\u{1}")).replace('\u{1}', r" \ "),
         int.page_titre_genre,
         echappe(&livre.genre),
     ));
@@ -584,14 +584,14 @@ fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
 
 "#,
         int.copyright,
-        echappe(&livre.copyright()).replace('\n', r" \ ")
+        echappe(&livre.copyright(None)).replace('\n', r" \ ")
     ));
 
     // La dédicace prend une belle page, son verso reste blanc — deux `#pagebreak()`
     // d'affilée, le dispositif de la blanche du faux-titre. Le corps s'ouvre donc en
     // page 7 au lieu de 5, et le dos en tient compte de lui-même puisqu'il découle de
     // la pagination mesurée, jamais d'une saisie.
-    if let Some(d) = livre.dedicace() {
+    if let Some(d) = livre.dedicace(None) {
         s.push_str(&format!(
             r#"#v(48mm)
 #align(right, emph(text(size: {}pt)[{}]))
