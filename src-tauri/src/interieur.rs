@@ -916,6 +916,7 @@ mod tests {
             blanche: false,
         };
         let s = source(&l, &Interieur::default(), pr, &r, &[], None);
+        assert!(!pr.pod_nom.is_empty());
         assert!(
             s.contains(&pr.pod_nom),
             "le nom de l'imprimeur manque à la page 4"

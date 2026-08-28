@@ -533,7 +533,8 @@ pub fn livre_modifier(livre: Livre, atelier: State<Atelier>) -> Result<ProjetVue
     vue_modifiee(o)
 }
 
-/// Les jetons que les champs dérivés du livre peuvent citer.
+/// Les jetons que les champs libres du livre peuvent citer : les clés du livre, et
+/// l'imprimeur du livrable.
 #[tauri::command]
 pub fn jetons_liste() -> Vec<&'static str> {
     crate::gabarit::jetons()

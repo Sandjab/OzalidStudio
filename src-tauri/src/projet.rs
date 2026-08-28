@@ -119,8 +119,9 @@ pub struct Livre {
     /// administratif, pas celle de la compilation, et un défaut calculé se lirait comme
     /// une mesure — le même argument qui interdit de préremplir un fond perdu relevé.
     ///
-    /// Vide est le cas courant : un tirage privé ne dépose rien, et le pavé de copyright
-    /// saute la ligne devenue vide.
+    /// Vide est le cas courant : un tirage privé ne dépose rien. Le pavé le compose tel
+    /// quel : une ligne qui ne porte que le jeton devient une ligne blanche, c'est le
+    /// parti du champ libre.
     #[serde(default)]
     pub depot_legal: String,
     /// Contrôle d'intégrité facultatif : il n'a de sens qu'au gel du manuscrit.
@@ -183,9 +184,10 @@ impl Livre {
     /// vaut mieux qu'un blanc — et c'est le même défaut que celui d'un `projet.toml`
     /// qui ne le porte pas.
     ///
-    /// Le prix, la mention et la dédicace font exception dans l'autre sens : eux
-    /// naissent vides, parce qu'un générique y composerait une ligne que personne n'a
-    /// choisie. Voir `le_prix_la_mention_et_la_dedicace_naissent_vides`. L'ISBN est du
+    /// Le prix, la mention, le dépôt légal et la dédicace font exception dans l'autre
+    /// sens : eux naissent vides, parce qu'un générique y composerait une ligne que
+    /// personne n'a choisie. Voir
+    /// `le_prix_la_mention_le_depot_legal_et_la_dedicace_naissent_vides`. L'ISBN est du
     /// même bord, et pour une raison de plus : un ISBN générique serait un ISBN faux.
     pub fn vide() -> Self {
         Self {
@@ -1636,7 +1638,7 @@ dos = 7.21
         assert_eq!(l.monogramme, "Monogramme");
     }
 
-    /// Trois champs naissent vides, et pour la même raison : vides, ils ne composent
+    /// Quatre champs naissent vides, et pour la même raison : vides, ils ne composent
     /// rien, et un générique y coûterait une ligne que personne n'a choisie.
     ///
     /// La dédicace est le seul champ sans interrupteur : `interieur.rs` lui compose une
@@ -1644,12 +1646,15 @@ dos = 7.21
     /// projet neuf, donc un dos plus épais, que rien à l'écran n'expliquerait. Le prix et
     /// la mention s'impriment au pied de la 4ème, qui saute les lignes vides : un livre
     /// neuf n'a ni prix ni dépôt légal, et « Prix » imprimé sous le résumé se lit comme
-    /// un oubli.
+    /// un oubli. Le dépôt légal, lui, s'imprime au pavé de copyright, qui compose son
+    /// champ tel quel : un générique daterait faussement un acte administratif qui n'a
+    /// pas eu lieu.
     #[test]
-    fn le_prix_la_mention_et_la_dedicace_naissent_vides() {
+    fn le_prix_la_mention_le_depot_legal_et_la_dedicace_naissent_vides() {
         let l = Livre::vide();
         assert!(l.prix.is_empty());
         assert!(l.mention.is_empty());
+        assert!(l.depot_legal.is_empty());
         assert!(l.dedicace.is_empty());
         assert_eq!(l.dedicace(None), None);
     }

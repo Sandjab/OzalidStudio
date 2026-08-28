@@ -1,9 +1,9 @@
 //! Les jetons `%CLE%` des champs libres du livre.
 //!
 //! Un champ libre — le titre de la page de titre, la dédicace, le copyright — peut
-//! citer un champ clé. La substitution se fait **à la composition**, jamais à la
-//! saisie : le `.ozalid` conserve le texte à jetons, qui doit suivre le livre si le
-//! titre change.
+//! citer un champ clé ou l'imprimeur du livrable. La substitution se fait **à la
+//! composition**, jamais à la saisie : le `.ozalid` conserve le texte à jetons, qui
+//! doit suivre le livre si le titre change.
 
 use crate::projet::Livre;
 
@@ -15,8 +15,9 @@ use crate::projet::Livre;
 /// ou tard oublié sur un champ libre — et l'oubli ne se verrait qu'imprimé.
 pub struct Contexte<'a> {
     pub livre: &'a Livre,
-    /// `None` quand rien n'est imprimé : l'ebook, la couverture. `%IMPRIMEUR%` rend alors
-    /// la chaîne vide, jamais le jeton littéral.
+    /// `None` là où le nom de l'imprimeur n'est pas disponible : l'ebook, qui n'en a pas,
+    /// et la couverture, dont la chaîne ne le porte pas jusqu'ici. `%IMPRIMEUR%` rend
+    /// alors la chaîne vide, jamais le jeton littéral.
     pub imprimeur: Option<&'a str>,
 }
 

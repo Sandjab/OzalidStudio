@@ -543,6 +543,46 @@ test('le dépôt légal part rogné, jamais null', async () => {
 });
 
 /**
+ * `livre()` relit tout le DOM à chaque envoi : un champ qu'`afficherProjet` ne
+ * réaffiche pas reste à sa valeur par défaut, vide, et la première édition d'un champ
+ * voisin l'efface du projet — silencieusement, puisque rien à l'écran ne dit qu'il a
+ * disparu. Le même trou existe pour l'ISBN depuis son propre lot ; il n'est pas repris
+ * ici pour ne pas élargir cette garde.
+ */
+test('le dépôt légal survit à l\'édition d\'un champ voisin', async () => {
+  let envoye = null;
+  // Le premier envoi simule un projet où le dépôt légal était déjà enregistré avant
+  // l'ouverture : la valeur vient du serveur, jamais du DOM qu'on n'a pas touché. Le
+  // second capture ce que `livre()` relit après ce premier `afficherProjet`.
+  let premier = true;
+  const capte = async (cmd, args) => {
+    if (cmd === 'livre_modifier') {
+      if (premier) {
+        premier = false;
+        return { ...PROJET, livre: { ...PROJET.livre, ...args.livre, depot_legal: 'septembre 2026' } };
+      }
+      envoye = args.livre;
+      return { ...PROJET, livre: { ...PROJET.livre, ...args.livre } };
+    }
+    return invoke(cmd, args);
+  };
+  const { els } = await charge({ invoke: capte, open: async () => null });
+
+  els.get('inGenre').value = 'nouvelle';
+  await els.get('inGenre').declenche('change');
+  assert.strictEqual(els.get('inDepotLegal').value, 'septembre 2026',
+    'le dépôt légal du projet chargé n\'est pas réaffiché');
+
+  els.get('inTitre').value = 'Un autre titre';
+  await els.get('inTitre').declenche('change');
+  assert.strictEqual(
+    envoye.depot_legal,
+    'septembre 2026',
+    'le dépôt légal a disparu à l\'édition du titre voisin : afficherProjet ne le réaffiche pas'
+  );
+});
+
+/**
  * Les cinq textes déplacés ne doivent plus être offerts par l'onglet Couverture.
  *
  * Les y laisser ferait deux endroits où saisir un éditeur, qui peuvent se contredire —
@@ -564,8 +604,8 @@ test('les textes du livre ont quitté le schéma de la couverture', () => {
  */
 test('l\'aide des jetons vient du Rust, pas du HTML', async () => {
   const rust = source('src-tauri', 'src', 'gabarit.rs');
-  const attendus = [...rust.matchAll(/\("(%[A-Z]+%)"/g)].map((m) => m[1]);
-  assert.ok(attendus.length >= 6, `moisson suspecte : ${attendus}`);
+  const attendus = [...rust.matchAll(/\("(%[A-Z_]+%)"/g)].map((m) => m[1]);
+  assert.ok(attendus.length >= 9, `moisson suspecte : ${attendus}`);
 
   const html = source('src', 'index.html');
   // `%TITRE%` a le droit d'y être en indication du champ de titre de page : c'est un

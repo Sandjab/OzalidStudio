@@ -60,7 +60,7 @@ pub fn lire_livre_toml(contenu: &str) -> Result<(Livre, Designations), String> {
         // l'écran. L'y ajouter serait cohérent avec le reste de l'identité, mais c'est un
         // champ de plus dans un format que d'autres livres utilisent déjà.
         isbn: v.isbn.clone(),
-        depot_legal: String::new(),
+        depot_legal: v.depot_legal.clone(),
         // Absent du `livre.toml`, il voulait déjà dire « le titre sert » : c'est ce
         // que le jeton dit désormais, en le montrant.
         titre_page: s
