@@ -176,6 +176,7 @@ mod tests {
 
     fn livre() -> Livre {
         Livre {
+            isbn: String::new(),
             titre: "Les Heures creuses".into(),
             titre_page: crate::projet::titre_page_defaut(),
             auteur: "Ivan Pjig".into(),

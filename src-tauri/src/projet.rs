@@ -103,6 +103,16 @@ pub struct Livre {
     /// composée : c'est `dedicace()` qui en juge, pas ses appelants.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dedicace: String,
+    /// L'ISBN, tel qu'il s'écrit avec ses tirets — c'est cette forme-là qui s'imprime en
+    /// clair au-dessus du code-barres. Les tirets ne se recalculent pas sans la table des
+    /// préfixes d'éditeur, que l'application n'a pas : ce qui est saisi est ce qui paraît.
+    ///
+    /// Vide est le cas courant et légitime — un tirage privé n'a pas d'ISBN, et la zone de
+    /// 4ème reste alors le rectangle blanc qu'elle a toujours été. Rempli, il est **vérifié**
+    /// avant toute composition : un ISBN faux ne se voit sur aucun aperçu, il se voit sur le
+    /// tirage. Voir `crate::ean`.
+    #[serde(default)]
+    pub isbn: String,
     /// Contrôle d'intégrité facultatif : il n'a de sens qu'au gel du manuscrit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chapitres: Option<u32>,
@@ -165,10 +175,12 @@ impl Livre {
     ///
     /// Le prix, la mention et la dédicace font exception dans l'autre sens : eux
     /// naissent vides, parce qu'un générique y composerait une ligne que personne n'a
-    /// choisie. Voir `le_prix_la_mention_et_la_dedicace_naissent_vides`.
+    /// choisie. Voir `le_prix_la_mention_et_la_dedicace_naissent_vides`. L'ISBN est du
+    /// même bord, et pour une raison de plus : un ISBN générique serait un ISBN faux.
     pub fn vide() -> Self {
         Self {
             titre: "Titre".into(),
+            isbn: String::new(),
             titre_page: titre_page_defaut(),
             auteur: "Auteur".into(),
             genre: genre_defaut(),
@@ -1604,6 +1616,7 @@ dos = 7.21
 
     fn livre() -> Livre {
         Livre {
+            isbn: String::new(),
             titre: "Les Heures creuses".into(),
             titre_page: "Les Heures\ncreuses".into(),
             auteur: "Ivan Pjig".into(),

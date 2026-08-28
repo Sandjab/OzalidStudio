@@ -579,6 +579,7 @@ function afficherProjet(p) {
   $('inMonogramme').value = p.livre.monogramme;
   $('inCopyright').value = p.livre.copyright;
   $('inPrix').value = p.livre.prix;
+  $('inIsbn').value = p.livre.isbn ?? '';
   $('inMention').value = p.livre.mention;
   // Le champ est absent du JSON quand le livre n'a pas de dédicace : `skip_serializing_if`.
   $('inDedicace').value = p.livre.dedicace ?? '';
@@ -1021,6 +1022,10 @@ function livre() {
     monogramme: $('inMonogramme').value.trim(),
     copyright: $('inCopyright').value,
     prix: $('inPrix').value.trim(),
+    // Rogné mais jamais reformaté : les tirets d'un ISBN sont ceux de son éditeur, et
+    // c'est cette forme-là qui s'imprime en clair au-dessus des barres. Le Rust les
+    // ignore pour calculer, et les recopie pour composer.
+    isbn: $('inIsbn').value.trim(),
     mention: $('inMention').value.trim(),
     // Non rognée : c'est le Rust qui rogne, en un seul endroit — et il substitue les
     // jetons avant de rogner, ce que le front ne saurait pas faire.
@@ -1449,7 +1454,7 @@ construireFaces();
 cablerPrises();
 cablerPlacement();
 for (const id of ['inTitre', 'inTitrePage', 'inAuteur', 'inGenre', 'inEditeur',
-  'inCollection', 'inMonogramme', 'inCopyright', 'inPrix', 'inMention',
+  'inCollection', 'inMonogramme', 'inCopyright', 'inPrix', 'inIsbn', 'inMention',
   'inDedicace', 'inChapitres']) {
   $(id).addEventListener('change', majLivre);
 }

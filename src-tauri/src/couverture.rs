@@ -1376,6 +1376,14 @@ pub fn corps_quatre(
 ) -> Result<String, String> {
     let (fw, _) = format;
     let q = &cv.quatrieme;
+    // L'ISBN se vérifie ici, avant tout tracé, et **sans regarder si la zone est allumée** :
+    // une zone éteinte cache le symbole, elle ne rend pas l'ISBN juste. Le laisser dormir
+    // ferait découvrir l'erreur le jour où l'on rallume la case, sur un projet qu'on croyait
+    // réglé depuis longtemps.
+    let isbn = match livre.isbn.trim() {
+        "" => None,
+        saisi => Some(crate::ean::Isbn::lire(saisi)?),
+    };
     let mut s = bloc_fond(b, papier_quatre(cv));
 
     // Le voile suit la photo réellement composée, et non le mode : un fond réglé sur
@@ -1442,17 +1450,137 @@ pub fn corps_quatre(
     }
 
     if q.isbn_actif {
-        c.push_str(&format!(
-            "#place(bottom + right, dx: -{}, dy: -{}, \
-             rect(width: {}, height: {}, fill: rgb(\"#ffffff\"), stroke: none))\n",
-            mm(q.isbn_dx / 100.0 * fw),
-            mm(q.isbn_dy / 100.0 * fw),
-            mm(q.isbn_l / 100.0 * fw),
-            mm(q.isbn_h / 100.0 * fw),
-        ));
+        c.push_str(&zone_isbn(isbn.as_ref(), &livre.isbn, q, fw));
     }
     s.push_str(&cale(b, format, &c));
     Ok(s)
+}
+
+/// La zone ISBN de la 4ème : son fond blanc, et le symbole EAN-13 quand le livre en porte un.
+///
+/// **Le fond seul reste le bon comportement quand il n'y a rien à coder.** L'imprimeur y
+/// pose parfois le sien, et un code-barres inventé serait le pire des défauts — celui qui
+/// se scanne parfaitement et rend un autre livre.
+///
+/// Les proportions sont celles de la norme, comptées en modules : 113 de large — les 95 du
+/// symbole, plus 11 de zone silencieuse à gauche et 7 à droite, qui **font partie du
+/// symbole** et doivent rester blanches — et 79 de haut, mention comprise. Le module se
+/// prend au plus étroit des deux contraintes, ce qui laisse la zone garder la forme que
+/// l'auteur lui a donnée : un symbole qui déborderait de sa zone irait sur le fond de la
+/// 4ème, où il cesserait d'être lisible.
+///
+/// `saisi` et non l'ISBN normalisé : c'est la forme de l'auteur, tirets compris, qui
+/// s'imprime en clair. Ceux-ci sont ceux de son éditeur, et rien ici ne sait les replacer.
+fn zone_isbn(isbn: Option<&crate::ean::Isbn>, saisi: &str, q: &Quatrieme, fw: f64) -> String {
+    let (w, h) = (q.isbn_l / 100.0 * fw, q.isbn_h / 100.0 * fw);
+    let (dx, dy) = (q.isbn_dx / 100.0 * fw, q.isbn_dy / 100.0 * fw);
+    let fond = format!(
+        "#place(top + left, rect(width: {}, height: {}, fill: rgb(\"#ffffff\"), \
+         stroke: none))\n",
+        mm(w),
+        mm(h)
+    );
+    let dedans = match isbn {
+        None => fond,
+        Some(code) => fond + &symbole(code, saisi, w, h),
+    };
+    format!(
+        "#place(bottom + right, dx: -{}, dy: -{}, block(width: {}, height: {})[\n{dedans}])\n",
+        mm(dx),
+        mm(dy),
+        mm(w),
+        mm(h)
+    )
+}
+
+/// Le symbole EAN-13 lui-même, posé dans une zone de `w` × `h`.
+///
+/// Le budget vertical, en modules sur les 79 : dix pour la mention en clair, deux de
+/// respiration, cinquante-cinq de barres, et les barres de garde qui descendent cinq
+/// modules plus bas — jusqu'à la ligne de base des chiffres, comme la norme le veut. C'est
+/// ce dépassement qui dit au lecteur optique où commence et où finit le code.
+fn symbole(code: &crate::ean::Isbn, saisi: &str, w: f64, h: f64) -> String {
+    let m = (w / 113.0).min(h / 79.0);
+    // Le symbole centré dans sa zone : l'auteur règle un rectangle, pas un cadrage.
+    let x0 = (w - 113.0 * m) / 2.0;
+    let y0 = (h - 79.0 * m) / 2.0;
+    let (haut, bas_barre, bas_garde) = (y0 + 12.0 * m, y0 + 67.0 * m, y0 + 72.0 * m);
+    let noir = |x: f64, y: f64, l: f64, ht: f64| {
+        format!(
+            "#place(top + left, dx: {}, dy: {}, rect(width: {}, height: {}, \
+             fill: rgb(\"#000000\"), stroke: none))\n",
+            mm(x),
+            mm(y),
+            mm(l),
+            mm(ht)
+        )
+    };
+
+    let modules = code.modules();
+    // Une garde est un module de la garde gauche, centrale ou droite : ce sont les seuls
+    // qui descendent plus bas. Leurs rangs sont fixes par construction du symbole.
+    let garde = |i: usize| (0..3).contains(&i) || (45..50).contains(&i) || (92..95).contains(&i);
+    let mut s = String::new();
+    // Les barres contiguës se fondent en une seule : dix-neuf rectangles au lieu de
+    // cinquante, et surtout aucun liseré blanc entre deux modules voisins — Typst pose des
+    // bords qui s'arrondissent au pixel, et deux rectangles jointifs ne le sont pas
+    // toujours à l'écran. Deux modules de hauteurs différentes ne se fondent pas.
+    let mut i = 0;
+    while i < 95 {
+        if !modules[i] {
+            i += 1;
+            continue;
+        }
+        let g = garde(i);
+        let debut = i;
+        while i < 95 && modules[i] && garde(i) == g {
+            i += 1;
+        }
+        let bas = if g { bas_garde } else { bas_barre };
+        s.push_str(&noir(
+            x0 + (11 + debut) as f64 * m,
+            haut,
+            (i - debut) as f64 * m,
+            bas - haut,
+        ));
+    }
+
+    // Les chiffres, en Libre Franklin : aucune OCR-B parmi les polices embarquées, et la
+    // lecture optique tient aux barres — les chiffres ne servent qu'à la saisie de secours,
+    // quand le lecteur ne passe pas.
+    let d = code.chiffres();
+    // La ligne des chiffres part **du bas des barres courtes**, jamais plus haut : posée
+    // ne serait-ce que deux modules au-dessus, elle se compose par-dessus les barres et
+    // devient illisible pour l'œil comme pour la caisse. Les gardes descendent plus bas et
+    // passent entre les groupes, là où aucun chiffre ne les attend.
+    let groupe = |x: f64, largeur: f64, texte: String| {
+        format!(
+            "#place(top + left, dx: {}, dy: {}, box(width: {})[#align(center)[\
+             #text(font: \"Libre Franklin\", size: {}, fill: rgb(\"#000000\"))[{texte}]]])\n",
+            mm(x),
+            mm(bas_barre),
+            mm(largeur),
+            mm(8.0 * m)
+        )
+    };
+    let chiffres =
+        |plage: std::ops::Range<usize>| d[plage].iter().map(|c| c.to_string()).collect::<String>();
+    // Le premier chiffre vit à gauche du symbole, dans la zone silencieuse : il n'est pas
+    // barré, il ne se lit que dans la parité des six suivants.
+    s.push_str(&groupe(x0, 10.0 * m, d[0].to_string()));
+    s.push_str(&groupe(x0 + 14.0 * m, 42.0 * m, chiffres(1..7)));
+    s.push_str(&groupe(x0 + 61.0 * m, 42.0 * m, chiffres(7..13)));
+
+    // La mention en clair, au-dessus. Elle ne se scanne pas : elle sert à celui qui recopie.
+    s.push_str(&format!(
+        "#place(top + left, dx: 0mm, dy: {}, box(width: {})[#align(center)[\
+         #text(font: \"Libre Franklin\", size: {}, fill: rgb(\"#000000\"))[ISBN {}]]])\n",
+        mm(y0),
+        mm(w),
+        mm(9.0 * m),
+        saisi.trim()
+    ));
+    s
 }
 
 /// Source Typst de la 4ème de couverture, seule sur sa page.
@@ -1598,6 +1726,7 @@ mod tests {
 
     fn livre() -> Livre {
         Livre {
+            isbn: String::new(),
             titre: "Les Heures creuses".into(),
             titre_page: crate::projet::titre_page_defaut(),
             auteur: "Ivan Pjig".into(),
@@ -1859,15 +1988,171 @@ mod tests {
         assert!((largeur_zone(17.43) - (2.0 * FORMAT.0 + 17.43)).abs() < 0.01);
     }
 
-    /// La zone ISBN est laissée vide et blanche : le code-barres est posé par
-    /// l'imprimeur. En imprimer un serait le pire des services.
+    /// Sans ISBN, la zone reste le rectangle blanc qu'elle a toujours été — et c'est
+    /// toujours un service : l'imprimeur y pose parfois le sien, et un code-barres inventé
+    /// serait le pire de tous les défauts.
+    ///
+    /// Ce test disait avant que la zone reste vide **en toutes circonstances**, au motif
+    /// que le code-barres appartenait à l'imprimeur. La règle a été renversée le 28/08 :
+    /// l'application connaît l'ISBN, elle sait le dessiner juste, et l'auteur qui n'en a
+    /// pas ne saisit rien. Le cas d'origine, lui, ne bouge pas d'un module.
     #[test]
-    fn la_zone_isbn_est_un_rectangle_blanc_vide() {
+    fn sans_isbn_la_zone_reste_un_rectangle_blanc_vide() {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
         let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains("fill: rgb(\"#ffffff\")"));
-        assert!(!s.contains("isbn"), "aucun contenu dans la zone");
+        assert!(!s.contains("ISBN"), "une mention sans ISBN");
+        assert!(!s.contains("#000000"), "des barres sans ISBN");
+    }
+
+    /// Un livre avec son ISBN, tel qu'on le lit sur une page de copyright.
+    fn livre_isbn(isbn: &str) -> Livre {
+        Livre {
+            isbn: isbn.into(),
+            ..livre()
+        }
+    }
+
+    /// Le symbole est fait de barres noires, et il y en a beaucoup : c'est ce qui le
+    /// distingue d'une zone blanche décorée d'un texte.
+    #[test]
+    fn un_isbn_rempli_pose_le_symbole() {
+        let mut cv = maquettes::fournie("bandeau");
+        cv.quatrieme.isbn_actif = true;
+        let s = source_quatre(
+            &livre_isbn("978-2-07-041311-9"),
+            &cv,
+            FORMAT,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let barres = s.matches("fill: rgb(\"#000000\")").count();
+        assert!(barres >= 20, "seulement {barres} barres");
+    }
+
+    /// La mention se lit **telle qu'elle a été saisie**, tirets compris : ce sont ceux de
+    /// l'éditeur, et rien dans l'application ne sait les replacer.
+    #[test]
+    fn la_mention_isbn_garde_les_tirets_saisis() {
+        let mut cv = maquettes::fournie("bandeau");
+        cv.quatrieme.isbn_actif = true;
+        let s = source_quatre(
+            &livre_isbn("978-2-07-041311-9"),
+            &cv,
+            FORMAT,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(
+            s.contains("ISBN 978-2-07-041311-9"),
+            "mention absente ou reformatée"
+        );
+    }
+
+    /// **Un ISBN faux ne compose pas.** Même doctrine que la police hors liste : il ne se
+    /// voit sur aucun aperçu, et il se voit sur le tirage entier.
+    #[test]
+    fn un_isbn_faux_refuse_la_composition() {
+        let mut cv = maquettes::fournie("bandeau");
+        cv.quatrieme.isbn_actif = true;
+        let err = source_quatre(
+            &livre_isbn("978-2-07-041311-8"),
+            &cv,
+            FORMAT,
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("clé"),
+            "la raison ne dit pas quoi corriger : {err}"
+        );
+    }
+
+    /// **Aucun chiffre ne doit mordre sur une barre.** Le premier jet posait la ligne des
+    /// chiffres quatre modules trop haut : les quatorze tests passaient, et « 782070 » se
+    /// lisait par-dessus les barres, illisible pour l'œil comme pour la caisse. Rien qu'une
+    /// composition regardée n'a montré — d'où ce test, qui mesure ce que l'œil a vu.
+    ///
+    /// La règle : le haut de chaque groupe de chiffres tombe **au plus bas** des barres les
+    /// plus courtes. Les gardes, elles, descendent plus bas et passent entre les groupes,
+    /// où aucun chiffre ne les attend.
+    #[test]
+    fn les_chiffres_ne_mordent_pas_sur_les_barres() {
+        let mut cv = maquettes::fournie("bandeau");
+        cv.quatrieme.isbn_actif = true;
+        let s = source_quatre(
+            &livre_isbn("978-2-07-041311-9"),
+            &cv,
+            FORMAT,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        // `#place(top + left, dx: Xmm, dy: Ymm, rect(width: Wmm, height: Hmm, fill: …#000000…`
+        let nombre = |apres: &str, dans: &str| -> Option<f64> {
+            let i = dans.find(apres)? + apres.len();
+            let reste = &dans[i..];
+            let j = reste.find("mm")?;
+            reste[..j].parse().ok()
+        };
+        let mut bas_barres: Vec<f64> = vec![];
+        let mut hauts_chiffres: Vec<f64> = vec![];
+        for ligne in s.lines() {
+            let Some(dy) = nombre("dy: ", ligne) else {
+                continue;
+            };
+            if ligne.contains("#000000") && ligne.contains("rect(") {
+                if let Some(h) = nombre("height: ", ligne) {
+                    bas_barres.push(dy + h);
+                }
+            } else if ligne.contains("box(width:") && !ligne.contains("ISBN ") {
+                hauts_chiffres.push(dy);
+            }
+        }
+        assert!(
+            !bas_barres.is_empty() && !hauts_chiffres.is_empty(),
+            "source illisible"
+        );
+        let plus_court = bas_barres.iter().cloned().fold(f64::INFINITY, f64::min);
+        for haut in &hauts_chiffres {
+            // Au centième de millimètre : la source écrit des longueurs arrondies, et
+            // comparer plus fin ferait échouer sur l'arrondi du formatage. Le défaut que ce
+            // test attrape valait 1,17 mm — cent fois la tolérance.
+            assert!(
+                *haut >= plus_court - 0.01,
+                "un groupe de chiffres commence à {haut} mm, au-dessus du bas des barres \
+                 ({plus_court} mm) : il se compose par-dessus"
+            );
+        }
+    }
+
+    /// Le refus ne dépend pas de la zone. Une zone éteinte cache le symbole, elle ne rend
+    /// pas l'ISBN juste — et le jour où l'on rallume la case, l'erreur serait découverte
+    /// bien plus tard, sur un projet qu'on croyait réglé.
+    #[test]
+    fn un_isbn_faux_refuse_meme_zone_eteinte() {
+        let mut cv = maquettes::fournie("bandeau");
+        cv.quatrieme.isbn_actif = false;
+        assert!(
+            source_quatre(
+                &livre_isbn("978-2-07-041311-8"),
+                &cv,
+                FORMAT,
+                None,
+                None,
+                None
+            )
+            .is_err(),
+            "un ISBN faux dort dans un projet dont la zone est éteinte"
+        );
     }
 
     /// Les trois maquettes doivent rester composables : c'est ce que promet le bouton

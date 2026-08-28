@@ -488,6 +488,34 @@ test('les champs libres voyagent en chaînes, jamais en null', async () => {
 });
 
 /**
+ * L'ISBN part **rogné mais non reformaté**, et en chaîne comme les autres champs libres.
+ *
+ * Les tirets sont ceux de l'éditeur : ce sont eux qui s'impriment en clair au-dessus des
+ * barres, et rien dans l'application ne sait les replacer. Un front qui les retirerait
+ * pour « normaliser » ferait imprimer un ISBN que personne n'écrit ainsi ; un front qui
+ * enverrait `null` ferait échouer la désérialisation au premier caractère tapé.
+ */
+test('l\'ISBN part rogné, jamais reformaté ni null', async () => {
+  let envoye = null;
+  const capte = async (cmd, args) => {
+    if (cmd === 'livre_modifier') {
+      envoye = args.livre;
+      return PROJET;
+    }
+    return invoke(cmd, args);
+  };
+  const { els } = await charge({ invoke: capte, open: async () => null });
+
+  els.get('inIsbn').value = '';
+  await els.get('inIsbn').declenche('change');
+  assert.strictEqual(envoye.isbn, '', 'ISBN vide envoyé en null');
+
+  els.get('inIsbn').value = '  978-2-07-041311-9  ';
+  await els.get('inIsbn').declenche('change');
+  assert.strictEqual(envoye.isbn, '978-2-07-041311-9', 'tirets perdus ou espaces gardés');
+});
+
+/**
  * Les cinq textes déplacés ne doivent plus être offerts par l'onglet Couverture.
  *
  * Les y laisser ferait deux endroits où saisir un éditeur, qui peuvent se contredire —

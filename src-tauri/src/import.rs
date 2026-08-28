@@ -56,6 +56,10 @@ pub fn lire_livre_toml(contenu: &str) -> Result<(Livre, Designations), String> {
     let v = Livre::vide();
     let livre = Livre {
         titre: s.titre,
+        // Le `livre.toml` ne porte pas encore d'ISBN : il naît vide et se saisit à
+        // l'écran. L'y ajouter serait cohérent avec le reste de l'identité, mais c'est un
+        // champ de plus dans un format que d'autres livres utilisent déjà.
+        isbn: v.isbn.clone(),
         // Absent du `livre.toml`, il voulait déjà dire « le titre sert » : c'est ce
         // que le jeton dit désormais, en le montrant.
         titre_page: s
@@ -641,6 +645,7 @@ couverture = "in/covers/LHC-Photo.png"
         };
         let p = assemble(
             Livre {
+                isbn: String::new(),
                 titre: "T".into(),
                 titre_page: crate::projet::titre_page_defaut(),
                 auteur: "A".into(),
@@ -823,6 +828,7 @@ couverture = "in/covers/LHC-Photo.png"
     fn un_livre_sans_png_de_l_atelier_s_importe_sans_couverture() {
         let p = assemble(
             Livre {
+                isbn: String::new(),
                 titre: "T".into(),
                 titre_page: crate::projet::titre_page_defaut(),
                 auteur: "A".into(),

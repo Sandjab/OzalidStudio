@@ -48,6 +48,7 @@ fn main() -> Result<(), String> {
         .map_or_else(|| std::env::temp_dir().join("ozalid-temoin"), PathBuf::from);
 
     let livre = Livre {
+        isbn: String::new(),
         titre: "Candide".into(),
         // Le jeton, comme un projet neuf : la page de titre reprend le titre.
         titre_page: "%TITRE%".into(),

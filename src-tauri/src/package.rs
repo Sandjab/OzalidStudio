@@ -875,6 +875,7 @@ mod tests {
     /// Le `Livre` du témoin, réduit à ce qu'`assembler` et `composer_interieur` lisent.
     fn livre_d_essai() -> crate::projet::Livre {
         crate::projet::Livre {
+            isbn: String::new(),
             titre: "Essai".into(),
             titre_page: "%TITRE%".into(),
             auteur: "Autrice".into(),
