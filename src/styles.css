@@ -1545,12 +1545,18 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
   gap: 1rem;
   margin-top: .8rem;
-  padding-top: .8rem;
   border-top: 1px solid var(--trait);
   overflow-y: auto;
   /* Sans quoi la grille, en élément flex, ne descend pas sous la hauteur de son contenu :
      elle déborderait de la boîte au lieu de défiler dedans. */
   min-height: 0;
+  /* De quoi loger les traits qui débordent des cartes. Un conteneur qui défile découpe
+     ses quatre côtés — `overflow-y: auto` force `overflow-x` à `auto` avec lui, la règle
+     ne laisse pas un axe visible en face d'un axe qui défile —, et sans cette marge le
+     cadre de la carte armée était rogné contre le bord gauche et coupé net à droite.
+     Il faut la place du plus large des deux traits : celui du focus, à 2 px posés
+     2 px plus loin. Mesuré : les quatre colonnes survivent à ce que la marge leur prend. */
+  padding: .8rem .35rem .35rem;
 }
 
 /* La carte range ses gestes en les laissant s'envelopper : la vignette et le nom
