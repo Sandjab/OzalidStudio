@@ -65,7 +65,8 @@ d'un acte administratif, pas celle de la compilation. Un défaut calculé se lir
 mesure — le même argument que celui qui interdit de préremplir un fond perdu relevé.
 
 Il se saisit dans l'onglet Livre, voisin de l'ISBN, et naît vide : un tirage privé n'en a
-pas, et le pavé saute les lignes vides.
+pas. Le pavé le compose tel quel : une ligne qui ne porte que le jeton devient une ligne
+blanche, c'est le parti du champ libre.
 
 ### 1.3 Le contexte de substitution
 
@@ -92,7 +93,8 @@ retraduire.
 
 `imprimeur: None` rend la **chaîne vide**, pas le jeton littéral. Un EPUB n'est pas imprimé,
 et un `%IMPRIMEUR%` resté en toutes lettres dans le pavé serait une faute visible du lecteur.
-La ligne devenue vide disparaît, comme le pied de la 4ème saute déjà les siennes.
+Le pavé le compose tel quel : une ligne qui ne porte que le jeton devient une ligne blanche,
+c'est le parti du champ libre — à la différence du pied de la 4ème, qui saute les siennes.
 
 C'est la mutation à poser en premier sur ce volet : laisser le jeton littéral dans l'ebook
 doit faire rougir un test nommé.

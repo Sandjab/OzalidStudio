@@ -119,14 +119,16 @@ L'identité du livre et son texte.
   complet sur une autre machine. Si vous corrigez le fichier d'origine, le bouton
   « Réimporter le manuscrit » met la copie à jour.
 - **L'identité** : titre, auteur, genre, éditeur, collection, monogramme, prix, mention,
-  dédicace, dépôt légal. Ces champs alimentent la couverture — une maquette dit *où* le
-  titre paraît, jamais *quel* titre.
+  dédicace. Ces champs alimentent la couverture — une maquette dit *où* le titre paraît,
+  jamais *quel* titre.
+- **Le dépôt légal** se saisit ici même, dans cet onglet, mais n'alimente pas la
+  couverture : il n'apparaît que dans le pavé de copyright de l'intérieur, et seulement
+  si l'auteur le cite.
 - **Le pavé de copyright**, composé en page liminaire de l'intérieur, est un texte libre.
-  Il reconnaît les mêmes jetons que la 4ème, plus `%ISBN%`, `%DEPOT_LEGAL%` et
-  `%IMPRIMEUR%`. Les deux premiers se saisissent ici même, dans cet onglet ; le troisième
-  vient du livrable, si bien que le même livre composé chez deux imprimeurs porte deux
-  mentions sans qu'on ait rien retapé. Dans l'ebook, qui n'est imprimé nulle part,
-  `%IMPRIMEUR%` ne rend rien.
+  Il reconnaît les mêmes neuf jetons que le pied de la 4ème — voir 2 · Couverture.
+  L'ISBN et le dépôt légal se saisissent dans cet onglet ; l'imprimeur vient du livrable,
+  si bien que le même livre composé chez deux imprimeurs porte deux mentions sans qu'on
+  ait rien retapé. Dans l'ebook, qui n'est imprimé nulle part, `%IMPRIMEUR%` ne rend rien.
 - **La police de l'intérieur** se choisit parmi sept serifs de labeur : EB Garamond (par
   défaut), Crimson Pro, Alegreya, Cardo, Vollkorn, Spectral, Libre Baskerville. Un exemple
   montre l'écriture réelle, dans les octets que le moteur composera.
@@ -144,7 +146,8 @@ Quatre faces à régler : **1ère**, **4ème**, **Dos**, **Planche**.
 - **La 4ème** porte un texte de présentation et, au-dessus, l'auteur, le titre et un filet,
   chacun activable séparément. Le texte reconnaît des jetons comme `%TITRE%` ou `%AUTEUR%`,
   résolus à la composition — les mêmes jetons que reconnaît le pavé de copyright, en
-  1 · Livre.
+  1 · Livre. `%IMPRIMEUR%` n'y rend rien non plus : la couverture ne reçoit pas le nom de
+  l'imprimeur.
 - **Le dos se règle élément par élément.** Auteur, titre, éditeur et collection y ont
   chacun leur style, leur place, leur rang et leur sens de lecture. Place et sens se
   règlent **à la souris**, directement sur l'aperçu. Seule la **largeur** du dos échappe à
