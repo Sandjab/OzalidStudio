@@ -123,20 +123,17 @@ fn compose(
     // différents ne se marchent pas dessus, deux papiers d'un même gabarit partageraient
     // leur intérieur.
     let int = package::composer_interieur(projet, &pr, &pr.cle, sortie, typst)?;
-    let p = package::assembler(
-        projet,
-        &pr,
-        r.papier,
+    let cible = package::Cible {
+        papier: r.papier.clone(),
         // BoD publie son dos et son fond perdu : le relevé est ignoré.
-        Releve::default(),
-        &pr.cle,
+        releve: Releve::default(),
         // Le témoin mesure une pagination, il ne prépare pas une commande : aucune
         // finition à déclarer.
-        None,
-        &int,
-        sortie,
-        typst,
-    )?;
+        finition: None,
+        cle: pr.cle.clone(),
+        pr,
+    };
+    let p = package::assembler(projet, &cible, &int, sortie, typst)?;
 
     println!(
         "{} en {} — {} pages, gouttière {:.1} mm, dos {:.2} mm, planche {:.2} × {:.2} mm{}",

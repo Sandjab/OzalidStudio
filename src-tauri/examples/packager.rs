@@ -52,20 +52,17 @@ fn main() -> Result<(), String> {
             fond_perdu: Some(3.0),
         };
         let sortie = racine.join(&pr.cle);
-        let int = package::composer_interieur(&projet, &pr, &pr.cle, &sortie, &typst)?;
-        let p = package::assembler(
-            &projet,
-            &pr,
-            resolu.papier,
+        let cible = package::Cible {
+            papier: resolu.papier.clone(),
             releve,
-            &pr.cle,
             // L'exemple ne déclare pas de finition : c'est une donnée de commande, et
             // elle vit sur le livrable du projet, pas sur un gabarit.
-            None,
-            &int,
-            &sortie,
-            &typst,
-        )?;
+            finition: None,
+            cle: pr.cle.clone(),
+            pr,
+        };
+        let int = package::composer_interieur(&projet, &cible.pr, &cible.cle, &sortie, &typst)?;
+        let p = package::assembler(&projet, &cible, &int, &sortie, &typst)?;
         println!(
             "{} — {} pages, gouttière {:.1} mm, dos {:.2} mm, planche {:.2} × {:.2} mm{}",
             p.libelle,

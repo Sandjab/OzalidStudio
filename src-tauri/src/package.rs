@@ -387,22 +387,21 @@ pub fn avertissements(
 ///
 /// Le `releve` ne sert que chez les imprimeurs qui ne publient ni dos ni fond perdu ;
 /// ailleurs, il est ignoré au profit de leur formule.
-// La signature retombera à six arguments à la tâche 5, quand `Provider` portera sa
-// `fabrication` : `pr` seul suffira à ce que `cle` et `releve` disent aujourd'hui à
-// part. `expect` et non `allow` : si le compte baisse avant que ce lint ne soit
-// retiré, le build doit le dire.
-#[expect(clippy::too_many_arguments)]
 pub fn assembler(
     projet: &Projet,
-    pr: &Provider,
-    papier: &Papier,
-    releve: Releve,
-    cle: &str,
-    finition: Option<&str>,
+    c: &Cible,
     interieur: &InterieurCompose,
     dossier: &Path,
     typst: &Typst,
 ) -> Result<Package, String> {
+    let Cible {
+        pr,
+        papier,
+        releve,
+        finition,
+        cle,
+    } = c;
+    let (cle, finition) = (cle.as_str(), finition.as_deref());
     let livre = &projet.meta.livre;
     std::fs::create_dir_all(dossier)
         .map_err(|e| format!("répertoire inutilisable ({}) : {e}", dossier.display()))?;
@@ -432,7 +431,7 @@ pub fn assembler(
     let mut polices_introuvables = interieur.polices_introuvables.clone();
 
     // 2. Le dos découle de cette pagination-là, jamais d'une saisie.
-    let g = Gabarit::pour(pr, papier, interieur.pages, releve)?;
+    let g = Gabarit::pour(pr, papier, interieur.pages, *releve)?;
 
     // 3. La planche.
     let cv = projet
@@ -514,9 +513,23 @@ fn ecrire_fiche(
     Ok(affiche(&chemin))
 }
 
-/// Un livrable prêt à packager : sa vue plate, son papier, son relevé et ses clés.
+/// Un livrable prêt à packager : sa vue plate, son papier, son relevé, sa finition et sa
+/// clé.
 ///
-/// `cle_gabarit` doit dériver de `pr` ; `lot` mémoïse dessus.
+/// **C'est l'argument de `assembler` et d'`assembler_envois`**, et non cinq paramètres
+/// côte à côte : les cinq vont ensemble, ils viennent tous du même livrable, et les
+/// passer séparément laissait à chaque appelant l'occasion de les dépareiller — un
+/// papier d'un livrable avec la clé d'un autre écrit un dos faux dans le bon répertoire.
+///
+/// [`composer_interieur`] ne la prend pas, et c'est délibéré : la pagination ne dépend
+/// ni du papier ni de la finition, et lui donner la cible entière laisserait croire le
+/// contraire. Sa signature dit ce qu'elle lit — le gabarit, et la clé qui nomme ses
+/// fichiers.
+///
+/// La clé du **gabarit**, sur laquelle `lot` mémoïse, n'y figure pas : c'est `pr.cle`,
+/// que ses deux constructeurs posent à `fabrication.cle_gabarit()`. La porter en double
+/// obligeait les appelants qui ne mémoïsent pas à la fournir quand même, et faisait d'un
+/// fait de construction un invariant à tenir.
 #[derive(Debug, Clone)]
 pub struct Cible {
     pub pr: Provider,
@@ -527,8 +540,9 @@ pub struct Cible {
     /// ne change pas un octet du PDF — c'est une donnée de commande —, et c'est à ce
     /// titre qu'elle entre sur la fiche de téléversement.
     pub finition: Option<String>,
+    /// La clé du **livrable**, à quatre axes : celle qui nomme son répertoire et ses
+    /// fichiers.
     pub cle: String,
-    pub cle_gabarit: String,
 }
 
 /// Packager un lot de livrables, l'intérieur composé **une fois par gabarit**.
@@ -547,25 +561,13 @@ pub fn lot(
         .iter()
         .map(|c| {
             let dossier = racine.join(&c.cle);
-            if !prets.contains_key(&c.cle_gabarit) {
+            if !prets.contains_key(&c.pr.cle) {
                 let i = composer_interieur(projet, &c.pr, &c.cle, &dossier, typst)?;
-                prets.insert(c.cle_gabarit.clone(), (c.pr.clone(), i));
+                prets.insert(c.pr.cle.clone(), (c.pr.clone(), i));
             }
-            let (pr, interieur) = prets
-                .get(&c.cle_gabarit)
-                .expect("vient d'être inséré si absent");
+            let (pr, interieur) = prets.get(&c.pr.cle).expect("vient d'être inséré si absent");
             debug_assert_eq!(*pr, c.pr, "deux gabarits de même clé, providers différents");
-            assembler(
-                projet,
-                &c.pr,
-                &c.papier,
-                c.releve,
-                &c.cle,
-                c.finition.as_deref(),
-                interieur,
-                &dossier,
-                typst,
-            )
+            assembler(projet, c, interieur, &dossier, typst)
         })
         .collect()
 }
@@ -676,21 +678,13 @@ fn verifie_pages(liste: &[crate::envoi::Envoi], pages: u32) -> Result<(), String
 /// pas créer de page : la gouttière, la parité, le compte de pages, le dos et la
 /// planche sont donc les mêmes pour tous. Converger M fois ne coûterait pas seulement
 /// M fois le temps — cela laisserait croire que le résultat pourrait différer.
-// Huitième argument depuis que la fiche est écrite ici aussi : la finition est une
-// donnée de commande, elle ne change pas un octet du PDF mais elle se recopie sur la
-// fiche. Elle tombera avec les six autres le jour où ces deux fonctions prendront la
-// `Cible` que `lot` tient déjà — le même nettoyage qu'`assembler` annonce.
-#[expect(clippy::too_many_arguments)]
 pub fn assembler_envois(
     projet: &Projet,
-    pr: &Provider,
-    papier: &Papier,
-    releve: Releve,
-    cle: &str,
-    finition: Option<&str>,
+    c: &Cible,
     racine: &Path,
     typst: &Typst,
 ) -> Result<Vec<(String, Package)>, String> {
+    let (pr, cle, finition) = (&c.pr, c.cle.as_str(), c.finition.as_deref());
     let envois = &projet.meta.envois;
     envois.verifie()?;
     if envois.liste.is_empty() {
@@ -701,9 +695,7 @@ pub fn assembler_envois(
     // compose la planche. Les envois n'en reprennent que le réglage et les fichiers.
     let reference = racine.join(".reference");
     let int = composer_interieur(projet, pr, cle, &reference, typst)?;
-    let base = assembler(
-        projet, pr, papier, releve, cle, finition, &int, &reference, typst,
-    )?;
+    let base = assembler(projet, c, &int, &reference, typst)?;
 
     // Le compte de pages n'existe qu'après la convergence : le contrôle ne peut pas
     // avoir lieu plus tôt, et refuser ici coûte une composition de moins qu'un tirage
@@ -1148,6 +1140,18 @@ mod tests {
         assert!(consigne < f.find("91 ppp").unwrap(), "{f}");
     }
 
+    /// La cible d'un livrable d'essai : le premier papier du provider, aucun relevé,
+    /// aucune finition. La clé de gabarit n'est plus à donner — c'est celle du provider.
+    fn cible_d_essai(pr: &Provider, cle: &str) -> Cible {
+        Cible {
+            pr: pr.clone(),
+            papier: pr.papiers[0].clone(),
+            releve: Releve::default(),
+            finition: None,
+            cle: cle.into(),
+        }
+    }
+
     /// Le `Provider` d'essai, doté du seuil de texte au dos qu'un POD publierait.
     fn provider_au_seuil(seuil: Option<u32>) -> Provider {
         Provider {
@@ -1558,11 +1562,7 @@ mod tests {
         let pr = provider_d_essai();
         let e = assembler(
             &projet,
-            &pr,
-            &pr.papiers[0],
-            Releve::default(),
-            "essai",
-            None,
+            &cible_d_essai(&pr, "essai"),
             &pret,
             dir.path(),
             &Typst::new("typst-qui-n-existe-pas"),
@@ -1603,11 +1603,10 @@ mod tests {
         let pr = provider_d_essai();
         let sorties = assembler_envois(
             &projet,
-            &pr,
-            &pr.papiers[0],
-            Releve::default(),
-            "essai-livre-broche-creme",
-            Some("Pelliculage d'essai"),
+            &Cible {
+                finition: Some("Pelliculage d'essai".into()),
+                ..cible_d_essai(&pr, "essai-livre-broche-creme")
+            },
             racine.path(),
             &typst,
         )
@@ -1660,20 +1659,12 @@ mod tests {
         };
         let cibles = [
             Cible {
-                pr: pr.clone(),
                 papier: creme,
-                releve: Releve::default(),
-                finition: None,
-                cle: "essai-livre-broche-creme".into(),
-                cle_gabarit: "essai-livre-broche".into(),
+                ..cible_d_essai(&pr, "essai-livre-broche-creme")
             },
             Cible {
-                pr,
                 papier: blanc,
-                releve: Releve::default(),
-                finition: None,
-                cle: "essai-livre-broche-blanc-essai".into(),
-                cle_gabarit: "essai-livre-broche".into(),
+                ..cible_d_essai(&pr, "essai-livre-broche-blanc-essai")
             },
         ];
         let sorties = lot(&projet, &cibles, racine.path(), &typst);
@@ -1704,14 +1695,7 @@ mod tests {
         let projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
         let racine = tempfile::tempdir().unwrap();
         let pr = provider_d_essai();
-        let c = |cle: &str| Cible {
-            pr: pr.clone(),
-            papier: pr.papiers[0].clone(),
-            releve: Releve::default(),
-            finition: None,
-            cle: cle.into(),
-            cle_gabarit: "essai-livre-broche".into(),
-        };
+        let c = |cle: &str| cible_d_essai(&pr, cle);
         let sorties = lot(
             &projet,
             &[c("essai-a"), c("essai-b")],

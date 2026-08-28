@@ -600,6 +600,26 @@ fn vise(o: &Ouvert) -> Result<(Provider, catalogue::Papier, &Livrable), String> 
     Ok((r.provider(), r.papier.clone(), l))
 }
 
+/// La cible de packaging d'un livrable : ce que `package` réclame pour composer.
+///
+/// Fonction libre et non deux montages recopiés : `packager` et `envoyer` la bâtissent
+/// tous deux, et la seule chose qui distingue leurs six champs — un papier avec la clé
+/// d'un autre livrable — écrirait un dos faux dans le bon répertoire.
+fn cible(pr: Provider, papier: catalogue::Papier, d: &Livrable) -> package::Cible {
+    package::Cible {
+        pr,
+        papier,
+        releve: planche::Releve {
+            dos: d.dos_mm,
+            fond_perdu: d.fond_perdu_mm,
+        },
+        // Le nom d'imprimeur, pas la clé : c'est lui que la fiche de téléversement
+        // porte, et « mat » ne se coche sur aucun bon de commande.
+        finition: nom_finition(d, catalogue::pod(&d.fabrication.pod)),
+        cle: d.cle(),
+    }
+}
+
 /// Le refus d'un livrable déjà déclaré, à quatre axes — la finition n'y est pas.
 ///
 /// Fonction libre plutôt qu'une ligne dans la commande : une commande réclame un `State`
@@ -1456,19 +1476,7 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
     let mut etapes: Vec<Result<package::Cible, Resultat>> = Vec::with_capacity(livrables.len());
     for d in &livrables {
         etapes.push(match catalogue::resout(&d.fabrication) {
-            Ok(r) => Ok(package::Cible {
-                pr: r.provider(),
-                papier: r.papier.clone(),
-                releve: planche::Releve {
-                    dos: d.dos_mm,
-                    fond_perdu: d.fond_perdu_mm,
-                },
-                // Le nom d'imprimeur, pas la clé : c'est lui que la fiche de
-                // téléversement porte, et « mat » ne se coche sur aucun bon de commande.
-                finition: nom_finition(d, Some(r.pod)),
-                cle: d.cle(),
-                cle_gabarit: d.fabrication.cle_gabarit(),
-            }),
+            Ok(r) => Ok(cible(r.provider(), r.papier.clone(), d)),
             // Le POD est le seul axe qui puisse encore se nommer quand la résolution
             // échoue sur un autre : afficher la clé à quatre segments en gros titre
             // serait un recul devant « BoD ».
@@ -2115,19 +2123,7 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
     let typst = typst()?;
     let racine = sorties_racine(o)?.join("envois");
 
-    let sorties = package::assembler_envois(
-        &o.projet,
-        &pr,
-        &papier,
-        planche::Releve {
-            dos: d.dos_mm,
-            fond_perdu: d.fond_perdu_mm,
-        },
-        &d.cle(),
-        nom_finition(d, catalogue::pod(&d.fabrication.pod)).as_deref(),
-        &racine,
-        &typst,
-    )?;
+    let sorties = package::assembler_envois(&o.projet, &cible(pr, papier, d), &racine, &typst)?;
 
     Ok(sorties
         .into_iter()
