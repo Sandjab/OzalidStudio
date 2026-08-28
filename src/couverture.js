@@ -69,8 +69,19 @@ function elementDos(cle, libelle) {
   return {
     ...style(`dos.${cle}.style`, libelle),
     face: 'dos',
+    // Le groupe ne paraît que pour le texte choisi. Les quatre étaient montrés côte à
+    // côte : vingt-huit contrôles pour régler quatre lignes sur une bande de 7 mm, et
+    // il fallait 1160 px de fenêtre pour les voir tous — au-dessous, la collection
+    // passait derrière un ascenseur horizontal, et c'était son seul chemin.
+    texteDos: cle,
     avant: [
-      { chemin: `dos.${cle}.actif`, libelle: 'Afficher', type: 'case' },
+      // `cache` : le contrôle existe — la commande le relit avec tous les autres — mais
+      // sa ligne n'entre pas dans le groupe. Il va dans la liste des textes, et c'est
+      // tout l'objet du chantier : un interrupteur ne se range pas derrière ce qu'il
+      // éteint. Rangé ici, décocher « Afficher » retirait le texte du dos, donc sa
+      // prise — `poserPrisesDos` ne pose que ce que Typst a composé —, et le seul
+      // chemin vers ce panneau avec elle.
+      { chemin: `dos.${cle}.actif`, libelle: 'Afficher', type: 'case', cache: true },
       { chemin: `dos.${cle}.place`, libelle: 'Position', type: 'liste', options: PLACES_DOS, cache: true },
       { chemin: `dos.${cle}.rang`, libelle: 'Ordre à cette position', type: 'nombre', min: 1, max: 9, pas: 1, cache: true },
       { chemin: `dos.${cle}.sens`, libelle: 'Sens', type: 'nombre', min: 0, max: 270, pas: 90, cache: true },
@@ -326,7 +337,7 @@ async function rafraichirMaquettes() {
 
   const sel = $('inMaquette');
   sel.replaceChildren();
-  sel.append(new Option('Repartir d\'une maquette…', ''));
+  sel.append(new Option('Repartir de…', ''));
   let separateur = false;
   for (const m of maquettes) {
     if (!m.fournie && !separateur) {
@@ -443,6 +454,9 @@ function gesteEffacer(m) {
   const b = document.createElement('button');
   b.type = 'button';
   b.textContent = 'Effacer';
+  // Nu au repos : il est à quelques pixels de « Renommer », et deux boutons de même
+  // poids côte à côte dont l'un est sans retour se cliquent l'un pour l'autre.
+  b.className = 'nu';
   b.addEventListener('click', () => {
     if (b.textContent === 'Effacer') {
       b.textContent = 'Confirmer';
@@ -492,7 +506,10 @@ async function choisirMaquette() {
  * `.ozalid` comme le manuscrit, et le chemin d'où elle vient n'a plus à exister pour
  * que la couverture se compose.
  */
-async function choisirImage(face) {
+async function choisirImage() {
+  // Sans paramètre : `face` est celle du module, celle que l'aperçu montre. Le paramètre
+  // qui la masquait obligeait chaque appelant à la redire, et c'est ce qui avait fait
+  // deux boutons là où la face suffisait.
   const chemin = await open({
     multiple: false,
     filters: [{ name: 'Photo de couverture', extensions: ['jpg', 'jpeg', 'png'] }],
@@ -561,6 +578,76 @@ function controle(c) {
   return el;
 }
 
+/**
+ * Un champ et son unité, dans une même boîte.
+ *
+ * L'unité ne se saisit pas et ne se tabule pas : elle est posée par-dessus le champ,
+ * hors du flux et sans prise au pointeur — un clic sur elle doit tomber dans le champ,
+ * comme un clic sur le blanc de droite.
+ */
+function enUnite(el, unite) {
+  const boite = h('div', undefined, 'champ-unite');
+  boite.append(el, h('i', unite));
+  return boite;
+}
+
+/** Le texte du dos que le panneau règle. Les quatre existent toujours ; un seul paraît. */
+let texteDos = 'titre';
+
+/**
+ * Choisit le texte du dos que le panneau règle.
+ *
+ * Deux chemins y mènent, et c'est voulu : la liste, qui porte les quatre en permanence,
+ * et le texte lui-même sur l'aperçu, qui est le raccourci. La liste ne peut pas être
+ * seulement un raccourci de plus — un texte qu'on ne compose pas n'a pas de prise, et
+ * c'est justement celui qu'on veut pouvoir rallumer.
+ */
+function choisirTexteDos(cle) {
+  texteDos = cle;
+  for (const { cle: c, bouton } of nomsTextesDos) {
+    bouton.setAttribute('aria-pressed', String(c === cle));
+  }
+  if (projet?.couverture) afficherCouverture(projet.couverture);
+}
+
+/** Les boutons de la liste, retenus avec leur clé — comme `controles` et `blocs`. */
+let nomsTextesDos = [];
+
+/**
+ * La liste des quatre textes du dos : ce qui se compose, et ce qui se règle.
+ *
+ * Une case et un nom par ligne, et les deux ne font pas la même chose — la case décide
+ * de ce que Typst compose, le nom choisit le sujet du panneau. Les cases sont celles du
+ * schéma, déplacées ici : `couvertureSaisie` les relit comme les autres, sans savoir
+ * qu'elles ont changé de place.
+ */
+function construireTextesDos() {
+  const bloc = h('div', undefined, 'groupe groupe-dos-textes');
+  bloc.append(h('h3', 'Textes du dos'));
+  nomsTextesDos = [];
+  for (const [cle, libelle] of ELEMENTS_DOS) {
+    const ligne = h('div', undefined, 'texte-dos');
+    const c = controles.find((x) => x.champ.chemin === `dos.${cle}.actif`);
+    const oeil = h('label', undefined, 'oeil');
+    // La case prend un identifiant en arrivant ici : elle n'en avait pas besoin dans le
+    // panneau, où sa ligne se trouvait par son libellé. Même forme que les gestes de la
+    // Livraison — `liv-retirer-<clé>`.
+    c.el.id = `dosActif-${cle}`;
+    // Le libellé de la case est porté pour qui ne voit pas la colonne : « Auteur » seul
+    // dirait le texte, pas ce que la case en fait.
+    oeil.append(c.el, h('span', `Composer : ${libelle}`, 'sr'));
+    const bouton = h('button', libelle, 'nom-texte');
+    bouton.type = 'button';
+    bouton.id = `dosTexte-${cle}`;
+    bouton.setAttribute('aria-pressed', String(cle === texteDos));
+    bouton.addEventListener('click', () => choisirTexteDos(cle));
+    ligne.append(oeil, bouton);
+    bloc.append(ligne);
+    nomsTextesDos.push({ cle, bouton });
+  }
+  return bloc;
+}
+
 /** Contrôles construits, avec leur champ de schéma et leur ligne. */
 let controles = [];
 /** Blocs du panneau, avec la face et les modes qui les concernent. */
@@ -576,18 +663,32 @@ function construireReglages() {
     bloc.append(h('h3', g.titre));
     for (const c of g.champs) {
       const ligne = h('label');
-      const lib = c.unite ? `${c.libelle} (${c.unite})` : c.libelle;
       const el = controle(c);
-      ligne.append(h('span', lib), el);
+      // L'unité est posée **dans** le champ, en suffixe, et non recopiée entre
+      // parenthèses derrière le libellé. « Corps (% larg.) » demandait de penser dans
+      // le repère du moteur ; « Corps », suivi d'un « % larg. » gris à droite de la
+      // valeur, demande de penser au corps. Le contrôle, lui, ne bouge pas : c'est
+      // toujours `el` qui entre dans `controles`, et rien d'autre ne sait qu'il est
+      // enveloppé.
+      ligne.append(h('span', c.libelle), c.unite ? enUnite(el, c.unite) : el);
       // Un champ `cache` a bien son contrôle — le geste y pose sa valeur, la commande
       // l'y relit — mais sa ligne n'entre pas dans le panneau : elle n'est nulle part,
       // plutôt que posée et masquée, pour qu'aucun réglage de mode ne la ramène.
       if (!c.cache) bloc.append(ligne);
       controles.push({ champ: c, el, ligne });
     }
-    blocs.push({ el: bloc, face: g.face ?? 'une', modes: g.modes ?? null });
+    blocs.push({
+      el: bloc, face: g.face ?? 'une', modes: g.modes ?? null, texteDos: g.texteDos ?? null,
+    });
     box.append(bloc);
   }
+  // En tête du panneau du dos : on lit la liste, puis le commun, puis le texte choisi.
+  // Construite après la boucle parce qu'elle emprunte les cases que la boucle vient de
+  // créer — les mêmes éléments, à une autre place.
+  const textes = construireTextesDos();
+  blocs.push({ el: textes, face: 'dos', modes: null, texteDos: null });
+  const suite = [...box.children];
+  box.replaceChildren(textes, ...suite);
 }
 
 /** Remplit les contrôles depuis la maquette, et masque ce qui est sans objet. */
@@ -608,7 +709,11 @@ function afficherCouverture(cv) {
     ligne.hidden = !!champ.modes && !champ.modes.includes(cv.mode);
   }
   for (const b of blocs) {
-    b.el.hidden = b.face !== face || (!!b.modes && !b.modes.includes(cv.mode));
+    b.el.hidden = b.face !== face
+      || (!!b.modes && !b.modes.includes(cv.mode))
+      // Un groupe de texte du dos ne paraît que pour le texte choisi. Les trois autres
+      // ne sont pas perdus : leur ligne est dans la liste, à gauche, toujours.
+      || (!!b.texteDos && b.texteDos !== texteDos);
   }
   poserDisposition(blocs.some((b) => !b.el.hidden));
   poserPrises();
@@ -627,9 +732,20 @@ function poserDisposition(panneau) {
   couv.setAttribute('data-face', face);
   couv.setAttribute('data-panneau', panneau ? 'oui' : 'non');
   $('reglages').hidden = !panneau;
-  // La lunette n'a d'objet que là où il y a du fond perdu à voir. Masquée plutôt que
-  // grisée, comme les réglages sans objet.
-  $('btReperes').hidden = face !== 'planche';
+  // La lunette n'a d'objet que là où il y a du fond perdu à voir. Éteinte et non
+  // masquée : un membre qui naît et meurt change la hauteur de la barre, et la barre
+  // porte l'aperçu.
+  $('btReperes').disabled = face !== 'planche';
+  // Le bouton de photo suit la face regardée. Le dos n'a pas de photo, la planche n'est
+  // pas une face qu'on habille — elle montre celles des autres.
+  const habillable = face === 'une' || face === 'quatre';
+  $('btImage').disabled = !habillable;
+  // Le libellé ne redit pas la face : le segmenté allumé, à trois centimètres à gauche,
+  // la nomme déjà. Le `title`, lui, la dit — c'est là qu'on vérifie sur quoi l'on va
+  // poser une photo avant de cliquer.
+  $('btImage').title = habillable
+    ? `Choisir la photo de ${face === 'quatre' ? '4ème' : '1ère'}`
+    : 'Le dos et la planche n\'ont pas de photo à eux';
 }
 
 /**
@@ -783,12 +899,16 @@ function basculerReperes() {
 async function rendreApercu() {
   if (!projet?.couverture) {
     poserApercu(null);
-    $('etatApercu').textContent = 'Choisir une maquette de départ.';
-    // Sans cette ligne, une invitation à choisir s'écrirait en rouge dès que l'aperçu
-    // précédent avait échoué : la classe survivrait au message qu'elle qualifiait.
+    // L'invitation est dans l'établi, pas sous lui. La ligne d'état redevient ce qu'elle
+    // est partout ailleurs : le compte rendu de la dernière composition, et rien d'autre.
+    $('couvVide').hidden = false;
+    $('etatApercu').textContent = '';
+    // Sans cette ligne, la classe d'un aperçu qui avait échoué survivrait au message
+    // qu'elle qualifiait.
     $('etatApercu').className = 'note';
     return;
   }
+  $('couvVide').hidden = true;
   $('etatApercu').textContent = 'composition de l\'aperçu…';
   try {
     // Ni gabarit ni fond perdu à passer : ils viennent du livrable visé, que le
@@ -1345,6 +1465,10 @@ function cablerPrises() {
       cle,
       deposer: (u) => deposerDos(cle, u),
     });
+    // Saisir un texte, c'est aussi le désigner : le panneau vient à celui qu'on tient.
+    // Le raccourci, pas le chemin — un texte qu'on ne compose pas n'a pas de prise, et
+    // c'est la liste qui le rattrape.
+    $(`priseDos${b}`).addEventListener('click', () => choisirTexteDos(cle));
     // Les icônes de sens vivent dans la prise : sans cet arrêt, presser l'une d'elles
     // commencerait aussi à traîner le texte qui la porte.
     for (const [id, quart] of QUARTS_DOS.includes(cle)

@@ -202,6 +202,8 @@ function afficherLivrables() {
 
     const retirer = h('button', 'Retirer');
     retirer.type = 'button';
+    // Ce qui défait, dans une ligne où le noir appartient à « Générer les packages ».
+    retirer.className = 'nu';
     retirer.id = `liv-retirer-${d.cle}`;
     // Le dernier ne se retire pas : le Rust refuse, mais un bouton qui ne peut
     // qu'échouer vaut mieux éteint que refusé.

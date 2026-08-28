@@ -379,10 +379,16 @@ function majPied() {
     return;
   }
   sel.replaceChildren();
+  // Le libellé du visé est relevé au passage plutôt que relu dans le DOM : `title` le
+  // reprend, et c'est ce qui rend entier ce que la bande tronque.
+  let vise = '';
   for (const d of projet.livraison.livrables) {
-    sel.append(new Option(libelleLivrable(d), d.cle));
+    const libelle = libelleLivrable(d);
+    if (d.cle === projet.livraison.courant) vise = libelle;
+    sel.append(new Option(libelle, d.cle));
   }
   sel.value = projet.livraison.courant;
+  sel.title = vise;
 
   viderPied();
   // Une composition qui tourne passe avant tout le reste, et en gris : elle dure des
@@ -1134,7 +1140,15 @@ async function montrerEchantillon(famille) {
   // La lecture a pu durer plus longtemps que le choix : c'est le dernier qui compte.
   if (famille !== $('inPoliceInterieur').value) return;
   if (nom) $('echantillonPolice').style.setProperty('--police-echantillon', `"${nom}"`);
-  else $('echantillonAbsent').textContent = `Pas d'échantillon de « ${famille} » : ${erreur}`;
+  // Ce que l'erreur brute ne disait pas, et qui est la seule question qu'on se pose
+  // devant un échantillon manquant : est-ce que mon livre va se composer quand même ?
+  // Oui — l'échantillon se charge dans la fenêtre, la composition se fait chez Typst, et
+  // les deux ne lisent pas la police au même endroit. La cause technique reste, en
+  // second : c'est elle qu'on recopiera dans un rapport.
+  else {
+    $('echantillonAbsent').textContent = `L'aperçu de « ${famille} » n'a pas pu être `
+      + `chargé ; la composition, elle, l'utilisera bien. (${erreur})`;
+  }
   $('echantillonPolice').hidden = !nom;
   $('echantillonAbsent').hidden = !!nom;
 }
@@ -1315,8 +1329,8 @@ $('btOuvrir').addEventListener('click', ouvrir);
 $('btImporter').addEventListener('click', importer);
 $('btReimporter').addEventListener('click', reimporter);
 $('btChoisirManuscrit').addEventListener('click', choisirManuscrit);
-$('btImageUne').addEventListener('click', () => choisirImage('une'));
-$('btImageQuatre').addEventListener('click', () => choisirImage('quatre'));
+// La face n'est pas passée d'ici : elle appartient à la Couverture, qui la connaît.
+$('btImage').addEventListener('click', () => choisirImage());
 $('btReperes').addEventListener('click', basculerReperes);
 // Le seul écouteur de l'application qui ne réponde pas à un geste : c'est l'image
 // décodée qui donne au cadre sa taille, et elle ne l'est qu'après avoir été posée.

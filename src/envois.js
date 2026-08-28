@@ -125,6 +125,12 @@ function afficherReglages() {
     'btRetirerEnvoi']) {
     $(id).disabled = !e;
   }
+  // Sans envoi choisi, les réglages ne s'éteignent pas : ils s'en vont, et un mot prend
+  // leur place. C'est la règle que cette fonction tient déjà pour la main — « ce que la
+  // main ne réclame pas ne paraît pas » — étendue d'un cran : sans dédicataire, il n'y a
+  // pas de main. Un champ grisé sous un canevas vide dit qu'on pourrait y écrire.
+  for (const id of ['champMain', 'champTaille', 'champAngle']) $(id).hidden = !e;
+  $('reglagesVides').hidden = !!e;
   $('champImage').hidden = !e || main() !== 'image';
   // Les seuils suivent l'image, et non la seule main : un envoi d'avant ce chantier
   // n'en porte pas, et deux curseurs sans valeur à régler ne diraient rien.
@@ -138,7 +144,10 @@ function afficherReglages() {
   // La main générée garde son mot : le gabarit dit le style du livre, le mot dit ce que
   // cette image-ci doit porter, et c'est lui que `{envoi}` va chercher. Seule la forme
   // en images n'a pas de texte à composer.
-  $('champMot').hidden = !!e && main() === 'image';
+  // Sans envoi, il s'en va comme les autres : le `!!e` de cette ligne ne servait qu'à
+  // ne pas masquer le mot d'un envoi qui n'existait pas — il le laissait donc offert,
+  // seul champ debout sous un panneau parti.
+  $('champMot').hidden = !e || main() === 'image';
   // Ce qui appartient au livre se pose **avant** la sortie : un livre sans dédicataire a
   // quand même sa police personnelle, et la laisser dans l'état du livre précédent
   // offrirait de retirer une écriture que celui-ci ne porte pas.

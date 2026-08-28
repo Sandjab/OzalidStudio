@@ -250,6 +250,39 @@ const derniereMaquette = (appels) =>
 const face = (els, libelle) =>
   [...els.get('faces').children].find((b) => b.textContent === libelle);
 
+/**
+ * Les lignes de réglage d'un groupe.
+ *
+ * Une ligne est un `label` : c'est ce qui la distingue du titre du groupe, et des lignes
+ * de la liste des textes du dos, qui portent une case et un bouton plutôt qu'un champ.
+ * Compter les enfants à partir du premier — `slice(1)` — supposait qu'un groupe ne
+ * contienne jamais que son titre et des lignes ; ce n'est plus vrai, et ce l'était par
+ * chance.
+ */
+const lignes = (groupe) => [...groupe.children].filter((l) => l.tagName === 'LABEL');
+
+/**
+ * Le contrôle que porte une ligne, quelle que soit sa profondeur.
+ *
+ * Un champ à unité vit dans une boîte qui porte le suffixe ; le lire à un rang fixe
+ * liait le test à la mise en page du libellé. On descend jusqu'à ce qui a une valeur.
+ */
+const CONTROLES = ['INPUT', 'SELECT', 'TEXTAREA'];
+
+function controleDe(ligne) {
+  // On s'arrête au premier contrôle rencontré, sans descendre dedans : un `select` a des
+  // enfants — ses options —, et chercher « le premier élément qui porte une valeur »
+  // rendait la première option au lieu de la liste.
+  const descend = (e) => (CONTROLES.includes(e.tagName)
+    ? [e]
+    : [...(e.children ?? [])].flatMap(descend));
+  return descend(ligne)[0] ?? ligne.children[1];
+}
+
+/** Un groupe du panneau, par son titre — et non par son rang, qui a déjà bougé. */
+const groupe = (els, titre) =>
+  [...els.get('reglages').children].find((g) => g.children[0]?.textContent === titre);
+
 /* ---------- schéma ---------- */
 
 /**
@@ -279,9 +312,9 @@ test('écrire puis relire un chemin imbriqué rend la valeur posée', () => {
 
 test('le panneau se remplit depuis la maquette du projet', async () => {
   const { els } = await ouvre(maquette());
-  const lignes = [...els.get('reglages').children]
-    .flatMap((g) => [...g.children].slice(1));
-  const valeurs = lignes.map((l) => l.children[1].value);
+  const valeurs = [...els.get('reglages').children]
+    .flatMap(lignes)
+    .map((l) => controleDe(l).value);
   assert.ok(valeurs.includes('bandeau'), 'le mode n\'est pas repris');
   assert.ok(valeurs.includes('#ffffff'), 'le papier n\'est pas repris');
   // Une chaîne : un contrôle ne rend jamais le nombre qu'on lui a posé.
@@ -291,12 +324,15 @@ test('le panneau se remplit depuis la maquette du projet', async () => {
 /**
  * Un réglage sans objet dans le mode courant est masqué : le panneau est long, et un
  * contrôle qui ne produirait aucun effet y serait un piège.
+ *
+ * Les libellés sont nus : l'unité est posée dans le champ, en suffixe, et non plus
+ * recopiée entre parenthèses derrière le nom du réglage.
  */
 test('les réglages sans objet dans le mode courant sont masqués', async () => {
   const visibles = (els) => {
     const out = new Map();
     for (const g of els.get('reglages').children) {
-      for (const l of [...g.children].slice(1)) {
+      for (const l of lignes(g)) {
         out.set(l.children[0].textContent, !g.hidden && !l.hidden);
       }
     }
@@ -304,12 +340,12 @@ test('les réglages sans objet dans le mode courant sont masqués', async () => 
   };
 
   const bandeau = visibles((await ouvre(maquette('bandeau'))).els);
-  assert.strictEqual(bandeau.get('Hauteur du bandeau (% haut.)'), true);
-  assert.strictEqual(bandeau.get('Hauteur du bloc titre (% haut.)'), false);
+  assert.strictEqual(bandeau.get('Hauteur du bandeau'), true);
+  assert.strictEqual(bandeau.get('Hauteur du bloc titre'), false);
 
   const typo = visibles((await ouvre(maquette('typo'))).els);
-  assert.strictEqual(typo.get('Hauteur du bandeau (% haut.)'), false);
-  assert.strictEqual(typo.get('Hauteur du bloc titre (% haut.)'), true);
+  assert.strictEqual(typo.get('Hauteur du bandeau'), false);
+  assert.strictEqual(typo.get('Hauteur du bloc titre'), true);
   assert.strictEqual(typo.get('Zoom'), false, 'cadrage image offert sans image');
 });
 
@@ -331,21 +367,76 @@ test('basculer sur la 4ème change les groupes offerts', async () => {
  * Les réglages du dos n'ont de sens que sur la face qui le montre. Les offrir sur la
  * 1ère donnerait à régler un élément absent de l'aperçu affiché.
  *
- * Les colonnes ne redisent plus « Dos » : la face est déjà nommée par l'onglet allumé,
- * et le préfixe mangeait la moitié de titres qui tiennent dans 13,5 rem.
+ * Les colonnes ne redisent plus « Dos » : la face est déjà nommée par l'onglet allumé.
+ *
+ * Et il n'y en a plus quatre à la fois : un seul texte se règle, celui que la liste
+ * désigne. Les quatre étaient montrés côte à côte — vingt-huit contrôles pour régler
+ * quatre lignes sur une bande de 7 mm, et il fallait 1160 px de fenêtre pour les voir
+ * tous : au-dessous, la collection passait derrière un ascenseur horizontal.
  */
-test('les quatre éléments du dos ne sont offerts que sur la face Dos', async () => {
+test('les réglages du dos ne sont offerts que sur la face Dos, un texte à la fois', async () => {
   const { els } = await ouvre(maquette());
   const titres = () => [...els.get('reglages').children]
     .filter((g) => !g.hidden)
     .map((g) => g.children[0].textContent);
 
   assert.ok(!titres().includes('Collection'), 'dos offert sur la 1ère');
-  assert.ok(!titres().includes('Fond et espacements'), 'dos offert sur la 1ère');
+  assert.ok(!titres().includes('Textes du dos'), 'dos offert sur la 1ère');
 
   await face(els, 'Dos').declenche('click');
   assert.deepStrictEqual(
-    titres(), ['Fond et espacements', 'Auteur', 'Titre', 'Éditeur', 'Collection']);
+    titres(), ['Textes du dos', 'Fond et espacements', 'Titre'],
+    'le dos montre plus d\'un texte à la fois');
+
+  await els.get('dosTexte-collection').declenche('click');
+  assert.deepStrictEqual(
+    titres(), ['Textes du dos', 'Fond et espacements', 'Collection'],
+    'le texte choisi n\'est pas celui que la liste désigne');
+});
+
+/**
+ * **Le test du chantier.** Un texte qu'on ne compose pas garde son chemin.
+ *
+ * `poserPrisesDos` ne pose une prise que là où Typst a composé quelque chose —
+ * `el.hidden = !boite` — de sorte qu'un texte éteint disparaît du dos, prise comprise.
+ * Tant que « Afficher » vivait dans le groupe du texte, le décocher enfermait ses
+ * réglages derrière lui : plus rien à cliquer sur l'aperçu, et plus de colonne au
+ * panneau. Un aller sans retour.
+ *
+ * La case vit donc dans la liste, qui porte les quatre en permanence. Ce test tient les
+ * deux bouts : la case n'est pas dans le groupe du texte, **et** le texte éteint reste
+ * désignable. Remettre `actif` dans `elementDos` fait rougir la première assertion ;
+ * masquer la ligne d'un texte éteint fait rougir la seconde.
+ */
+test('un texte du dos qu\'on ne compose pas reste réglable', async () => {
+  const { els } = await ouvre(maquette());
+  await face(els, 'Dos').declenche('click');
+
+  const groupeCollection = () => [...els.get('reglages').children]
+    .find((g) => g.children[0]?.textContent === 'Collection');
+
+  await els.get('dosTexte-collection').declenche('click');
+  const dansLeGroupe = lignes(groupeCollection())
+    .map((l) => l.children[0].textContent);
+  assert.ok(!dansLeGroupe.includes('Afficher'),
+    'l\'interrupteur est rangé derrière ce qu\'il éteint');
+
+  // On l'éteint pour de bon : la collection quitte le dos, donc l'aperçu, donc sa prise.
+  const bascule = els.get('dosActif-collection');
+  bascule.checked = false;
+  await bascule.declenche('change');
+
+  // Et on repart d'un autre texte, comme on le ferait après avoir éteint celui-là.
+  await els.get('dosTexte-titre').declenche('click');
+  assert.strictEqual(els.get('dosTexte-collection').hidden, false,
+    'la ligne d\'un texte éteint a quitté la liste : ses réglages sont enfermés');
+
+  await els.get('dosTexte-collection').declenche('click');
+  assert.deepStrictEqual(
+    [...els.get('reglages').children].filter((g) => !g.hidden)
+      .map((g) => g.children[0].textContent),
+    ['Textes du dos', 'Fond et espacements', 'Collection'],
+    'un texte éteint n\'est plus désignable');
 });
 
 /**
@@ -362,11 +453,15 @@ test('la place, le rang et le sens du dos ne sont plus offerts au panneau', asyn
 
   const libelles = [...els.get('reglages').children]
     .filter((g) => !g.hidden)
-    .flatMap((g) => [...g.children].slice(1).map((l) => l.children[0].textContent));
+    .flatMap((g) => lignes(g).map((l) => l.children[0].textContent));
   for (const absent of ['Position', 'Ordre à cette position', 'Sens']) {
     assert.ok(!libelles.includes(absent), `« ${absent} » encore offert au panneau`);
   }
-  assert.ok(libelles.includes('Afficher'), 'la colonne n\'offre plus rien du tout');
+  // « Afficher » n'y est plus non plus, et pour une autre raison que les trois autres :
+  // il est parti dans la liste des textes, pas dans le geste. La colonne garde de quoi
+  // se lire — c'est ce que vérifie la ligne suivante.
+  assert.ok(!libelles.includes('Afficher'), 'l\'interrupteur est revenu dans le groupe');
+  assert.ok(libelles.includes('Police'), 'la colonne n\'offre plus rien du tout');
   assert.strictEqual(contexte.valeurSaisie('dos.titre.place'), 'pied');
   assert.strictEqual(contexte.valeurSaisie('dos.titre.rang'), 2);
   assert.strictEqual(contexte.valeurSaisie('dos.titre.sens'), 0);
@@ -466,7 +561,7 @@ test('modifier un réglage renvoie la maquette entière', async () => {
       return projet(couverture);
     },
   });
-  const papier = els.get('reglages').children[0].children[2].children[1];
+  const papier = controleDe(lignes(groupe(els, 'Page'))[1]);
   papier.value = '#fcf0d8';
   await papier.declenche('change');
 
@@ -490,7 +585,7 @@ test('un nombre tapé hors des bornes du schéma y est ramené', async () => {
       return projet(couverture);
     },
   });
-  const marge = els.get('reglages').children[0].children[4].children[1];
+  const marge = controleDe(lignes(groupe(els, 'Page'))[3]);
 
   marge.value = '500';
   await marge.declenche('change');
@@ -506,8 +601,14 @@ test('un nombre tapé hors des bornes du schéma y est ramené', async () => {
 /**
  * La photo entre dans le projet par la face qu'elle sert, et non par le nom du fichier
  * choisi : c'est ce rôle que la composition relira, et lui seul.
+ *
+ * La face n'est plus nommée par le bouton mais **regardée** : un seul bouton dans la
+ * barre, qui porte sur l'aperçu ouvert. C'est ce que ce test tient — passer à la 4ème
+ * doit suffire à ce que la photo suivante y aille, sans qu'aucun appelant ne redise la
+ * face. Si le jour venait où le bouton reprenait un paramètre, ce test serait le premier
+ * à le dire.
  */
-test('choisir une photo la pose sur la face demandée', async () => {
+test('la photo se pose sur la face regardée', async () => {
   let recu = null;
   const { els } = await ouvre(maquette(), {
     image_choisir: (args) => {
@@ -516,13 +617,45 @@ test('choisir une photo la pose sur la face demandée', async () => {
     },
   }, ['/photos/fumee.jpg']);
 
-  await els.get('btImageQuatre').declenche('click');
+  await face(els, '4ème').declenche('click');
+  await els.get('btImage').declenche('click');
   assert.deepStrictEqual({ ...recu }, { face: 'quatre', chemin: '/photos/fumee.jpg' });
+});
+
+/**
+ * Le bouton s'éteint là où il n'y a pas de photo à poser : le dos n'en a pas, et la
+ * planche n'est pas une face qu'on habille — elle montre celles des autres.
+ *
+ * Éteint et non retiré : c'est la même règle que la lunette, et pour la même raison —
+ * un membre qui naît et meurt change la hauteur de la barre, donc la place de l'aperçu.
+ *
+ * Le libellé ne nomme pas la face : le segmenté allumé le fait à trois centimètres à
+ * gauche, et la barre n'a pas 55 px à donner à une redite — mesuré, c'est ce qui la
+ * faisait déborder à 900. C'est le `title` qui la porte, pour qui veut vérifier avant
+ * de cliquer.
+ */
+test('le bouton de photo dit la face qu\'il sert, et s\'éteint là où il n\'y en a pas', async () => {
+  const { els } = await ouvre(maquette());
+  await attendreApercu();
+  assert.match(els.get('btImage').title, /1ère/);
+  assert.strictEqual(els.get('btImage').disabled, false);
+
+  await face(els, '4ème').declenche('click');
+  await attendreApercu();
+  assert.match(els.get('btImage').title, /4ème/);
+  assert.strictEqual(els.get('btImage').disabled, false);
+
+  for (const nom of ['Dos', 'Planche']) {
+    await face(els, nom).declenche('click');
+    await attendreApercu();
+    assert.strictEqual(els.get('btImage').hidden, false, `bouton de photo retiré sur ${nom}`);
+    assert.strictEqual(els.get('btImage').disabled, true, `bouton de photo offert sur ${nom}`);
+  }
 });
 
 test('un sélecteur de photo annulé ne touche pas au projet', async () => {
   const { els, appels } = await ouvre(maquette());
-  await els.get('btImageUne').declenche('click');
+  await els.get('btImage').declenche('click');
   assert.ok(!appels.some(([c]) => c === 'image_choisir'), 'photo posée sans fichier');
 });
 
@@ -598,19 +731,38 @@ test('viser un autre livrable redemande un aperçu', async () => {
 });
 
 /**
- * L'invite ne s'écrit qu'à un seul endroit, et c'est celui où le manque se voit : dans
- * l'aperçu vide. Elle s'écrivait aussi en haut de l'étape, mot pour mot — deux fois la
- * même phrase, dont l'une occupait une ligne à demeure sur un écran qui en manque.
+ * L'invite ne s'écrit qu'à un seul endroit, et c'est celui où le manque se voit : **dans**
+ * l'établi, au milieu du carton. Elle s'écrivait sous lui, dans la ligne d'état — à
+ * l'endroit où l'on lit le compte rendu d'une composition, deux centimètres sous un
+ * rectangle de 480 px, c'est-à-dire là où l'œil ne va pas quand il cherche pourquoi rien
+ * ne s'affiche.
+ *
+ * Les deux premières assertions vont ensemble, et c'est le couple qui protège : le mot
+ * paraît dans l'établi, **et** la ligne d'état ne le redit pas. Sans la seconde, on
+ * aurait ajouté une invite sans déplacer l'autre, et la phrase se lirait deux fois.
+ *
+ * Ce que ce test ne dit pas : la phrase elle-même. Elle est statique dans `index.html`,
+ * et le shim ne matérialise que les éléments qui portent un identifiant — le texte des
+ * `<p>` du bloc ne lui est pas lisible. C'est du contenu, pas un comportement.
  */
-test('sans maquette, l\'aperçu le dit au lieu de rester vide', async () => {
+test('sans maquette, l\'établi dit pourquoi il est vide', async () => {
   const { els } = await ouvre(null);
   await attendreApercu();
-  assert.match(els.get('etatApercu').textContent, /Choisir une maquette/);
+  assert.strictEqual(els.get('couvVide').hidden, false, 'établi vide et muet');
+  assert.strictEqual(els.get('etatApercu').textContent, '',
+    'l\'invite se redit sous l\'aperçu, là où elle ne se lisait pas');
   assert.strictEqual(els.get('apercu').hidden, true, 'cadre d\'image sans image');
   // Rien à régler, donc pas de panneau — et la colonne qu'il occupait rendue à la scène
   // qui porte l'invite.
   assert.strictEqual(els.get('reglages').hidden, true);
   assert.strictEqual(els.get('couv').getAttribute('data-panneau'), 'non');
+});
+
+/** Une maquette en place, et le mot s'en va : il ne reste pas par-dessus la couverture. */
+test('une maquette en place retire le mot de l\'établi', async () => {
+  const { els } = await ouvre(maquette());
+  await attendreApercu();
+  assert.strictEqual(els.get('couvVide').hidden, true, 'le mot du vide couvre la couverture');
 });
 
 /**
@@ -641,10 +793,13 @@ test('un aperçu qui échoue efface l\'image et affiche la cause', async () => {
 
 /**
  * La classe qui colore un message lui survit si personne ne la reprend. Après un aperçu
- * en échec, l'invitation à choisir une maquette s'écrirait en rouge — et une invitation
- * en rouge se lit comme un refus, alors qu'elle ne demande qu'un choix.
+ * en échec, la ligne d'état garderait son rouge alors qu'elle ne dit plus rien — et le
+ * mot de l'établi, juste au-dessus, paraîtrait sous un rouge qui ne le qualifie pas.
+ *
+ * Déplacer l'invite n'a pas retiré ce piège, il l'a déplacé avec elle : c'est toujours
+ * `className` qui survit à `textContent`.
  */
-test('l\'invitation à choisir une maquette n\'hérite pas du rouge de l\'échec', async () => {
+test('la ligne d\'état ne garde pas le rouge d\'un échec qu\'elle ne dit plus', async () => {
   let couverture = maquette();
   const { els } = await ouvre(
     couverture,
@@ -664,9 +819,10 @@ test('l\'invitation à choisir une maquette n\'hérite pas du rouge de l\'échec
   await els.get('btOuvrir').declenche('click');
   await attendreApercu();
 
-  assert.match(els.get('etatApercu').textContent, /Choisir une maquette/);
+  assert.strictEqual(els.get('couvVide').hidden, false, 'établi vide et muet');
+  assert.strictEqual(els.get('etatApercu').textContent, '');
   assert.strictEqual(els.get('etatApercu').className, 'note',
-    'une invitation à choisir écrite en rouge se lit comme un refus');
+    'un rouge qui survit à son message va qualifier le suivant');
 });
 
 /**
@@ -837,17 +993,26 @@ test('éteindre le fond perdu retire l\'habillage sans recomposer', async () => 
 
 /**
  * Un bouton qui ne peut rien faire est un piège : les trois autres faces n'ont pas de
- * fond perdu à montrer. Même raison que les réglages sans objet, masqués plutôt que
- * grisés.
+ * fond perdu à montrer. Il s'éteint donc — et il ne disparaît plus.
+ *
+ * Le changement n'est pas cosmétique et ce test est ce qui le garde : `hidden` retirait
+ * un membre de la barre, la barre passait à deux rangs sur la planche, et l'aperçu
+ * descendait de 44 px **en changeant de face**. Sur un outil où l'on alterne les faces
+ * des dizaines de fois pour juger un cadrage, l'objet jugé se déplaçait à chaque
+ * aller-retour. C'est pourquoi l'assertion porte sur `hidden` à *toutes* les faces :
+ * revenir à un masquage ferait échouer la moitié du test qui parle de la 1ère, pas
+ * seulement celle qui parle de la planche.
  */
-test('la bascule ne s\'offre que sur la planche', async () => {
+test('la bascule s\'éteint hors planche, elle ne quitte jamais la barre', async () => {
   const { els } = await ouvre(maquette());
   await attendreApercu();
-  assert.strictEqual(els.get('btReperes').hidden, true, 'bascule offerte sur la 1ère');
+  assert.strictEqual(els.get('btReperes').hidden, false, 'bascule retirée de la barre sur la 1ère');
+  assert.strictEqual(els.get('btReperes').disabled, true, 'bascule offerte sur la 1ère');
 
   await face(els, 'Planche').declenche('click');
   await attendreApercu();
-  assert.strictEqual(els.get('btReperes').hidden, false, 'bascule absente de la planche');
+  assert.strictEqual(els.get('btReperes').hidden, false, 'bascule retirée de la barre sur la planche');
+  assert.strictEqual(els.get('btReperes').disabled, false, 'bascule éteinte sur la planche');
 });
 
 /* ---------- manipulation directe ---------- */
@@ -1180,7 +1345,7 @@ test('le menu des maquettes range les personnalisées sous un séparateur', asyn
     texte: o.textContent, valeur: o.value, inerte: !!o.disabled,
   }));
   assert.deepEqual(options, [
-    { texte: 'Repartir d\'une maquette…', valeur: '', inerte: false },
+    { texte: 'Repartir de…', valeur: '', inerte: false },
     { texte: 'Bandeau', valeur: 'bandeau', inerte: false },
     { texte: 'Filets', valeur: 'filets', inerte: false },
     { texte: '──────────', valeur: '', inerte: true },

@@ -119,7 +119,7 @@ source = "calculateur : minimum 24 pages, maximum 900, compte pair obligatoire"
 [[reliure]]
 cle = "rigide"
 nom = "Couverture rigide"
-non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+non_outille = "la planche n'est pas composée : ni rempli, ni mors, ni cartons. L'intérieur, lui, se compose."
 
 # Trois pelliculages, offerts sur toutes les couvertures. Aucun n'a d'effet sur la
 # composition : la finition nomme une option de commande, et le livrable en garde la trace.

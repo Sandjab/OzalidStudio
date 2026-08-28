@@ -44,7 +44,7 @@
     <div class="bloc">
       <h2>Projet</h2>
       <div class="ligne">
-        <button id="btNouveau" type="button">Nouveau projet</button>
+        <button id="btNouveau" class="primaire" type="button">Nouveau projet</button>
         <button id="btOuvrir" type="button">Ouvrir un .ozalid…</button>
         <button id="btImporter" type="button">Importer un livre.toml…</button>
       </div>
@@ -112,7 +112,7 @@
       <label><span>Corps</span>
         <input type="number" id="inEpreuveCorps" min="8" max="18" step="0.5" value="12"></label>
       <div class="ligne">
-        <button id="btEpreuve" type="button">Tirer une épreuve</button>
+        <button id="btEpreuve" class="primaire" type="button">Tirer une épreuve</button>
         <span id="etatEpreuve" class="etat"></span>
       </div>
       <p class="chemin" id="cheminEpreuve"></p>
@@ -163,7 +163,10 @@
            `choisirFace` y compte les enfants par rang — un bouton étranger dedans ferait
            viser la face voisine. Elle naît allumée et masquée : la planche n'est pas la
            face de départ. -->
-      <button id="btReperes" class="lunette" type="button" aria-pressed="true" hidden>
+      <!-- Il s'éteint, il ne disparaît plus : c'est le `hidden` qui faisait sauter la
+           barre d'un rang, et l'aperçu avec elle. Sa place est réservée à toutes les
+           faces, ce qui ne coûte rien puisque la barre tient désormais sur une ligne. -->
+      <button id="btReperes" class="lunette" type="button" aria-pressed="true" disabled>
         Repères
       </button>
       <span class="creux"></span>
@@ -176,8 +179,13 @@
            fallu, la barre les prend sur la mention des photos, à 900 px. -->
       <select id="inMaquette" aria-label="Repartir d'une maquette"></select>
       <button id="btMaquettes" type="button">Maquettes…</button>
-      <button id="btImageUne" type="button">Photo de 1ère…</button>
-      <button id="btImageQuatre" type="button">Photo de 4ème…</button>
+      <!-- Un bouton et non deux : il porte sur la face qu'on regarde, comme le panneau
+           de réglages à côté. Deux boutons nommaient chacun leur face et coûtaient à eux
+           seuls 265 px d'une barre qui n'en a pas — c'est ce qui la faisait passer à
+           deux rangs, et l'aperçu descendre de 44 px à chaque changement de face.
+           Éteint sur le dos et la planche, qui n'ont pas de photo à eux : même règle que
+           le panneau, qui disparaît sur la planche parce qu'elle ne se règle plus. -->
+      <button id="btImage" type="button">Photo…</button>
       <p class="note source" id="etatImages"></p>
     </div>
 
@@ -191,6 +199,17 @@
              habillage calé sur elle marquerait la coupe à côté du livre. D'où ce cadre,
              qui n'existe que pour épouser l'image. -->
         <div class="scene">
+          <!-- Ce que l'établi vide a à dire, et il le dit au milieu du carton — pas sous
+               lui. La note qui portait cette phrase vivait deux centimètres plus bas,
+               sous un rectangle de 480 px : à l'endroit précis où l'œil ne va pas quand
+               il cherche pourquoi rien ne s'affiche. Un écran vide est une invitation à
+               agir, et une invitation se met là où le vide se voit. -->
+          <div class="etabli-vide" id="couvVide" hidden>
+            <p class="titre-vide">Aucune maquette</p>
+            <p class="dit">Une maquette pose un premier dessin sur le format du livre.
+              Choisissez-en une dans « Repartir de… », en haut de la barre : elle se
+              modifie ensuite, et rien n'y est définitif.</p>
+          </div>
           <div class="cadre" id="cadreApercu">
             <img id="apercu" class="apercu" alt="Aperçu de la couverture">
             <!-- Le direct : ce que la fenêtre montre pendant qu'on déplace la photo,
@@ -283,7 +302,7 @@
       <div class="ligne">
         <label for="inMaquetteNom">Enregistrer la couverture actuelle</label>
         <input id="inMaquetteNom" type="text" placeholder="Nom de la maquette">
-        <button id="btMaquetteEnregistrer" type="button">Enregistrer</button>
+        <button id="btMaquetteEnregistrer" class="primaire" type="button">Enregistrer</button>
       </div>
       <p class="etat" id="etatMaquettes"></p>
       <div class="ligne fin">
@@ -321,7 +340,7 @@
       </div>
       <div id="livrables" class="livrables"></div>
       <div class="ligne">
-        <button id="btPackager" type="button">Générer les packages</button>
+        <button id="btPackager" class="primaire" type="button">Générer les packages</button>
         <span id="etatPackages" class="etat"></span>
       </div>
       <div id="packages" class="resultat" hidden></div>
@@ -335,7 +354,7 @@
         <code>ebook/</code>, à côté du <code>.ozalid</code>. Le format vient du
         livrable visé, en bas de la fenêtre.</p>
       <div class="ligne">
-        <button id="btEbooks" type="button">Générer les ebooks</button>
+        <button id="btEbooks" class="primaire" type="button">Générer les ebooks</button>
         <span id="etatEbooks" class="etat"></span>
       </div>
       <div id="ebooks" class="resultat" hidden></div>
@@ -361,7 +380,7 @@
       <ul id="envois" role="listbox" aria-label="Dédicataires"></ul>
       <!-- Retirer porte sur l'exemplaire ouvert et non sur chaque ligne : vingt boutons
            « Retirer » dans une liste sont vingt occasions de se tromper de personne. -->
-      <button id="btRetirerEnvoi" type="button" disabled>Retirer cet envoi</button>
+      <button id="btRetirerEnvoi" class="nu" type="button" disabled>Retirer cet envoi</button>
 
       <!-- Ce qui appartient au livre et non à l'exemplaire : l'écriture de l'auteur
            entre dans le `.ozalid` pour que le projet compose la même main sur une
@@ -369,7 +388,7 @@
       <h2>Police personnelle</h2>
       <div class="ligne">
         <button id="btPolice" type="button">Ma police…</button>
-        <button id="btPoliceRetirer" type="button" disabled>Retirer</button>
+        <button id="btPoliceRetirer" class="nu" type="button" disabled>Retirer</button>
       </div>
       <p class="note" id="etatPolice"></p>
     </div>
@@ -407,7 +426,13 @@
          écrire. -->
     <div class="bande reglages">
       <h2>Réglages</h2>
-      <label><span>Main</span><select id="inMain"></select></label>
+      <!-- Le mot de la bande vide. Il ne paraît que sans dédicataire choisi, et les
+           réglages font l'inverse : un panneau complet sous un canevas vide offre de
+           régler l'inclinaison d'un envoi qui n'existe pas. -->
+      <p class="dit-vide" id="reglagesVides" hidden>Aucun envoi choisi. Ajoutez un
+        dédicataire ci-contre, puis choisissez la page où son envoi se posera.</p>
+
+      <label id="champMain"><span>Main</span><select id="inMain"></select></label>
 
       <label id="champMot"><span>Mot</span>
         <textarea id="inMot" rows="4"></textarea></label>
@@ -464,7 +489,7 @@
           <input type="password" id="inDiffusionCle" placeholder="inchangée"></label>
         <div class="ligne">
           <button id="btDiffusionRegler" type="button">Enregistrer l'accès</button>
-          <button id="btDiffusionOublier" type="button">Oublier la clé</button>
+          <button id="btDiffusionOublier" class="nu" type="button">Oublier la clé</button>
           <span id="etatDiffusion" class="etat"></span>
         </div>
         <p class="note">L'adresse, le nom du modèle et la clé restent sur cette machine,
@@ -476,15 +501,15 @@
           lire deux fois.</p>
       </div>
 
-      <label><span>Échelle</span>
+      <label id="champTaille"><span>Échelle</span>
         <input type="range" id="inTaille" min="5" max="100" step="1">
         <span class="val" id="vTaille"></span></label>
-      <label><span>Inclinaison</span>
+      <label id="champAngle"><span>Inclinaison</span>
         <input type="range" id="inAngle" min="-45" max="45" step="1">
         <span class="val" id="vAngle"></span></label>
 
       <div class="ligne">
-        <button id="btEnvoyer" type="button" disabled>Générer les envois</button>
+        <button id="btEnvoyer" class="primaire" type="button" disabled>Générer les envois</button>
       </div>
       <div id="resultatEnvois" class="resultat" hidden></div>
     </div>

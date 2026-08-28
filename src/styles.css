@@ -180,7 +180,11 @@ body {
    mention ici, c'est d'abord vérifier qu'il reste de la place à 900 px.
    Les éléments vides ne prennent pas leur `gap` : un `p` sans contenu n'a pas de boîte
    à espacer, et le pied d'un livre jamais composé ne montre donc pas quatre trous. */
-#pied p { margin: 0; white-space: nowrap; }
+/* Les mentions ne se compriment pas : elles portent des chiffres, et un chiffre à demi
+   lu est pire qu'un chiffre absent. Sans `flex: none`, la pression d'un libellé long
+   partait sur elles — mesuré à 900 px, « gouttière 20,00 mm » sortait coupé au bord de
+   la fenêtre, sans ellipse pour le dire. */
+#pied p { margin: 0; white-space: nowrap; flex: none; }
 
 /* Le dos périmé et le repli de police, les deux seuls états du pied qui réclament
    quelque chose. Le rouge suffit : le pied est sur fond clair, contrairement aux boutons
@@ -208,9 +212,32 @@ body {
   align-items: baseline;
   gap: .5rem;
   margin: 0;
+  /* C'est le libellé qui cède, et lui seul — le seul des membres du pied dont la
+     longueur ne se prévoit pas. Un flex refuse de comprimer son enfant sous son
+     contenu tant qu'on ne le lui dit pas : sans ce `min-width`, la pression passait au
+     voisin, et le pied rendait « Vu pour » sur deux lignes en coupant sa dernière
+     mesure. C'est le pendant du `min-width: 0` que les quatre bandes de la coquille
+     portent déjà, pour la même raison et au même prix. */
+  min-width: 0;
 }
 
-#visee select { width: auto; padding: .1rem .3rem; font-size: .85rem; }
+/* Le libellé entier n'est pas perdu : il reste dans la liste dépliée — l'endroit où on
+   le lit vraiment, au moment de choisir — et dans le `title`. C'est le parti du chemin
+   de l'entête, tenu ici pour la même raison.
+   Le libellé n'est pas raccourci à la source, et c'est délibéré : `libelleLivrable` ne
+   porte le papier que parce que deux livrables d'un même gabarit ne diffèrent que par
+   lui. Le tailler dans le texte ferait deux entrées identiques dans cette liste. */
+#visee span { white-space: nowrap; }
+
+#visee select {
+  width: auto;
+  min-width: 6rem;
+  max-width: 26rem;
+  padding: .1rem .3rem;
+  font-size: .85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Le titre du livre vit dans une bande à hauteur de ligne : sa graisse et son
    interlettrage le distinguent, pas son corps. */
@@ -371,20 +398,49 @@ select:disabled { color: var(--gris); background: var(--eteint); }
    seul, le bouton d'à côté à la ligne suivante. Il garde de quoi se lire. */
 .ligne > input, .ligne > select { width: auto; flex: 1; min-width: 8rem; }
 
+/* Trois niveaux, et le défaut est le **secondaire**. Le sens du choix se mesure : sur la
+   quarantaine de boutons de la fenêtre, une demi-douzaine sont l'action de leur étape.
+   Marquer ces six-là coûte six classes ; garder le plein par défaut et marquer les
+   trente-quatre autres en coûterait trente-quatre, et la première étourderie rendrait un
+   « Retirer » aussi noir qu'un « Générer ».
+   Ce n'est pas une doctrine importée : la croix qui retire une photo source l'appliquait
+   déjà, seule, et son commentaire dit pourquoi — « sept boutons noirs feraient passer le
+   retrait d'une photo pour une commande d'égale importance ». C'est la même phrase, tenue
+   partout. */
 button {
   font: inherit;
   /* Un libellé de bouton ne se coupe pas : il nomme un geste, et la moitié d'un geste
      ne veut rien dire. C'est la ligne qui cède, pas le mot. */
   white-space: nowrap;
   padding: .4rem .9rem;
-  border: 1px solid var(--encre);
+  border: 1px solid var(--trait);
   border-radius: 3px;
-  background: var(--encre);
-  color: var(--surface);
+  background: var(--surface);
+  color: var(--encre);
   cursor: pointer;
 }
 
 button:disabled { opacity: .4; cursor: default; }
+
+/* L'action de l'étape, une par étape : Tirer une épreuve, Générer les packages, Générer
+   les ebooks, Générer les envois, Nouveau projet, Enregistrer une maquette. Le noir est
+   ce qui reste quand tout le reste a cédé sa place — il ne se donne pas deux fois sur un
+   même écran. */
+button.primaire {
+  border-color: var(--encre);
+  background: var(--encre);
+  color: var(--surface);
+}
+
+/* Ce qui défait : retirer un envoi, retirer la police, oublier une clé, effacer une
+   maquette. Sans fond ni filet tant qu'on ne le vise pas, et le rouge n'arrive qu'à
+   l'approche — un geste qui se lit comme une commande d'égale importance est un geste
+   qu'on fait par erreur. */
+button.nu {
+  border-color: transparent;
+  background: none;
+  color: var(--gris);
+}
 
 /* Le soin des états, faute de couleur. La coquille ayant rendu le rouge à l'alerte, ce
    qui la sépare d'un formulaire tient désormais à la typographie, aux blancs et à ceci :
@@ -400,8 +456,11 @@ button:disabled { opacity: .4; cursor: default; }
    sur un outil qu'on manie à la journée se paie en attente, pas en douceur. */
 :focus-visible { outline: 2px solid var(--encre); outline-offset: 2px; }
 
-button:hover:not(:disabled) { background: var(--encre-survol); border-color: var(--encre-survol); }
-button:active:not(:disabled) { background: var(--encre); border-color: var(--encre); }
+button:hover:not(:disabled):not(.nu) { background: var(--survol); }
+button:active:not(:disabled):not(.nu) { background: var(--eteint); }
+button.primaire:hover:not(:disabled) { background: var(--encre-survol); border-color: var(--encre-survol); }
+button.primaire:active:not(:disabled) { background: var(--encre); border-color: var(--encre); }
+button.nu:hover:not(:disabled) { color: var(--rouge); }
 
 /* Les boutons sans fond — les onglets d'étape, les faces de couverture — se creusent au
    lieu de s'assombrir : ils n'ont pas de fond à foncer, et la règle ci-dessus les
@@ -517,10 +576,19 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    insécables — `.onglets` en `nowrap` —, ce qui écarte le défaut qui avait fait refuser
    le repli : elles se mettaient sur trois rangs dès 900 px.
    Ajouter un contrôle ici, c'est donc décider ce qu'il repousse au rang suivant. */
+/* Une ligne, et une seule. Le repli était une commodité qui se payait à l'endroit le
+   plus cher de la fenêtre : la barre passait à deux rangs, l'aperçu descendait de 44 px,
+   et il descendait **en changeant de face** — sur un outil où l'on alterne 1ère, 4ème et
+   Planche des dizaines de fois pour juger un cadrage, l'objet jugé se déplaçait à chaque
+   aller-retour. Une image qui bouge entre deux comparaisons ne se compare plus.
+   Ce qui cède sous la pression est la mention des photos, seul membre dont la longueur
+   ne se prévoit pas — un nom de fichier. Tout le reste est mesuré : à 836 px, ce que
+   `main` laisse dans la fenêtre la plus étroite qu'on autorise, les membres fixes en
+   réclament 800. Ajouter un bouton ici, c'est d'abord refaire cette addition. */
 .outils {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: .5rem .8rem;
   padding: .5rem 0;
   min-width: 0;
@@ -531,7 +599,9 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Le ressort qui sépare ce qu'on regarde de ce qui l'alimente. */
 .outils .creux { flex: 1; min-width: .5rem; }
-.outils .source { flex: 0 1 auto; }
+/* Le seul membre qui se comprime, et il ne se comprime que par son nom de photo — la
+   croix qui la retire, elle, ne cède jamais : un geste à demi visible ne se clique pas. */
+.outils .source { flex: 0 1 auto; min-width: 0; overflow: hidden; }
 
 /* Le menu prend la largeur de son invite, pas celle de la barre : étiré, il se lirait
    comme le sujet de l'étape au lieu du geste qu'il est — c'est le même parti que le
@@ -636,7 +706,15 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
      défile comme il le fait sur les trois autres faces. Serrer les colonnes pour en
      tenir cinq de plus reviendrait à réduire la case du libellé à un mot et demi —
      « Interlettrage (/100 em) » y passerait sur trois lignes. */
-  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  /* Trois colonnes et non cinq : la liste des textes, le commun au dos, et le texte
+     choisi. Les quatre groupes de textes ne sont plus côte à côte — ils se relaient dans
+     la troisième. Il fallait 1160 px de fenêtre pour voir les cinq colonnes ; à 1040 la
+     dernière passait derrière un ascenseur horizontal, et à 900 les deux dernières. Il
+     en faut désormais 780, c'est-à-dire moins que le minimum de la fenêtre.
+     Les colonnes reprennent leur largeur de lecture : 16 rem laissent au champ de quoi
+     afficher sa valeur *et* son unité, ce que 13,5 rem ne faisaient plus une fois
+     l'unité entrée dans le champ. */
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
   gap: 0 1.2rem;
   align-content: start;
   align-items: start;
@@ -656,6 +734,76 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .couv[data-face="dos"] .groupe label {
   grid-template-columns: minmax(0, 1fr);
   gap: .15rem;
+}
+
+/* La liste des quatre textes du dos. Une case et un nom par ligne : la case décide de ce
+   qui se compose, le nom choisit le sujet du panneau. Deux cibles voisines pour deux
+   gestes différents, et c'est la disposition qui les distingue — la case à gauche, le
+   nom qui prend la ligne, comme les calques d'un logiciel de dessin. */
+.texte-dos { display: flex; align-items: center; gap: .5rem; }
+
+.texte-dos .oeil {
+  display: flex;
+  margin: 0;
+  /* La case garde sa taille propre : `input { width: 100% }` l'étirerait sur la
+     colonne, et la grille de `label` la poserait sous son libellé — c'est ce qui
+     arrivait au « Afficher » de chaque groupe, seul contrôle de la fenêtre à rompre
+     l'alignement de sa ligne. */
+}
+
+.texte-dos .oeil input { width: auto; }
+
+.texte-dos .nom-texte {
+  flex: 1;
+  text-align: left;
+  border-color: transparent;
+  background: none;
+  padding: .25rem .45rem;
+  color: var(--encre);
+}
+
+/* Le texte réglé se creuse, il ne s'encre pas : ce n'est pas une commande armée, c'est
+   le sujet du panneau d'à côté. Même parti que l'onglet d'étape sélectionné. */
+.texte-dos .nom-texte[aria-pressed="true"] {
+  background: var(--survol);
+  border-color: var(--trait);
+}
+
+/* Ce qui ne se compose pas se lit en gris — et se lit quand même : c'est toute la raison
+   d'être de cette liste. Le texte masqué n'a plus de prise sur l'aperçu, et sans sa
+   ligne ici, ses réglages seraient enfermés derrière la case qui les a éteints. */
+.texte-dos:has(input:not(:checked)) .nom-texte { color: var(--gris); }
+
+/* Ce qu'on dit à qui n'a pas la colonne sous les yeux, et à personne d'autre. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* L'unité, posée dans le champ plutôt que recopiée dans le libellé. Hors du flux et sans
+   prise au pointeur : un clic sur elle tombe dans le champ, comme un clic sur le blanc
+   à sa droite. Le rembourrage réservé à sa place est la seule chose qui l'empêche de
+   recouvrir la valeur — « % côté court » est la plus longue des six, et c'est elle qui
+   fixe les 4,4 rem. */
+/* L'unité **à côté** du champ, et non posée dessus.
+   Elle a d'abord été mise dans le champ, en absolu, avec un rembourrage pour lui faire
+   sa place : c'était compter sans les flèches d'un `input[type=number]`, que WebKit
+   range à droite du *contenu* et non du champ — le rembourrage les poussait donc vers
+   l'intérieur, au milieu du suffixe. Vu à l'écran, pas dans un test : « % côté court »
+   sortait avec une paire de flèches entre le « c » et le « ô ».
+   Côte à côte, il n'y a plus rien à superposer, et le champ garde ses flèches au bord. */
+.champ-unite { display: flex; align-items: baseline; gap: .35rem; }
+.champ-unite input { flex: 1; min-width: 0; }
+
+.champ-unite i {
+  flex: none;
+  font-style: normal;
+  font-size: .75rem;
+  color: var(--gris);
 }
 
 /* Le fond et les espacements ne règlent pas un texte du dos mais le dos lui-même : la
@@ -690,6 +838,44 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   color: var(--gris);
 }
 
+/* Le mot de l'établi vide. Centré dans le carton, borné à une largeur de lecture, et
+   en clair sur le gris 18 % — c'est le seul texte de la fenêtre qui ne soit pas sur fond
+   clair, et il le paie d'un contraste vérifié : #fff sur #7a7b78 tient 4,7:1.
+   `position: absolute` parce que la scène range son contenu en flex : le mot y prendrait
+   sa place à côté du cadre, et le cadre vide a déjà toute la sienne. */
+.etabli-vide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 2rem;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+}
+
+.etabli-vide .titre-vide { margin: 0 0 .4rem; font-size: 1rem; font-weight: 600; }
+
+.etabli-vide .dit {
+  margin: 0;
+  max-width: 24rem;
+  font-size: .85rem;
+  line-height: 1.45;
+  /* Le blanc pur pour le titre, un blanc un peu retenu pour la phrase : deux niveaux
+     valent mieux qu'un corps de plus, sur trois lignes qui doivent rester une note. */
+  color: #ececea;
+}
+
+/* Le mot de la bande des Envois, quand aucun dédicataire n'est choisi. Il vit sur fond
+   clair, lui, et prend donc le gris des notes. */
+.dit-vide {
+  margin: 0;
+  color: var(--gris);
+  font-size: .85rem;
+  line-height: 1.45;
+}
+
 /* La scène a la hauteur ; l'image y garde ses proportions. Sans elle, une planche
    haute pousserait la fenêtre, et un `object-fit` laisserait le fond blanc et l'ombre
    déborder de la couverture. */
@@ -698,6 +884,9 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   align-items: flex-start;
   justify-content: center;
   min-height: 0;
+  /* Le repère du mot de l'établi vide, qui se pose en absolu dedans. Sans lui, il
+     remonterait au premier ancêtre positionné et se centrerait sur la fenêtre. */
+  position: relative;
   /* L'ombre portée déborde d'une vingtaine de pixels sous l'image : sans ce
      rembourrage, l'aperçu au plus haut de la scène se ferait couper son ombre par
      l'`overflow` — la couverture paraîtrait posée à même le bord. Le rembourrage est
@@ -716,6 +905,18 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   color: var(--encre);
   border-color: var(--trait);
 }
+
+/* Les quatre faces se touchent : elles ne sont pas quatre gestes mais quatre états d'un
+   même aperçu, et un segmenté le dit mieux que quatre boutons séparés. Les 46 px que
+   rendent les trois gouttières et les trois filets partagés sont la moitié de ce qu'il
+   fallait trouver pour tenir la ligne à 836.
+   Le `margin-left: -1px` fait porter un seul filet aux deux voisins ; sans le `z-index`,
+   la face arrivée verrait son bord droit recouvert par la suivante. */
+#faces { gap: 0; }
+#faces button { border-radius: 0; margin-left: -1px; }
+#faces button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+#faces button:last-child { border-radius: 0 3px 3px 0; }
+#faces button[aria-pressed="true"] { position: relative; z-index: 1; }
 
 .onglets button[aria-pressed="true"] {
   background: var(--encre);
@@ -1211,17 +1412,45 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    ont leurs cinquante premiers caractères en commun, et se seraient lus pareil.
    Le nom ne se coupe pas — c'est lui qui distingue —, le répertoire si, et `title` donne
    le chemin entier au survol. */
+/* Un récent est une porte, et rien au repos ne le disait : ni cadre, ni chevron, ni
+   fond — seul le survol soulignait, c'est-à-dire seulement une fois la souris arrivée.
+   Une liste de texte noir sur le fond de la fenêtre se lit comme un relevé, pas comme
+   cinq boutons. Il prend donc la surface blanche des champs et un filet : ce que
+   l'accueil offre est justement cette liste-là, et c'est le seul écran où il n'y a rien
+   d'autre à faire. */
 .recents button {
   display: grid;
-  max-width: 100%;
-  background: transparent;
-  border-color: transparent;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 .8rem;
+  /* Toutes de la même largeur : une carte qui prend celle de son chemin fait de la
+     liste un escalier, et le chemin est justement ce qui varie le plus. C'est le nom
+     qu'on lit, et les noms sont alignés. */
+  width: 100%;
+  background: var(--surface);
+  border-color: var(--trait);
   color: var(--encre);
-  padding: .15rem 0;
+  padding: .3rem .6rem;
+  margin-bottom: .25rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .78rem;
   text-align: left;
 }
+
+/* Le chevron : posé par la feuille et non par le JS — il ne dit rien qu'on doive lire,
+   il dit que la ligne mène quelque part. `aria-hidden` par nature : un `::after` de
+   contenu décoratif n'entre pas dans l'arbre d'accessibilité, et le libellé du bouton
+   se suffit. */
+.recents button::after {
+  content: "›";
+  grid-column: 2;
+  grid-row: 1 / 3;
+  color: var(--gris);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.recents .nom, .recents .chemin { grid-column: 1; }
 
 .recents .nom { font-size: .85rem; }
 
@@ -1232,13 +1461,10 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   font-size: .72rem;
 }
 
-/* Le soulignement était déjà là ; le fond et le filet, eux, sont à redire — `button:hover`
-   l'emporte sur `.recents button` et remplirait d'encre un chemin de fichier. */
-.recents button:hover {
-  text-decoration: underline;
-  background: transparent;
-  border-color: transparent;
-}
+/* Le survol creuse, comme partout ailleurs dans la fenêtre. Le soulignement est parti
+   avec le fond transparent : il disait « ceci se clique » à une ligne qui le dit
+   désormais au repos, et deux réponses pour un seul geste en font une de trop. */
+.recents button:hover { background: var(--survol); border-color: var(--gris); }
 
 /* ---------- le dialogue des maquettes ---------- */
 

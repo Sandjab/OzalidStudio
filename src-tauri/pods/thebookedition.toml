@@ -121,7 +121,7 @@ source = "leur aide : 40 à 750 pages en dos carré collé, nombre pair"
 [[reliure]]
 cle = "rigide"
 nom = "Couverture rigide"
-non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+non_outille = "la planche n'est pas composée : ni rempli, ni mors, ni cartons. L'intérieur, lui, se compose."
 
 # Trois pelliculages sur la couverture 300 g du dos carré collé. Aucun n'a d'effet sur la
 # composition : la finition nomme une option de commande, et le livrable en garde la trace.

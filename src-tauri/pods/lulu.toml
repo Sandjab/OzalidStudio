@@ -297,7 +297,7 @@ dos_texte = { pages = 81, source = "Book Creation Guide, chapitre « Cover Layou
 [[reliure]]
 cle = "rigide"
 nom = "Couverture rigide"
-non_outille = "planche ne sait pas composer une couverture rigide : ni rempli, ni mors, ni cartons"
+non_outille = "la planche n'est pas composée : ni rempli, ni mors, ni cartons. L'intérieur, lui, se compose."
 
 # Deux pelliculages, sur toutes les couvertures brochées. Aucun n'a d'effet sur la
 # composition : la finition nomme une option de commande, et le livrable en garde la trace.

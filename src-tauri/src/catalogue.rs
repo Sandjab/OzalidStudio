@@ -2885,8 +2885,12 @@ non_outille = "géométrie du casewrap non relevée"
     fn une_reliure_non_outillee_est_refusee_avec_sa_raison() {
         let e = resout(&fabrication("bod", "135x215", "rigide", "creme-90")).unwrap_err();
         assert!(e.contains("rigide"), "{e}");
+        // Le fragment est pris dans la raison du fichier, et il porte ce qui distingue
+        // une reliure non outillée : ce qui manque à la planche, nommé. Le vérifier sur
+        // « ni rempli » plutôt que sur une tournure du début de phrase tient même si la
+        // formulation est reprise — et elle l'a été.
         assert!(
-            e.contains("ne sait pas composer"),
+            e.contains("ni rempli, ni mors, ni cartons"),
             "la raison du fichier doit traverser : {e}"
         );
     }

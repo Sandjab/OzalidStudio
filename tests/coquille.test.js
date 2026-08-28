@@ -917,6 +917,47 @@ test('l\'entête s\'annonce à qui ne la voit pas', () => {
     'l\'entête ne s\'annonce plus : le focus reste dans le champ refusé');
 });
 
+/**
+ * Le noir ne se donne pas deux fois sur un même écran.
+ *
+ * Ce test lit le balisage, comme celui d'au-dessus et pour la même raison : la
+ * hiérarchie des boutons est une propriété de la feuille de style et des classes, pas
+ * du comportement, et le faux DOM ne rapporte pas les classes du HTML statique.
+ *
+ * Ce qu'il protège est une règle facile à défaire par mimétisme : `button` rend
+ * désormais un bouton **secondaire**, et `primaire` désigne l'action de l'étape — celle
+ * qu'on est venu faire. En poser deux dans une même section, c'est n'en désigner aucune,
+ * et c'est exactement ce que faisait la fenêtre d'avant, où les quarante boutons étaient
+ * noirs et où les deux taches les plus sombres de la Livraison étaient ses deux
+ * « Retirer ».
+ *
+ * L'exception est nommée et non tolérée en silence : la Livraison porte deux blocs qui
+ * produisent chacun des fichiers, et chacun a son geste.
+ */
+test('une seule action primaire par section, et jamais sur ce qui défait', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'index.html'), 'utf8');
+
+  // Les sections de premier rang, dans l'ordre du fichier.
+  const sections = html.split(/<section /).slice(1);
+  const attendus = { etapeLivraison: 2 };
+  for (const bloc of sections) {
+    const id = bloc.match(/id="([^"]+)"/)[1];
+    const primaires = [...bloc.matchAll(/<button id="([^"]+)" class="primaire"/g)]
+      .map((m) => m[1]);
+    const permis = attendus[id] ?? 1;
+    assert.ok(primaires.length <= permis,
+      `${id} désigne ${primaires.length} actions primaires (${primaires.join(', ')}) : `
+      + 'en désigner plusieurs revient à n\'en désigner aucune');
+  }
+
+  // Ce qui défait ne porte jamais le noir : le geste discret est le seul qui ne se
+  // clique pas par erreur à la place de son voisin.
+  for (const id of ['btRetirerEnvoi', 'btPoliceRetirer', 'btDiffusionOublier']) {
+    assert.match(html, new RegExp(`<button id="${id}" class="nu"`),
+      `« ${id} » a repris le poids d'une commande ordinaire`);
+  }
+});
+
 /* ---------- les témoins d'attention ---------- */
 
 const sous = (els, cle) => els.get(`sous-${cle}`).textContent;
@@ -1284,6 +1325,32 @@ test('modifier un autre champ n\'efface pas la dédicace', async () => {
  * Ce que l'écran doit faire, lui, c'est **ouvrir** le neuf : il naît en fin de liste, et
  * l'y laisser fermé obligerait à le chercher parmi vingt pour lui écrire son mot.
  */
+/**
+ * Sans dédicataire, les réglages d'un envoi ne s'éteignent pas : ils s'en vont, et un mot
+ * prend leur place.
+ *
+ * C'est la règle que la bande tient déjà pour la main — « ce que la main ne réclame pas
+ * ne paraît pas » — étendue d'un cran : sans dédicataire, il n'y a pas de main. Un champ
+ * grisé sous un canevas vide dit qu'on pourrait y écrire, et c'est faux.
+ *
+ * `champMot` est le piège de la série, et il a été vu à l'écran avant d'être écrit ici :
+ * sa règle de masquage commençait par `!!e`, c'est-à-dire qu'elle ne se déclenchait que
+ * s'il y avait un envoi. Sans envoi, elle laissait donc le champ debout — seul, sous un
+ * panneau parti.
+ */
+test('sans dédicataire, la bande des envois dit quoi faire au lieu d\'offrir des champs', async () => {
+  const a = atelier({ sur: { envois: { gabarit: '', liste: [] } } });
+  const { els } = await charge({ invoke: a.invoke });
+  await els.get('btNouveau').declenche('click');
+
+  assert.strictEqual(els.get('reglagesVides').hidden, false,
+    'la bande ne dit pas par où commencer');
+  for (const id of ['champMain', 'champMot', 'champTaille', 'champAngle']) {
+    assert.strictEqual(els.get(id).hidden, true,
+      `« ${id} » reste offert sans envoi à régler`);
+  }
+});
+
 test('un envoi ajouté s\'ouvre aussitôt', async () => {
   const a = atelier({
     sur: {

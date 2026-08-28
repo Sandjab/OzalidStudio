@@ -2740,7 +2740,14 @@ nom = "Pelliculage mat"
             .non_outille
             .as_deref()
             .expect("une reliure non outillée dit pourquoi");
-        assert!(raison.contains("couverture rigide"), "{raison}");
+        // Sur ce qui manque, et non sur le nom de la reliure : ce nom est déjà à côté
+        // dans l'interface — « Couverture rigide — <raison> » — et l'y redire était
+        // justement ce que la raison faisait de trop. Un test qui vérifie une redite
+        // empêche de la retirer.
+        assert!(
+            raison.contains("ni rempli, ni mors, ni cartons"),
+            "{raison}"
+        );
     }
 
     /// Le drapeau voyage jusqu'à l'arbre et y suit le fichier, papier par papier.
