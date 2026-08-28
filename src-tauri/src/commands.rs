@@ -910,6 +910,59 @@ pub fn maquette_choisir(
     vue_modifiee(o)
 }
 
+/// La vignette d'une maquette : sa 1ère de couverture, composée sur le livre ouvert.
+///
+/// Ce n'est pas l'archive qu'on montre, c'est ce que la **choisir** donnerait — le titre
+/// et l'auteur du projet, ses photos là où la maquette n'en porte pas, le format du
+/// livrable visé. Une vignette qui montrerait l'archive nue promettrait autre chose que
+/// le bouton d'à côté, et c'est [`images_vignette`] qui l'en empêche.
+///
+/// Le projet n'est pas touché : la fusion se fait sur une copie de sa table d'images.
+///
+/// `dos_mm` vient de la fenêtre, comme pour [`couverture_apercu`] : il ne sert ici qu'au
+/// prolongement panoramique d'une photo qui traverse la planche, et une vignette se
+/// compose très bien sans, sur un livre dont l'intérieur n'a pas encore paginé.
+///
+/// **60 ppi et non les 150 de l'aperçu** : mesuré, la rastérisation ne coûte rien — c'est
+/// la composition qui prend ses trente millisecondes —, mais une vignette y pèse 6 Kio
+/// contre 20, et elles voyagent toutes ensemble dans la même page, en `data:`.
+#[tauri::command]
+pub fn maquette_apercu(
+    cle: String,
+    dos_mm: Option<f64>,
+    app: tauri::AppHandle,
+    atelier: State<Atelier>,
+) -> Result<String, String> {
+    let m = maquettes::par_cle(config(&app).as_deref(), &cle)
+        .ok_or_else(|| format!("maquette inconnue : {cle}"))?;
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let (pr, _, _) = vise(o)?;
+
+    // Un répertoire à part de celui de l'aperçu : les deux se composent en même temps —
+    // la fenêtre garde son aperçu affiché derrière le dialogue — et partager le dossier
+    // ferait écrire à l'un les images de l'autre.
+    let dossier = std::env::temp_dir().join("ozalid-vignettes");
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("vignette impossible : {e}"))?;
+    let images = images_vignette(&o.projet.images, &m.images);
+    let (une, _) = package::ecrire_table(&images, &dossier)?;
+
+    let src = couverture::source_une(
+        &o.projet.meta.livre,
+        &m.couverture,
+        pr.format,
+        une.as_ref(),
+        dos_mm,
+    );
+    // Un fichier par maquette : la clé est celle d'une archive qui existe — `par_cle`
+    // vient de la refuser sinon —, donc un simple nom de fichier.
+    let typ = dossier.join(format!("{cle}.typ"));
+    let png = dossier.join(format!("{cle}.png"));
+    ecrire(&typ, &src)?;
+    typst()?.apercu(&typ, &png, 1, 60)?;
+    donnee_png(&png)
+}
+
 /// Enregistre la couverture du projet ouvert comme maquette personnalisée.
 ///
 /// Le projet n'est pas touché : ce geste écrit à côté, dans le répertoire de
@@ -1023,6 +1076,24 @@ fn poser_image(images: &mut BTreeMap<String, Vec<u8>>, nom: String, octets: Vec<
     let quatre = package::sert_la_quatrieme(&nom);
     images.retain(|n, _| package::sert_la_quatrieme(n) != quatre);
     images.insert(nom, octets);
+}
+
+/// Les images sous lesquelles une maquette se *verrait*, sans que le projet bouge.
+///
+/// Une vignette doit montrer ce que choisir la maquette donnerait, pas ce que l'archive
+/// contient : la règle est donc exactement celle de [`maquette_choisir`] — rôle par rôle,
+/// par [`poser_image`] —, et c'est de la partager qui garantit que la vignette ne ment
+/// pas. Une maquette purement typographique n'emporte aucune photo, et composée seule
+/// elle montrerait une couverture nue là où la choisir aurait gardé celle du livre.
+fn images_vignette(
+    projet: &BTreeMap<String, Vec<u8>>,
+    maquette: &BTreeMap<String, Vec<u8>>,
+) -> BTreeMap<String, Vec<u8>> {
+    let mut fondues = projet.clone();
+    for (nom, octets) in maquette {
+        poser_image(&mut fondues, nom.clone(), octets.clone());
+    }
+    fondues
 }
 
 /// Retire du projet la photo que ce nom désigne.
@@ -2446,6 +2517,35 @@ mod tests {
         assert_eq!(reponse_garde(R::Cancel), "annuler");
         // Fermer la boîte sans choisir ne doit rien perdre.
         assert_eq!(reponse_garde(R::Custom("autre chose".into())), "annuler");
+    }
+
+    /// La vignette d'une maquette montre ce que la *choisir* donnerait, pas l'archive
+    /// nue. La règle est celle de `maquette_choisir` — rôle par rôle —, et c'est de la
+    /// partager qui l'empêche de mentir : une maquette typographique laisserait sinon
+    /// voir une couverture sans photo, alors que la choisir garde celle du livre.
+    #[test]
+    fn la_vignette_garde_du_livre_les_photos_que_la_maquette_ne_remplace_pas() {
+        let projet = BTreeMap::from([
+            ("couverture.jpg".to_string(), b"photo du livre".to_vec()),
+            ("quatrieme.jpg".to_string(), b"quatrieme du livre".to_vec()),
+        ]);
+
+        // Une maquette purement typographique : rien à poser, tout reste.
+        assert_eq!(images_vignette(&projet, &BTreeMap::new()), projet);
+
+        // Une maquette qui porte sa 1ère : elle prend la place de celle du livre — par
+        // rôle, donc jusque sous un autre nom de fichier — et laisse la 4ème.
+        let m = BTreeMap::from([(
+            "couverture.png".to_string(),
+            b"photo de la maquette".to_vec(),
+        )]);
+        let f = images_vignette(&projet, &m);
+        assert_eq!(f.get("couverture.png"), m.get("couverture.png"));
+        assert!(
+            !f.contains_key("couverture.jpg"),
+            "deux photos de 1ère se disputeraient la face"
+        );
+        assert_eq!(f.get("quatrieme.jpg"), projet.get("quatrieme.jpg"));
     }
 
     fn fabrication(pod: &str, format: &str, reliure: &str, papier: &str) -> catalogue::Fabrication {

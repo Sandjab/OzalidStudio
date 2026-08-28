@@ -1307,12 +1307,14 @@ test('reposer un texte du dos au même endroit ne modifie pas le projet', async 
 
 /* ---------- le menu des maquettes et le dialogue ---------- */
 
-/** Ce que le dialogue montre : une ligne par maquette, avec ses boutons. */
+/** Ce que le dialogue montre : une carte par maquette, avec ses boutons. */
 const lignesMaquettes = (els) => [...els.get('listeMaquettes').children].map((l) => {
   const enfants = [...l.children];
   return {
-    nom: enfants[0].textContent,
-    gestes: enfants.filter((e) => e.tagName === 'BUTTON').map((b) => b.textContent),
+    nom: enfants.find((e) => e.className === 'nom')?.textContent,
+    gestes: enfants
+      .filter((e) => e.tagName === 'BUTTON' && e.className !== 'vignette')
+      .map((b) => b.textContent),
   };
 });
 
@@ -1334,31 +1336,11 @@ const AVEC_PERSONNALISEE = () => [
 ];
 
 /**
- * Le menu est un geste, pas un état : les personnalisées s'y rangent après les
- * fournies, derrière un séparateur qu'on ne peut pas choisir. Une option désactivée
- * plutôt qu'un `optgroup` — le faux DOM sélectionne la première option *enfant* d'un
- * select, et des options rangées dans un groupe ne le seraient plus.
- */
-test('le menu des maquettes range les personnalisées sous un séparateur', async () => {
-  const { els } = await ouvre(maquette(), { maquettes_liste: AVEC_PERSONNALISEE });
-  const options = [...els.get('inMaquette').children].map((o) => ({
-    texte: o.textContent, valeur: o.value, inerte: !!o.disabled,
-  }));
-  assert.deepEqual(options, [
-    { texte: 'Repartir de…', valeur: '', inerte: false },
-    { texte: 'Bandeau', valeur: 'bandeau', inerte: false },
-    { texte: 'Filets', valeur: 'filets', inerte: false },
-    { texte: '──────────', valeur: '', inerte: true },
-    { texte: 'Ma collection', valeur: 'ma-collection', inerte: false },
-  ]);
-});
-
-/**
  * Le geste du lot : le nom saisi part au Rust, et la liste se refait derrière — sans
- * quoi la maquette qu'on vient d'enregistrer manquerait au menu jusqu'au prochain
- * démarrage.
+ * quoi la maquette qu'on vient d'enregistrer manquerait à la liste d'où on l'a tirée
+ * jusqu'au prochain démarrage.
  */
-test('enregistrer une maquette la fait paraître au menu', async () => {
+test('enregistrer une maquette la fait paraître dans la liste', async () => {
   const enregistrees = [];
   const { els } = await ouvre(maquette(), {
     maquette_enregistrer: ({ nom }) => { enregistrees.push(nom); return null; },
@@ -1374,8 +1356,8 @@ test('enregistrer une maquette la fait paraître au menu', async () => {
 
   assert.deepEqual(enregistrees, ['Ma collection']);
   assert.ok(
-    [...els.get('inMaquette').children].some((o) => o.textContent === 'Ma collection'),
-    'la maquette enregistrée doit paraître au menu'
+    lignesMaquettes(els).some((l) => l.nom === 'Ma collection'),
+    'la maquette enregistrée doit paraître dans la liste'
   );
   assert.strictEqual(els.get('inMaquetteNom').value, '', 'le champ se vide après le geste');
   assert.ok(els.get('dlgMaquettes').open, 'le dialogue reste ouvert : on en enregistre souvent deux');
@@ -1485,4 +1467,210 @@ test('un refus de geste se lit dans le dialogue', async () => {
   await els.get('btMaquettes').declenche('click');
   await bouton(els, 'Bandeau', 'Cloner').declenche('click');
   assert.match(els.get('etatMaquettes').textContent, /maquette inconnue/);
+});
+
+/* ---------- les vignettes du dialogue ---------- */
+
+/** Laisse la boucle des vignettes s'épuiser : elles se composent une à une. */
+const attendreVignettes = () => new Promise((r) => setTimeout(r, 0));
+
+/** Ce que chaque carte du dialogue montre : son nom, et la source de sa vignette. */
+const vignettes = (els) => [...els.get('listeMaquettes').children].map((c) => {
+  // L'image est dans le bouton qui porte le geste, pas directement dans la carte.
+  const bouton = [...c.children].find((e) => e.className === 'vignette');
+  const img = [...(bouton?.children ?? [])].find((e) => e.tagName === 'IMG');
+  return { nom: [...c.children].find((e) => e.className === 'nom')?.textContent, image: img?.src };
+});
+
+/** Les clés demandées à la composition, dans l'ordre. */
+const composees = (appels) => appels.filter(([c]) => c === 'maquette_apercu').map(([, a]) => a);
+
+/**
+ * Une maquette se choisit sur son dessin, pas sur son nom : « Filets » ne dit rien de
+ * ce qu'on verra. La vignette se compose sur le **livre ouvert** — c'est ce que la
+ * choisir donnerait —, et le dos courant part avec elle, comme pour l'aperçu de
+ * l'étape : une photo panoramique se cadre sur la planche entière.
+ */
+test('ouvrir le dialogue compose une vignette par maquette', async () => {
+  const { els, appels } = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}`,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(composees(appels), [
+    { cle: 'bandeau', dosMm: null },
+    { cle: 'filets', dosMm: null },
+    { cle: 'surimpression', dosMm: null },
+  ]);
+  assert.deepEqual(vignettes(els), [
+    { nom: 'Bandeau', image: 'data:image/png;base64,bandeau' },
+    { nom: 'Filets', image: 'data:image/png;base64,filets' },
+    { nom: 'Surimpression', image: 'data:image/png;base64,surimpression' },
+  ]);
+});
+
+/**
+ * Rien n'a bougé entre deux ouvertures : recomposer donnerait la même image, et le
+ * dialogue s'ouvrirait sur des cadres vides à chaque fois pour ne rien montrer d'autre.
+ */
+test('rouvrir le dialogue ne recompose pas les vignettes', async () => {
+  const { els, appels } = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}`,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+  await els.get('btMaquettesFermer').declenche('click');
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(composees(appels).map((a) => a.cle), ['bandeau', 'filets', 'surimpression']);
+  assert.deepEqual(vignettes(els).map((v) => v.image), [
+    'data:image/png;base64,bandeau',
+    'data:image/png;base64,filets',
+    'data:image/png;base64,surimpression',
+  ]);
+});
+
+/**
+ * Le titre et l'auteur imprimés sur la vignette sont ceux du livre. Garder l'image
+ * d'avant après un changement de titre montrerait un livre qui n'existe plus — et c'est
+ * précisément sur ces mots-là qu'on juge une maquette.
+ */
+test('changer le titre du livre périme les vignettes', async () => {
+  let titre = 'Les Heures creuses';
+  const { els, appels } = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}-${titre}`,
+    livre_modifier: ({ livre }) => { titre = livre.titre; return projet(maquette()); },
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+  await els.get('btMaquettesFermer').declenche('click');
+
+  els.get('inTitre').value = 'Le Chant des sirènes';
+  await els.get('inTitre').declenche('change');
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(composees(appels).map((a) => a.cle),
+    ['bandeau', 'filets', 'surimpression', 'bandeau', 'filets', 'surimpression']);
+  assert.deepEqual(vignettes(els).map((v) => v.image), [
+    'data:image/png;base64,bandeau-Le Chant des sirènes',
+    'data:image/png;base64,filets-Le Chant des sirènes',
+    'data:image/png;base64,surimpression-Le Chant des sirènes',
+  ]);
+});
+
+/**
+ * Une composition qui échoue — une police absente, une archive abîmée — laisse son
+ * cadre vide et rend la main : les maquettes suivantes n'ont rien fait, et une liste
+ * qui s'arrêterait à la première fautive cacherait celles qui vont bien.
+ */
+test('une vignette qui refuse ne retient pas les suivantes', async () => {
+  const { els, appels } = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => {
+      if (cle === 'filets') throw new Error('archive illisible');
+      return `data:image/png;base64,${cle}`;
+    },
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(composees(appels).map((a) => a.cle), ['bandeau', 'filets', 'surimpression']);
+  assert.deepEqual(vignettes(els).map((v) => v.image), [
+    'data:image/png;base64,bandeau',
+    undefined,
+    'data:image/png;base64,surimpression',
+  ]);
+});
+
+
+/* ---------- repartir d'une maquette, depuis l'overlay ---------- */
+
+/** Le bouton que porte la vignette de `nom` : c'est lui qui arme, puis applique. */
+const vignette = (els, nom) => {
+  const carte = [...els.get('listeMaquettes').children]
+    .find((c) => [...c.children].some((e) => e.textContent === nom));
+  assert.ok(carte, `aucune carte « ${nom} »`);
+  const b = [...carte.children].find((e) => e.className === 'vignette');
+  assert.ok(b, `« ${nom} » n'a pas de vignette cliquable`);
+  return b;
+};
+
+/** Ce que la carte de `nom` dit d'elle-même : « fournie », ou l'invite à confirmer. */
+const mention = (els, nom) => {
+  const carte = [...els.get('listeMaquettes').children]
+    .find((c) => [...c.children].some((e) => e.textContent === nom));
+  return [...carte.children].find((e) => e.className === 'note')?.textContent;
+};
+
+/** Ouvre l'overlay sur ses vignettes, en retenant ce qui part au Rust. */
+async function overlay(sur = {}) {
+  const choisies = [];
+  const ctx = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}`,
+    maquette_choisir: ({ cle }) => { choisies.push(cle); return projet(maquette()); },
+    ...sur,
+  });
+  await ctx.els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+  return { ...ctx, choisies };
+}
+
+/**
+ * Repartir d'une maquette écrase tous les réglages de la couverture, et rien ne les
+ * rend. Dans une galerie, cliquer sert d'abord à regarder — le clic qui applique ne
+ * peut donc pas être le premier. Même raison qu'Effacer, à deux clics juste à côté.
+ */
+test('le premier clic sur une vignette arme sans rien appliquer', async () => {
+  const { els, choisies } = await overlay();
+  await vignette(els, 'Bandeau').declenche('click');
+
+  assert.deepEqual(choisies, [], 'un seul clic ne doit rien écraser');
+  assert.strictEqual(mention(els, 'Bandeau'), 'Confirmer ?');
+  assert.ok(els.get('dlgMaquettes').open, 'rien n\'est appliqué, rien ne se ferme');
+});
+
+/**
+ * Le second clic applique et ferme : la couverture obtenue ne se juge que sur l'aperçu,
+ * que la boîte modale recouvre.
+ */
+test('le second clic applique la maquette et ferme l\'overlay', async () => {
+  const { els, choisies } = await overlay();
+  await vignette(els, 'Filets').declenche('click');
+  await vignette(els, 'Filets').declenche('click');
+
+  assert.deepEqual(choisies, ['filets']);
+  assert.strictEqual(els.get('dlgMaquettes').open, false, 'l\'aperçu doit redevenir visible');
+});
+
+/**
+ * Deux cartes armées mentiraient : le second clic n'en sert qu'une, et l'autre resterait
+ * à promettre un geste qu'elle ne fera pas.
+ */
+test('armer une autre vignette désarme la première', async () => {
+  const { els, choisies } = await overlay();
+  await vignette(els, 'Bandeau').declenche('click');
+  await vignette(els, 'Filets').declenche('click');
+
+  assert.strictEqual(mention(els, 'Bandeau'), 'fournie', 'la première doit se désarmer');
+  assert.strictEqual(mention(els, 'Filets'), 'Confirmer ?');
+  assert.deepEqual(choisies, [], 'aucun des deux clics n\'a porté sur la même carte');
+});
+
+/**
+ * Une carte armée ne survit pas à la fermeture. Sans quoi on rouvre l'overlay sur une
+ * carte qui n'attend plus qu'un clic, et le premier clic — celui qu'on croit sans
+ * conséquence — écrase les réglages : le piège même que les deux temps referment.
+ */
+test('rouvrir l\'overlay ne laisse aucune vignette armée', async () => {
+  const { els, choisies } = await overlay();
+  await vignette(els, 'Surimpression').declenche('click');
+  await els.get('btMaquettesFermer').declenche('click');
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.strictEqual(mention(els, 'Surimpression'), 'fournie', 'la carte doit être désarmée');
+  await vignette(els, 'Surimpression').declenche('click');
+  assert.deepEqual(choisies, [], 'le premier clic après réouverture ne doit rien écraser');
 });

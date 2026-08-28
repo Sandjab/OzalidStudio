@@ -322,37 +322,107 @@ function ecrire(obj, chemin, valeur) {
    pour `livraison.js`. */
 
 /**
- * (Re)construit le menu de la barre **et** la liste du dialogue, d'un seul appel.
+ * (Re)construit la liste du dialogue.
  *
- * La liste vit dans le Rust, qui relit le répertoire de configuration à chaque appel ;
- * la tenir à jour ici la dédoublerait. Rappelée après chaque geste, sans quoi ce qu'on
+ * Elle vit dans le Rust, qui relit le répertoire de configuration à chaque appel ; la
+ * tenir à jour ici la dédoublerait. Rappelée après chaque geste, sans quoi ce qu'on
  * vient de cloner manquerait à la liste d'où on l'a tiré.
  *
- * Les personnalisées suivent les fournies, derrière une option inerte qui fait le
- * séparateur — le Rust les rend déjà dans cet ordre, la fenêtre n'a qu'à repérer où
- * l'origine change.
+ * Les personnalisées suivent les fournies : c'est l'ordre que le Rust rend, et la grille
+ * le garde. Aucun séparateur ne les sépare — la mention sous chaque carte dit déjà
+ * laquelle est fournie, et le menu d'avant n'en avait besoin que faute de pouvoir
+ * l'écrire.
  */
 async function rafraichirMaquettes() {
   const maquettes = await invoke('maquettes_liste');
 
-  const sel = $('inMaquette');
-  sel.replaceChildren();
-  sel.append(new Option('Repartir de…', ''));
-  let separateur = false;
-  for (const m of maquettes) {
-    if (!m.fournie && !separateur) {
-      const trait = new Option('──────────', '');
-      trait.disabled = true;
-      sel.append(trait);
-      separateur = true;
-    }
-    sel.append(new Option(m.libelle, m.cle));
-  }
-  sel.value = '';
-
   const liste = $('listeMaquettes');
+  desarmerMaquettes();
   liste.replaceChildren();
-  for (const m of maquettes) liste.append(ligneMaquette(m));
+  cadres = new Map();
+  // Le rapport d'aspect des cadres, pris au format du livrable visé : ils tiennent leur
+  // place avant que les images arrivent, sans quoi les cartes sauteraient l'une après
+  // l'autre au fil des compositions.
+  const pr = providers.find((x) => x.cle === livrableCourant()?.gabarit);
+  if (pr) liste.style.setProperty('--ratio', String(pr.largeur / pr.hauteur));
+  else liste.style.removeProperty('--ratio');
+  for (const m of maquettes) liste.append(carteMaquette(m));
+  // Les vignettes ne se composent que le dialogue ouvert : la liste, elle, se refait au
+  // démarrage et après chaque geste, et le dialogue est fermé la plupart du temps.
+  if ($('dlgMaquettes').open) await poserVignettes();
+}
+
+/* ---------- les vignettes ---------- */
+
+/** Ce qui a déjà été composé, par clé de maquette. */
+const vignettes = new Map();
+/** Le cadre de chaque maquette, refait avec la liste. */
+let cadres = new Map();
+/** La passe en cours : une liste refaite abandonne celle qui courait encore. */
+let passeVignettes = 0;
+/** La carte en attente de son second clic : sa clé, et de quoi la rendre à son état. */
+let armee = null;
+
+/**
+ * Ouvre le dialogue, et compose ce qui manque.
+ *
+ * C'est le seul endroit d'où part une composition de vignette : la liste se construit
+ * au démarrage, où personne ne les regarde.
+ */
+function ouvrirMaquettes() {
+  $('etatMaquettes').textContent = '';
+  $('etatMaquettes').className = 'etat';
+  $('dlgMaquettes').showModal();
+  return poserVignettes();
+}
+
+/**
+ * Pose les vignettes manquantes, une à une.
+ *
+ * En séquence et non toutes ensemble : Typst est un sidecar unique, six compositions
+ * lancées d'un coup ne finiraient pas plus tôt et retiendraient l'aperçu de l'étape,
+ * qui emprunte le même chemin. Mesuré, une vignette coûte une trentaine de millisecondes.
+ *
+ * Une composition qui refuse laisse son cadre vide et n'est pas retenue : le refus tient
+ * le plus souvent à ce que le projet n'a pas encore — un livrable, une pagination —, et
+ * la garder ferait un trou qui survivrait au manque comblé.
+ */
+async function poserVignettes() {
+  passeVignettes += 1;
+  const passe = passeVignettes;
+  const refus = [];
+  for (const cle of [...cadres.keys()]) {
+    if (!vignettes.has(cle)) {
+      try {
+        vignettes.set(cle, await invoke('maquette_apercu', { cle, dosMm: dosCourant() }));
+      } catch (e) {
+        refus.push(String(e));
+      }
+    }
+    // Après l'attente : la liste a pu être refaite, et le cadre d'alors n'est plus au DOM.
+    if (passe !== passeVignettes) return;
+    const img = cadres.get(cle);
+    if (img && vignettes.has(cle)) img.src = vignettes.get(cle);
+  }
+  // Toutes refusées, c'est le projet qui manque de quelque chose, et le dire une fois
+  // vaut mieux que six cadres vides dont aucun ne s'explique. Une seule qui refuse ne
+  // dit rien : son cadre vide est déjà le message, et les autres sont là pour comparer.
+  if (refus.length && refus.length === cadres.size) {
+    $('etatMaquettes').textContent = refus[0];
+    $('etatMaquettes').className = 'etat erreur';
+  }
+}
+
+/**
+ * Le projet a bougé : les vignettes portent son titre, son auteur et son format, et
+ * celles d'avant montrent un livre qui n'existe plus.
+ *
+ * Les cadres se vident avec le cache : les laisser pleines ferait rouvrir le dialogue
+ * sur des images fausses, le temps que la recomposition les remplace.
+ */
+function oublierVignettes() {
+  vignettes.clear();
+  for (const img of cadres.values()) img.removeAttribute('src');
 }
 
 /**
@@ -375,27 +445,47 @@ async function rendCompte(action, dit = '') {
 }
 
 /**
- * Une ligne de la liste : le nom, ce qu'elle est, et ses gestes.
+ * Une carte de la liste : la vignette, le nom, ce que la maquette est, et ses gestes.
+ *
+ * La vignette d'abord, parce qu'une maquette se choisit sur son dessin — « Filets » ne
+ * dit rien de ce qu'on verra. Elle arrive après coup, par `poserVignettes` ; le cadre,
+ * lui, est là tout de suite.
  *
  * Sans `innerHTML` — le nom d'une maquette vient d'un fichier qu'on n'a pas écrit. Une
  * fournie n'offre que Cloner : c'est une politesse, la garantie est dans le Rust, qui
  * refuse de renommer et d'effacer ce qui est livré avec lui.
  */
-function ligneMaquette(m) {
-  const ligne = document.createElement('div');
-  ligne.className = 'ligne maquette';
+function carteMaquette(m) {
+  const ligne = document.createElement('figure');
+  ligne.className = 'maquette';
 
-  const nom = document.createElement('span');
+  // La vignette est un bouton, et non une image qui écoute les clics : c'est ce qui lui
+  // donne le focus au clavier, Entrée, et un nom que l'aperçu ne prononce pas.
+  const bouton = document.createElement('button');
+  bouton.type = 'button';
+  bouton.className = 'vignette';
+  bouton.setAttribute('aria-label', `Repartir de « ${m.libelle} »`);
+  // `alt` vide : la vignette montre ce que le nom écrit juste dessous nomme déjà, et
+  // la redire ferait entendre deux fois la même chose.
+  const img = document.createElement('img');
+  img.alt = '';
+  if (vignettes.has(m.cle)) img.src = vignettes.get(m.cle);
+  cadres.set(m.cle, img);
+  bouton.append(img);
+  ligne.append(bouton);
+
+  const nom = document.createElement('figcaption');
   nom.className = 'nom';
   nom.textContent = m.libelle;
   ligne.append(nom);
 
-  if (m.fournie) {
-    const dit = document.createElement('span');
-    dit.className = 'note';
-    dit.textContent = 'fournie';
-    ligne.append(dit);
-  }
+  // La mention existe toujours, même vide : c'est elle qui porte l'invite à confirmer,
+  // et une ligne qui naîtrait à ce moment-là décalerait la carte sous le curseur.
+  const dit = document.createElement('p');
+  dit.className = 'note';
+  dit.textContent = m.fournie ? 'fournie' : '';
+  ligne.append(dit);
+  bouton.addEventListener('click', () => armerOuRepartir(m, ligne, dit));
 
   ligne.append(boutonGeste('Cloner', () => invoke('maquette_cloner', { cle: m.cle })));
   if (!m.fournie) {
@@ -483,20 +573,52 @@ async function enregistrerMaquette() {
 }
 
 /**
- * Repart d'une maquette, et rend l'invite à son menu.
+ * Repartir d'une maquette, en deux clics : le premier arme la carte, le second applique.
  *
- * Le menu ne montre pas un état : le projet ne garde pas de quelle maquette il est
- * parti, et il n'aurait rien de vrai à dire une fois les réglages repris un par un. Il
- * ne porte donc qu'un geste, et revient sur son invite — y laisser « Bandeau » affiché
- * ferait passer pour un état ce qui est un bouton, et le geste, refait par mégarde,
- * écrase tous les réglages.
+ * Le geste écrase tous les réglages de la couverture et rien ne les rend. Dans une
+ * galerie, cliquer sert d'abord à regarder : le clic qui écrase ne peut donc pas être le
+ * premier. C'est le même dispositif qu'Effacer, à deux cartes de là, pour la même raison.
+ *
+ * Aucune carte ne marque « la maquette courante », et ce n'est pas un oubli : le projet
+ * ne garde pas de quelle maquette il est parti, et n'aurait rien de vrai à en dire une
+ * fois les réglages repris un par un. L'armement est l'état d'un geste en cours, pas
+ * celui du livre — il meurt avec la boîte, voir `desarmerMaquettes`.
+ *
+ * Appliquer ferme le dialogue : la couverture obtenue ne se juge que sur l'aperçu, que
+ * la boîte modale recouvre.
  */
-async function choisirMaquette() {
-  const sel = $('inMaquette');
-  const cle = sel.value;
-  sel.value = '';
-  if (!cle) return;
-  await tente(async () => afficherProjet(await invoke('maquette_choisir', { cle })));
+function armerOuRepartir(m, carte, dit) {
+  const confirme = armee?.cle === m.cle;
+  desarmerMaquettes();
+  if (confirme) {
+    $('dlgMaquettes').close();
+    return tente(async () => afficherProjet(await invoke('maquette_choisir', { cle: m.cle })));
+  }
+  // Ce qu'il faudra défaire est retenu ici, et non relu sur la carte : « fournie » ne se
+  // devine pas d'un DOM où l'invite a pris sa place.
+  const origine = dit.textContent;
+  armee = {
+    cle: m.cle,
+    defaire: () => {
+      carte.className = 'maquette';
+      dit.textContent = origine;
+    },
+  };
+  carte.className = 'maquette armee';
+  dit.textContent = 'Confirmer ?';
+  return undefined;
+}
+
+/**
+ * Désarme la carte en attente, s'il y en a une.
+ *
+ * Appelé à la fermeture du dialogue autant qu'au changement de carte : une carte armée
+ * qui survivrait ferait de la réouverture un piège — le premier clic, celui qu'on croit
+ * sans conséquence, écraserait les réglages.
+ */
+function desarmerMaquettes() {
+  armee?.defaire();
+  armee = null;
 }
 
 /**

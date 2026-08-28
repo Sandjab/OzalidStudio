@@ -114,6 +114,7 @@ pub fn run() {
             commands::interieur_modifier,
             commands::epreuve_tirer,
             commands::maquette_choisir,
+            commands::maquette_apercu,
             commands::maquette_enregistrer,
             commands::maquette_cloner,
             commands::maquette_renommer,

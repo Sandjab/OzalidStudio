@@ -1491,24 +1491,123 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   max-width: 42rem;
   background: var(--surface);
   color: var(--encre);
+  max-height: calc(100vh - 4rem);
+}
+
+/* Le navigateur plafonne déjà la hauteur d'un `dialog` à celle de la fenêtre. Ce qu'il ne
+   décide pas, c'est *ce qui* défile — et par défaut c'est la boîte entière, Fermer
+   compris. Une colonne flex le décide : ce qui explique et ce qui agit tiennent les deux
+   bouts, la liste prend ce qui reste et défile seule. À treize maquettes, le bouton Fermer
+   était passé sous le bord de la fenêtre.
+   `[open]` n'est pas une précaution : un `display` posé sur `.dialogue` tout court écrase
+   le `dialog:not([open]) { display: none }` du navigateur, et la boîte reste à l'écran en
+   permanence — visible, jamais modale, par-dessus le bouton qui l'ouvre. Elle recouvrait
+   « Maquettes… », donc `showModal()` n'était plus jamais appelé et aucune vignette ne se
+   composait. Une heure pour le voir, faute d'avoir regardé la fenêtre fermée. */
+.dialogue[open] {
+  display: flex;
+  flex-direction: column;
 }
 
 .dialogue::backdrop { background: rgb(0 0 0 / 35%); }
 .dialogue h2 { margin: 0 0 .4rem; font-size: 1.05rem; }
 .dialogue .ligne { margin-top: .8rem; }
 .dialogue .ligne.fin { justify-content: flex-end; }
+/* Le refus d'un geste ne se laisse pas écraser : dans une colonne flex plus haute que
+   la boîte, tous les enfants rétrécissent à proportion, et le message le plus court —
+   celui qui dit pourquoi rien ne s'est passé — disparaît le premier. Seule la liste
+   cède, et elle a `overflow-y` pour ça. */
+.dialogue > :not(.maquettes) { flex-shrink: 0; }
 .dialogue .etat { display: block; margin-top: .6rem; }
 
-/* La liste : une ligne par maquette, le nom qui pousse les gestes à droite. Les filets
-   séparent sans encadrer — la boîte a déjà sa bordure. */
-.maquettes { margin-top: .8rem; border-top: 1px solid var(--trait); }
-.ligne.maquette { margin: 0; padding: .4rem 0; border-bottom: 1px solid var(--trait); }
-.ligne.maquette .nom { flex: 1; }
-.ligne.maquette .note { margin: 0; }
+/* La liste : une carte par maquette, en grille. C'était une ligne de texte par maquette,
+   et une maquette ne se choisit pas sur son nom — « Filets » ne dit rien de ce qu'on
+   verra. Des vignettes empilées en liste ne se comparent pas davantage : la grille les
+   met côte à côte, ce pour quoi elles existent. */
+.maquettes {
+  display: grid;
+  /* Le plancher à 8 rem, et non 9 : `auto-fill` compte les colonnes avec lui, et à 9 rem
+     la barre de défilement qui paraît à la treizième maquette — dix-sept pixels de moins —
+     faisait tomber la grille de quatre colonnes à trois, donc *grossir* les vignettes au
+     moment précis où il y en avait le plus. À 8 rem, les quatre colonnes tiennent des deux
+     côtés de ce seuil. Le plafond, lui, doit rester `1fr` : une piste de taille fixe est
+     celle qu'`auto-fill` compte, et un plafond de 10 rem ramenait la grille à trois
+     colonnes étirées — le défaut qu'il devait corriger.
+     `auto-fill` et non `auto-fit` : à trois maquettes fournies, `auto-fit` fondrait les
+     pistes vides et étirerait les trois cartes sur toute la boîte. */
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 1rem;
+  margin-top: .8rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--trait);
+  overflow-y: auto;
+  /* Sans quoi la grille, en élément flex, ne descend pas sous la hauteur de son contenu :
+     elle déborderait de la boîte au lieu de défiler dedans. */
+  min-height: 0;
+}
+
+/* La carte range ses gestes en les laissant s'envelopper : la vignette et le nom
+   prennent la largeur entière, les boutons se partagent la ligne tant qu'ils y tiennent
+   et passent à la suivante sinon. Une grille de colonnes égales ne marchait pas — à
+   quatre cartes dans la boîte, « Renommer » débordait de sa colonne et « Effacer » se
+   retrouvait seul dessous, hors du bloc. Vu à l'écran, pas dans un test. */
+.maquette {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: start;
+  gap: .3rem;
+  margin: 0;
+}
+
+.maquette .vignette, .maquette .nom, .maquette .note { width: 100%; }
+/* Chacun réclame sa largeur de texte et prend sa part du reste : deux boutons courts
+   partagent la ligne, un long la garde pour lui. */
+.maquette button { flex: 1 1 auto; }
+.maquette .nom { font-size: .85rem; line-height: 1.3; }
+.maquette .note { margin: 0; }
+.maquette button { padding: .25rem .4rem; font-size: .8rem; }
+
+/* La vignette est le geste : un bouton, dépouillé de tout ce qui fait un bouton — c'est
+   la couverture qu'on regarde, pas le cadre qui la porte.
+   Le cadre tient sa place avant que l'image arrive : les compositions se font l'une après
+   l'autre, et des cartes sans hauteur sauteraient l'une après l'autre sous le curseur.
+   `--ratio` est celui du format visé, posé par `rafraichirMaquettes` ; le repli est le
+   format d'un roman ordinaire, pour la fenêtre qui n'a pas encore de livrable. Le fond
+   éteint fait le cadre vide — c'est l'attente, pas une couverture blanche. */
+.maquette .vignette {
+  width: 100%;
+  padding: 0;
+  aspect-ratio: var(--ratio, .63);
+  background: var(--eteint);
+  border: 1px solid var(--trait);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.maquette .vignette img { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+/* Survolée, elle s'annonce par son cadre et jamais par son fond : le fond de survol des
+   autres boutons passerait derrière une couverture claire et en fausserait la couleur —
+   or la couleur est précisément ce qu'on est venu juger. */
+.maquette .vignette:hover:not(:disabled) {
+  border-color: var(--encre);
+  background: var(--eteint);
+}
+
+/* Armée, en attente de son second clic. Le trait est à l'encre et non au rouge : ceci
+   n'est pas une panne, c'est une question. Un `outline` plutôt qu'une bordure épaissie —
+   il ne prend pas de place, et la vignette ne rétrécit pas d'un pixel sous le curseur. */
+.maquette.armee .vignette {
+  outline: 2px solid var(--encre);
+  outline-offset: 1px;
+}
+
+.maquette.armee .note { color: var(--encre); }
+
 /* Le second clic d'un effacement : ce qui se perd là ne se retrouve pas. Le rouge est
    au fond et non au texte — les boutons de cette fenêtre sont déjà noirs, et du rouge
    sombre sur noir ne se lit pas. Vu à l'écran, pas dans un test. */
-.ligne.maquette button.danger {
+.maquette button.danger {
   background: var(--rouge);
   border-color: var(--rouge);
   color: var(--surface);

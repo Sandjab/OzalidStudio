@@ -489,11 +489,10 @@ async function chargerProviders() {
   // démarrage, et il survit à tous les livres qu'on ouvrira ensuite.
   afficherDiffusion(await invoke('diffusion_lire'));
   await rafraichirMaquettes();
-  $('inMaquette').addEventListener('change', choisirMaquette);
-  $('btMaquettes').addEventListener('click', () => {
-    $('etatMaquettes').textContent = '';
-    $('dlgMaquettes').showModal();
-  });
+  $('btMaquettes').addEventListener('click', ouvrirMaquettes);
+  // Désarmer à la fermeture, et pas seulement à l'ouverture : Échap ferme aussi, et le
+  // dialogue rouvert sur une carte armée ferait du premier clic un écrasement.
+  $('dlgMaquettes').addEventListener('close', desarmerMaquettes);
   $('btMaquettesFermer').addEventListener('click', () => $('dlgMaquettes').close());
   $('btMaquetteEnregistrer').addEventListener('click', enregistrerMaquette);
   construireReglages();
@@ -568,6 +567,9 @@ function libelleLivrable(d) {
 
 function afficherProjet(p) {
   projet = p;
+  // Les vignettes du dialogue des maquettes portent le titre, l'auteur et le format de
+  // ce projet-ci : elles ne survivent à aucune de ses modifications.
+  oublierVignettes();
   $('titreLivre').textContent = p.livre.titre || 'Sans titre';
   $('cheminProjet').textContent = p.chemin ?? 'projet non enregistré';
   // Le chemin se tronque dans la bande : entier, il n'est plus qu'à un survol.
@@ -878,6 +880,7 @@ function oublierLesSorties() {
 async function afficherAucunProjet() {
   projet = null;
   oublierLesSorties();
+  oublierVignettes();
   $('titreLivre').textContent = 'Ozalid Studio';
   $('cheminProjet').textContent = 'aucun projet ouvert';
   $('cheminProjet').title = '';

@@ -213,6 +213,11 @@ class El {
 
   close() {
     this.open = false;
+    // Le vrai `<dialog>` émet `close` à chaque fermeture, d'où qu'elle vienne — le
+    // bouton, Échap, ou `close()` appelé de loin. C'est le seul point où l'application
+    // peut défaire ce qu'une boîte ouverte tenait, et l'omettre ici laissait passer une
+    // carte de maquette restée armée à la réouverture.
+    void this.declenche('close');
   }
 
   async declenche(type, evenement) {

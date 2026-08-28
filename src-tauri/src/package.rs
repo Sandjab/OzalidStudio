@@ -805,8 +805,18 @@ pub fn ecrire_images(
     projet: &Projet,
     dossier: &Path,
 ) -> Result<(Option<Ressource>, Option<Ressource>), String> {
+    ecrire_table(&projet.images, dossier)
+}
+
+/// La même chose, pour une table d'images qui n'est celle d'aucun projet : la vignette
+/// d'une maquette compose les photos du livre et celles de l'archive fondues, et rien
+/// dans ce montage n'est un `Projet`.
+pub fn ecrire_table(
+    images: &BTreeMap<String, Vec<u8>>,
+    dossier: &Path,
+) -> Result<(Option<Ressource>, Option<Ressource>), String> {
     let (mut une, mut quatre) = (None, None);
-    for (nom, octets) in &projet.images {
+    for (nom, octets) in images {
         std::fs::write(dossier.join(nom), octets).map_err(|e| format!("{nom} : {e}"))?;
         let r = Ressource::depuis(nom, octets)
             .ok_or_else(|| format!("{nom} : dimensions illisibles (ni PNG ni JPEG)."))?;

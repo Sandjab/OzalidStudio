@@ -148,9 +148,10 @@
   <section id="etapeCouverture" class="etape" role="tabpanel" hidden>
     <!-- Une seule barre au-dessus de l'aperçu : ce qu'on regarde à gauche, ce qui
          alimente la maquette à droite. Elle tient sur une ligne à 900 px — la fenêtre
-         la plus étroite qu'on autorise — et c'est ce qui commande sa composition : le
-         choix d'une maquette de départ est un menu et non trois boutons, l'état des
-         photos une mention et non deux phrases.
+         la plus étroite qu'on autorise — et c'est ce qui commande sa composition :
+         l'état des photos est une mention et non deux phrases, et le choix d'une
+         maquette de départ a quitté la barre pour la boîte, où il se fait sur des
+         dessins plutôt que sur des noms.
          Ce qui a disparu et qui ne manque pas : la note « Aucune maquette », que
          l'aperçu vide disait déjà, mot pour mot, deux centimètres plus bas. -->
     <div class="outils">
@@ -170,14 +171,13 @@
         Repères
       </button>
       <span class="creux"></span>
-      <!-- Un menu d'action, pas un état : rien dans le projet ne dit de quelle maquette
-           on est parti, et le geste écrase les réglages. Il revient donc toujours sur
-           son invite — voir `choisirMaquette` dans `couverture.js`.
-           Sans étiquette visible, comme les deux selects d'ajout de la Livraison et des
-           Envois : c'est son invite qui porte le geste, et l'`aria-label` le dit à qui
-           ne la voit pas. Ici la raison est aussi la place — les deux mots qu'il aurait
-           fallu, la barre les prend sur la mention des photos, à 900 px. -->
-      <select id="inMaquette" aria-label="Repartir d'une maquette"></select>
+      <!-- Un seul bouton là où il y avait aussi un menu « Repartir de… ». Le menu
+           nommait des maquettes, et une maquette ne se choisit pas sur son nom : « Filets »
+           ne dit rien de ce qu'on verra. Le geste est donc allé là où les dessins sont —
+           dans la boîte, sur les vignettes —, et la barre y a regagné la largeur qui lui
+           manquait à 900 px. Ce que le menu portait de vrai lui survit : c'est un geste
+           et non un état, rien ne marque « la maquette courante », et le second clic
+           existe parce que le geste écrase les réglages. Voir `armerOuRepartir`. -->
       <button id="btMaquettes" type="button">Maquettes…</button>
       <!-- Un bouton et non deux : il porte sur la face qu'on regarde, comme le panneau
            de réglages à côté. Deux boutons nommaient chacun leur face et coûtaient à eux
