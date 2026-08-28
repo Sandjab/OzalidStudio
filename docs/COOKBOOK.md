@@ -55,6 +55,14 @@ Vaut chez tous les six :
   écart signifie que le PDF téléversé n'est pas celui qui vient d'être composé.
 - Le texte du dos tombe dans le dos, sans mordre sur les plats. C'est le premier symptôme
   d'un compte de pages ou d'un papier faux.
+- **Un dos mince ne porte pas de texte.** Lulu l'interdit à 80 pages ou moins, KDP le
+  réserve aux livres d'au moins 79 pages ; les quatre autres ne publient rien là-dessus.
+  L'application avertit au compte rendu de package chez ceux qui le publient, et se tait
+  chez les autres — un seuil inventé serait pire que pas de contrôle.
+- **Une image de couverture sous 300 ppp s'imprime floue.** La mesure est prise sur les
+  millimètres où l'image tombe une fois cadrée et zoomée : recadrer de moitié divise la
+  définition par deux. L'application la relève au compte rendu de package et se contente
+  d'avertir — une image à 250 ppp s'imprime, et le tirage reste juste.
 - Rien d'important ne s'approche du bord à moins de la marge de sécurité de l'imprimeur.
   C'est ce que le massicot peut emporter.
 - Le titre et l'auteur sont ceux du livre.

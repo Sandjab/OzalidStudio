@@ -128,6 +128,23 @@ pub struct Pagination {
     pub max: u32,
 }
 
+/// Le seuil à partir duquel l'imprimeur autorise du texte au dos.
+///
+/// `pages` est la **pagination minimale autorisée**, et non la phrase du guide : les
+/// deux imprimeurs qui publient ce seuil l'écrivent de façons inverses — Lulu interdit
+/// « à 80 pages ou moins », KDP autorise « à partir de 79 ». La traduction est faite une
+/// fois, ici, et `source` garde la phrase d'origine pour qu'on puisse la refaire.
+///
+/// Il ne se loge pas dans le `source` de la reliure, déjà pris par sa pagination admise :
+/// deux relevés distincts, deux phrases à garder.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DosTexte {
+    pub pages: u32,
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Format {
@@ -182,6 +199,14 @@ pub struct Reliure {
     pub pages: Option<Pagination>,
     #[serde(default)]
     pub parite: Option<Parite>,
+    /// Pagination minimale à laquelle le texte au dos est autorisé, quand l'imprimeur
+    /// la publie.
+    ///
+    /// Optionnel **par construction** : deux imprimeurs sur six publient ce seuil, et son
+    /// absence vaut silence. Un seuil inventé ferait refuser un dos que le guide autorise
+    /// — pire que pas de contrôle.
+    #[serde(default)]
+    pub dos_texte: Option<DosTexte>,
     /// Pourquoi cette reliure n'est pas composable. Décrit **notre** état, jamais celui
     /// du POD : « géométrie non relevée » se vérifie, « le POD ne publie pas son rempli »
     /// serait une affirmation sur autrui qu'on n'a pas faite.
@@ -710,6 +735,9 @@ pub struct Provider {
     pub fond_perdu: Option<f64>,
     pub pages_min: u32,
     pub pages_max: u32,
+    /// Pagination minimale à laquelle cette reliure admet du texte au dos, quand
+    /// l'imprimeur la publie. `None` : rien de relevé, donc aucun contrôle.
+    pub dos_texte_pages: Option<u32>,
     pub papiers: Vec<Papier>,
     /// La fabrication par défaut de cette entrée plate : son triplet, et le premier
     /// papier du POD. C'est elle que l'écran renvoie quand on ajoute depuis la liste.
@@ -800,6 +828,7 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                     // son broché.
                     pages_min: bornes.0,
                     pages_max: bornes.1,
+                    dos_texte_pages: r.dos_texte.as_ref().map(|d| d.pages),
                     papiers: pod.papiers.clone(),
                     fabrication,
                 });
@@ -1006,6 +1035,7 @@ impl Resolu {
             fond_perdu: self.fond_perdu(),
             pages_min: bornes.0,
             pages_max: bornes.1,
+            dos_texte_pages: self.reliure.dos_texte.as_ref().map(|d| d.pages),
             papiers: self.pod.papiers.clone(),
             fabrication,
         }
@@ -2948,6 +2978,27 @@ non_outille = "géométrie du casewrap non relevée"
             })
             .unwrap_or_else(|e| panic!("{heritee} : {e}"));
         }
+    }
+
+    /// Le seuil de texte au dos remonte du fichier de POD jusqu'à la vue plate : c'est
+    /// elle que `package` lit, et un seuil resté dans le `Pod` ne contrôlerait rien.
+    ///
+    /// Les deux chiffres sont ceux du relevé du 28/08, et ils sont **inverses l'un de
+    /// l'autre** dans les guides : Lulu interdit « à 80 pages ou moins », KDP autorise
+    /// « à partir de 79 ». Le champ les ramène tous deux à la pagination minimale
+    /// autorisée — 81 et 79 —, et c'est la traduction qui est ancrée ici.
+    #[test]
+    fn le_seuil_de_texte_au_dos_remonte_a_la_vue_plate() {
+        assert_eq!(p("lulu").dos_texte_pages, Some(81));
+        assert_eq!(p("kdp-6x9").dos_texte_pages, Some(79));
+    }
+
+    /// L'absence vaut silence. BoD ne publie aucun seuil de texte au dos : lui en prêter
+    /// un ferait refuser un dos que son guide n'interdit pas, et un seuil inventé est
+    /// pire que pas de contrôle.
+    #[test]
+    fn un_pod_qui_ne_publie_pas_de_seuil_n_en_porte_pas() {
+        assert_eq!(p("bod").dos_texte_pages, None);
     }
 
     /// L'empreinte ne voit que ce qui pagine : le format, les marges, les gouttières.

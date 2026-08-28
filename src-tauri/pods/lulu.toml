@@ -285,6 +285,10 @@ pages = { min = 32, max = 800 }
 # partout.
 parite = "paire"
 source = "guide : « Paperback books require a minimum of 32 interior pages » ; 800 au maximum, feuille de spécifications"
+# Le texte au dos : Lulu l'interdit « à 80 pages ou moins », donc il l'autorise à partir de
+# 81 — c'est cette pagination-là que porte le champ. La phrase publiée, inverse de celle de
+# KDP, reste dans sa `source` pour qu'on puisse refaire la traduction.
+dos_texte = { pages = 81, source = "Book Creation Guide, chapitre « Cover Layout » — « If your book is 80 pages or fewer, do not include spine text. »" }
 
 # Lulu relie en dur de trois façons — pleine toile, pelliculée, jaquette — et publie une
 # table de dos pour chacune. La géométrie est donc relevable, mais `planche` ne sait pas

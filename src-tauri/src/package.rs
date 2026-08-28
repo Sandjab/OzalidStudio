@@ -48,6 +48,10 @@ pub struct Package {
     /// Familles que Typst n'a pas trouvées et a remplacées par une écriture de repli
     /// — sans échouer, donc sans que rien d'autre ne le dise. Vide, tout va bien.
     pub polices_introuvables: Vec<String>,
+    /// Ce que la composition a relevé sans échouer : une image trop pauvre pour
+    /// l'impression, un texte au dos sous le seuil de l'imprimeur. Des phrases toutes
+    /// faites — voir [`avertissements`] —, que le compte rendu affiche telles quelles.
+    pub avertissements: Vec<String>,
     /// Vrai quand l'intérieur de ce package est la copie de celui d'un autre livrable
     /// du même gabarit : il n'a pas été recomposé.
     pub interieur_partage: bool,
@@ -151,6 +155,116 @@ fn verifie_pagination(cle: &str, pages: u32, pr: &Provider, papier: &Papier) -> 
     ))
 }
 
+/// La résolution sous laquelle une image imprimée se voit.
+///
+/// **Convention d'Ozalid, et non un seuil relevé chez un imprimeur** : aucun des six ne
+/// publie de minimum. C'est la valeur d'usage de la photogravure, écrite une fois et
+/// nommée pour qu'on sache d'où elle vient le jour où on la discutera.
+const PPP_MINIMUM: f64 = 300.0;
+
+/// L'avertissement d'une image trop pauvre pour l'impression, s'il y a lieu.
+///
+/// La mesure est prise sur les millimètres que l'image occupe **une fois cadrée et
+/// zoomée**, et non sur la zone : une image recadrée à 40 % n'imprime que 40 % de ses
+/// pixels, et la juger sur ses pixels bruts la déclarerait bonne à tort.
+///
+/// Un avertissement et jamais un refus, contrairement à l'ISBN : une image à 250 ppp
+/// s'imprime, et le tirage reste juste. C'est un jugement d'auteur.
+fn image_pauvre(fichier: &str, pixels: u32, mm: f64) -> Option<String> {
+    if mm <= 0.0 {
+        return None;
+    }
+    let ppp = f64::from(pixels) / mm * 25.4;
+    (ppp < PPP_MINIMUM).then(|| {
+        format!(
+            "Image « {fichier} » posée à {ppp:.0} ppp, sous les {PPP_MINIMUM:.0} ppp \
+             d'une impression : elle s'imprimera floue. La recadrer moins, ou en \
+             fournir une plus définie."
+        )
+    })
+}
+
+/// L'avertissement d'un texte au dos que l'imprimeur n'autorise pas à cette pagination.
+///
+/// Deux conditions, et il faut les deux : la pagination est sous le seuil publié, **et**
+/// le dos compose au moins un élément. Un dos nu sous le seuil ne pose aucun problème —
+/// c'est le texte que le guide refuse sur une tranche mince, pas la tranche.
+///
+/// Un imprimeur qui ne publie pas de seuil ne contrôle rien : `dos_texte_pages` est
+/// `None` chez quatre des six, et son absence vaut silence. Un seuil inventé ferait
+/// éteindre un dos que le guide autorise.
+///
+/// Un avertissement et non un refus : le PDF composé reste juste, et c'est l'imprimeur
+/// qui décidera de l'imprimer. Le sien est le seul avis qui compte.
+fn dos_sous_le_seuil(pr: &Provider, pages: u32, porte_du_texte: bool) -> Option<String> {
+    let seuil = pr.dos_texte_pages?;
+    (porte_du_texte && pages < seuil).then(|| {
+        format!(
+            "Texte au dos sur {pages} pages : {} n'en autorise qu'à partir de {seuil}. \
+             Éteindre les éléments du dos.",
+            pr.libelle
+        )
+    })
+}
+
+/// L'avertissement de l'image d'un envoi, s'il y a lieu.
+///
+/// Sa largeur imprimée est une fraction de celle de la page — `place.taille` —, comme
+/// `foreground` la compose : c'est le réglage qu'on tire à la souris sur le canevas, et
+/// il pèse sur la résolution autant que le recadrage d'une couverture.
+///
+/// Le détourage ne change pas les pixels, seulement leur transparence : les dimensions
+/// de l'archive sont donc celles qui s'impriment, et il n'y a rien à recalculer.
+///
+/// Rien à dire d'un envoi manuscrit, ni d'une image absente de l'archive ou illisible :
+/// le refus de composer, lui, est déjà porté par `trace`.
+fn image_d_envoi_pauvre(
+    projet: &Projet,
+    e: &crate::envoi::Envoi,
+    largeur_page: f64,
+) -> Option<String> {
+    let fichier = e.image.as_deref()?;
+    let (pixels, _) = crate::image::dimensions(projet.images_envois.get(fichier)?)?;
+    image_pauvre(fichier, pixels, e.place.taille * largeur_page)
+}
+
+/// Ce que la composition d'un livrable a relevé **sans échouer** : une image trop pauvre
+/// pour l'impression, un texte au dos sous le seuil de l'imprimeur.
+///
+/// Des phrases toutes faites, et non des mesures à mettre en forme : le compte rendu les
+/// affiche telles quelles, et la fiche de téléversement les recopiera — un dossier relu
+/// trois mois plus tard doit dire ce que l'écran disait, mot pour mot.
+///
+/// Hors d'`assembler` pour être éprouvé sans Typst ni disque, comme `verifie_pagination`.
+///
+/// Une même image posée sur deux faces — c'est le prolongement panoramique — n'avertit
+/// qu'une fois : elle est pauvre une fois, pas deux.
+pub fn avertissements(
+    livre: &crate::projet::Livre,
+    cv: &crate::couverture::Couverture,
+    pr: &Provider,
+    g: &Gabarit,
+    pages: u32,
+    une: Option<&Ressource>,
+    quatre: Option<&Ressource>,
+) -> Vec<String> {
+    let mut v = Vec::new();
+    let mut vues: Vec<&str> = Vec::new();
+    for (r, largeur) in planche::images_posees(cv, g, une, quatre) {
+        if vues.contains(&r.fichier.as_str()) {
+            continue;
+        }
+        vues.push(&r.fichier);
+        v.extend(image_pauvre(&r.fichier, r.largeur, largeur));
+    }
+    v.extend(dos_sous_le_seuil(
+        pr,
+        pages,
+        planche::dos_porte_du_texte(livre, cv),
+    ));
+    v
+}
+
 /// Assemble un package : le dos, découlant de la pagination de l'intérieur, puis la
 /// planche. L'intérieur lui-même n'est pas recomposé — il est reçu tout fait, composé
 /// une fois par gabarit par `composer_interieur` (directement ou via `lot`), et copié
@@ -246,6 +360,15 @@ pub fn assembler(
         chemins: vec![affiche(&pdf_int), affiche(&pdf_pl)],
         vignette: affiche(&png_pl),
         polices_introuvables,
+        avertissements: avertissements(
+            livre,
+            cv,
+            pr,
+            &g,
+            interieur.pages,
+            une.as_ref(),
+            quatre.as_ref(),
+        ),
         interieur_partage,
     })
 }
@@ -459,6 +582,10 @@ pub fn assembler_envois(
 
         // La planche ne dépend pas de l'envoi : elle est recopiée, pas recomposée.
         let mut p = base.clone();
+        // La sienne, en revanche, lui appartient : la même main posée deux fois plus
+        // grande n'a pas la même définition, et c'est un réglage par exemplaire.
+        p.avertissements
+            .extend(image_d_envoi_pauvre(projet, e, pr.format.0));
         for f in replis {
             if !p.polices_introuvables.contains(&f) {
                 p.polices_introuvables.push(f);
@@ -662,6 +789,7 @@ mod tests {
             fond_perdu: Some(5.0),
             pages_min: 1,
             pages_max: 900,
+            dos_texte_pages: None,
             papiers: vec![Papier {
                 cle: "creme".into(),
                 nom: "Crème d'essai".into(),
@@ -680,6 +808,233 @@ mod tests {
                 papier: "creme".into(),
             },
         }
+    }
+
+    /// Un PNG dont seul l'IHDR compte : `image::dimensions` ne décode rien d'autre.
+    fn png(largeur: u32, hauteur: u32) -> Vec<u8> {
+        let mut o = b"\x89PNG\r\n\x1a\n".to_vec();
+        o.extend(13u32.to_be_bytes());
+        o.extend(b"IHDR");
+        o.extend(largeur.to_be_bytes());
+        o.extend(hauteur.to_be_bytes());
+        o.extend([8, 6, 0, 0, 0]);
+        o
+    }
+
+    /// **La taille de l'objet entre dans la mesure, comme le recadrage pour la
+    /// couverture.** La même main, posée sur le quart de la page, est quatre fois plus
+    /// définie qu'étalée sur toute sa largeur — et c'est le second réglage qu'aucun
+    /// aperçu ne trahit avant l'exemplaire reçu.
+    #[test]
+    fn la_taille_d_un_envoi_entre_dans_la_resolution_relevee() {
+        let mut p = projet_en_images(Some("Léa.png"));
+        p.images_envois.insert("Léa.png".into(), png(600, 400));
+        let mesure = |taille: f64| {
+            let mut e = p.meta.envois.liste[0].clone();
+            e.place.taille = taille;
+            image_d_envoi_pauvre(&p, &e, 135.0)
+        };
+
+        assert_eq!(mesure(0.25), None, "600 px sur 33,75 mm : 451 ppp");
+        let a = mesure(1.0).expect("600 px sur 135 mm : 113 ppp, un avertissement");
+        assert!(a.contains("Léa.png"), "{a}");
+    }
+
+    /// Un envoi manuscrit n'a pas d'image, et une image annoncée peut manquer de
+    /// l'archive : ni l'un ni l'autre n'est un défaut de résolution. Le refus de
+    /// composer, lui, est déjà porté par `trace`.
+    #[test]
+    fn un_envoi_sans_image_lisible_ne_se_mesure_pas() {
+        let p = projet_en_images(Some("Léa.png"));
+        // L'archive ne porte que quatre octets : pas de dimensions à lire.
+        assert_eq!(
+            image_d_envoi_pauvre(&p, &p.meta.envois.liste[0], 135.0),
+            None
+        );
+
+        let manuscrit = crate::envoi::Envoi {
+            main: crate::envoi::Main::Police {
+                police: "Caveat".into(),
+            },
+            ..p.meta.envois.liste[0].clone()
+        };
+        assert_eq!(image_d_envoi_pauvre(&p, &manuscrit, 135.0), None);
+    }
+
+    /// Le `Provider` d'essai, doté du seuil de texte au dos qu'un POD publierait.
+    fn provider_au_seuil(seuil: Option<u32>) -> Provider {
+        Provider {
+            dos_texte_pages: seuil,
+            ..provider_d_essai()
+        }
+    }
+
+    /// Un livre dont le dos a de quoi composer : sans titre ni auteur, `composes` ne
+    /// rend rien et le contrôle du dos n'aurait rien à juger.
+    fn livre_au_dos_ecrit() -> crate::projet::Livre {
+        crate::projet::Livre {
+            titre: "Les Heures creuses".into(),
+            auteur: "Ivan Pjig".into(),
+            ..crate::projet::Livre::vide()
+        }
+    }
+
+    fn gabarit_d_essai(pr: &Provider, pages: u32) -> Gabarit {
+        Gabarit::pour(pr, &pr.papiers[0], pages, Releve::default()).unwrap()
+    }
+
+    fn photo(largeur: u32, hauteur: u32) -> Ressource {
+        Ressource {
+            fichier: "couverture.jpg".into(),
+            largeur,
+            hauteur,
+        }
+    }
+
+    /// Sous le seuil publié, un dos qui compose quelque chose se signale : le texte y
+    /// sera imprimé sur une tranche que l'imprimeur ne garantit pas droite, et cela ne
+    /// se découvre aujourd'hui que sur l'exemplaire reçu.
+    #[test]
+    fn un_dos_qui_compose_sous_le_seuil_avertit() {
+        let a = dos_sous_le_seuil(&provider_au_seuil(Some(81)), 64, true)
+            .expect("64 pages sous un seuil de 81, dos composé : un avertissement");
+        assert!(a.contains("64"), "{a}");
+        assert!(a.contains("81"), "{a}");
+        assert!(
+            a.contains("Essai"),
+            "l'avertissement nomme l'imprimeur : {a}"
+        );
+    }
+
+    /// Un dos nu sous le seuil ne pose aucun problème : c'est le **texte** que
+    /// l'imprimeur refuse sur une tranche mince, pas la tranche. Avertir ici enverrait
+    /// chercher un réglage à éteindre qui l'est déjà.
+    #[test]
+    fn un_dos_nu_sous_le_seuil_ne_dit_rien() {
+        assert_eq!(
+            dos_sous_le_seuil(&provider_au_seuil(Some(81)), 64, false),
+            None
+        );
+    }
+
+    /// Le seuil est la pagination minimale **autorisée** : à 81 pages exactement, Lulu
+    /// autorise. Avertir là serait refuser ce que le guide permet.
+    #[test]
+    fn au_seuil_exact_le_texte_au_dos_est_autorise() {
+        assert_eq!(
+            dos_sous_le_seuil(&provider_au_seuil(Some(81)), 81, true),
+            None
+        );
+        assert!(dos_sous_le_seuil(&provider_au_seuil(Some(81)), 80, true).is_some());
+    }
+
+    /// L'absence de seuil vaut silence, et non zéro : quatre imprimeurs sur six n'en
+    /// publient pas, et un contrôle inventé serait pire que pas de contrôle.
+    #[test]
+    fn un_pod_sans_seuil_ne_controle_rien() {
+        assert_eq!(dos_sous_le_seuil(&provider_au_seuil(None), 24, true), None);
+    }
+
+    /// Une image dont on connaît les pixels et les millimètres : 1000 px sur 200 mm de
+    /// large font 127 ppp, moins de la moitié de ce qu'une impression réclame. Le PDF se
+    /// compose quand même — c'est un jugement d'auteur, pas une erreur —, mais rien
+    /// aujourd'hui ne le dit avant l'exemplaire reçu.
+    #[test]
+    fn une_image_trop_pauvre_pour_l_impression_avertit() {
+        let a = image_pauvre("quatrieme.jpg", 1000, 200.0)
+            .expect("1000 px sur 200 mm : 127 ppp, un avertissement");
+        assert!(a.contains("quatrieme.jpg"), "l'image est nommée : {a}");
+        assert!(a.contains("127"), "la résolution mesurée est dite : {a}");
+        assert!(a.contains("300"), "le seuil est dit : {a}");
+    }
+
+    /// Le seuil est atteint, pas dépassé : 300 px sur un pouce font exactement 300 ppp,
+    /// et avertir là ferait douter d'une image qui convient.
+    #[test]
+    fn une_image_juste_au_seuil_ne_dit_rien() {
+        assert_eq!(image_pauvre("une.png", 300, 25.4), None);
+        assert!(image_pauvre("une.png", 299, 25.4).is_some());
+    }
+
+    /// **Ce que le contrôle de résolution a de particulier** : il mesure les pixels sur
+    /// les millimètres où ils tombent, pas sur ceux de la zone. La même photo, cadrée
+    /// deux fois plus grand, n'imprime que la moitié de sa définition — et c'est
+    /// exactement le cas qu'on ne peut pas voir à l'écran avant l'exemplaire reçu.
+    #[test]
+    fn le_recadrage_entre_dans_la_resolution_relevee() {
+        let pr = provider_au_seuil(None);
+        let g = gabarit_d_essai(&pr, 244);
+        let photo = photo(2000, 3000);
+        let dit = |cv: &crate::couverture::Couverture| {
+            avertissements(&livre_au_dos_ecrit(), cv, &pr, &g, 244, Some(&photo), None)
+        };
+
+        let cv = crate::maquettes::fournie("bandeau");
+        assert!(
+            dit(&cv).is_empty(),
+            "2000 px sur cette zone dépassent 300 ppp : {:?}",
+            dit(&cv)
+        );
+
+        let zoomee = crate::couverture::Couverture {
+            cadrage: crate::image::Cadrage {
+                zoom: 2.0,
+                ..cv.cadrage
+            },
+            ..cv.clone()
+        };
+        let a = dit(&zoomee);
+        assert_eq!(a.len(), 1, "{a:?}");
+        assert!(a[0].contains("couverture.jpg"), "{}", a[0]);
+    }
+
+    /// Le prolongement panoramique compose la même photo sur la 4ème, le dos et la 1ère.
+    /// Elle est pauvre une fois, pas trois : trois fois la même phrase ferait chercher
+    /// trois images là où il n'y en a qu'une.
+    #[test]
+    fn une_image_posee_sur_deux_faces_n_avertit_qu_une_fois() {
+        let pr = provider_au_seuil(None);
+        let g = gabarit_d_essai(&pr, 244);
+        let mut cv = crate::maquettes::fournie("bandeau");
+        cv.quatrieme.fond = crate::couverture::FondQuatre::Panorama;
+
+        let a = avertissements(
+            &livre_au_dos_ecrit(),
+            &cv,
+            &pr,
+            &g,
+            244,
+            Some(&photo(600, 900)),
+            None,
+        );
+        assert_eq!(a.len(), 1, "{a:?}");
+    }
+
+    /// Le contrôle du dos est câblé sur ce que le dos **compose**, et non sur ce que la
+    /// maquette déclare : une maquette dont tous les éléments de dos sont éteints ne
+    /// réclame rien, et l'avertir enverrait éteindre ce qui l'est déjà.
+    #[test]
+    fn le_seuil_du_dos_se_juge_sur_ce_que_le_dos_compose() {
+        let pr = provider_au_seuil(Some(81));
+        let g = gabarit_d_essai(&pr, 64);
+        let cv = crate::maquettes::fournie("bandeau");
+        let a = avertissements(&livre_au_dos_ecrit(), &cv, &pr, &g, 64, None, None);
+        assert_eq!(a.len(), 1, "{a:?}");
+        assert!(a[0].contains("dos"), "{}", a[0]);
+
+        // Les quatre textes que le dos peut porter, tous vides : `Livre::vide` en pose
+        // trois par défaut, et un dos nu ne s'obtient qu'en les retirant.
+        let muet = crate::projet::Livre {
+            titre: String::new(),
+            auteur: String::new(),
+            editeur: String::new(),
+            collection: String::new(),
+            ..crate::projet::Livre::vide()
+        };
+        assert!(
+            avertissements(&muet, &cv, &pr, &g, 64, None, None).is_empty(),
+            "sans titre ni auteur, le dos ne compose rien"
+        );
     }
 
     fn papier_plafonne(cle: &str, bornes: Option<(u32, u32)>) -> Papier {

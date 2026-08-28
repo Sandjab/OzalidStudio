@@ -175,6 +175,10 @@ pages = { min = 24, max = 828 }
 # partout.
 parite = "paire"
 source = "options d'impression KDP"
+# Le texte au dos : KDP l'autorise « à partir de 79 pages », et le champ porte ce
+# chiffre-là tel quel. Le seuil de 80 qu'on lit ailleurs sur la même page d'aide vaut pour
+# leur outil Cover Creator, pas pour un PDF déposé — relevé du 28/08/2026.
+dos_texte = { pages = 79, source = "aide KDP G201953020 — « To include spine text, your book must have at least 79 pages. »" }
 
 # KDP : deux papiers noir et blanc, définitifs après publication (page d'aide « Create a
 # Paperback Cover »). Aucun terme additif — l'épaisseur de la couverture n'entre pas dans

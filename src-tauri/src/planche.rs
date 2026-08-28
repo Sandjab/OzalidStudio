@@ -178,6 +178,16 @@ fn composes<'a>(
     .collect()
 }
 
+/// Vrai quand le dos compose au moins un élément.
+///
+/// La même liste que [`bloc_dos`] et [`dos_requis`], et pour la même raison : le
+/// contrôle du seuil de texte au dos ne doit juger que ce qui s'imprime réellement.
+/// Une maquette dont les quatre éléments sont éteints, ou un livre sans titre, laissent
+/// un dos nu — et un dos nu, l'imprimeur ne l'interdit sur aucune pagination.
+pub fn dos_porte_du_texte(livre: &Livre, cv: &Couverture) -> bool {
+    !composes(livre, cv).is_empty()
+}
+
 /// Le contenu d'un élément, tourné du sens que sa maquette lui donne.
 ///
 /// Trois choses s'y jouent, et chacune a été vue rater :
@@ -486,6 +496,58 @@ fn bloc_dos(
 }
 
 /// Source Typst de la planche entière, sur une page unique aux dimensions du gabarit.
+/// Les images que la planche pose réellement, et la largeur en millimètres qu'elles y
+/// occupent une fois cadrées et zoomées.
+///
+/// **À lire avec [`source`], et à modifier avec elle** : les deux refont les mêmes
+/// boîtes et les mêmes panoramas, et c'est de cette identité que dépend le contrôle de
+/// résolution de `package` — mesurer une géométrie que personne n'imprime avertirait à
+/// tort ou jamais. Le test `chaque_image_composee_est_relevee_a_la_largeur_ou_elle_s_imprime`
+/// compare les deux chemins sur la source composée : il est le garde-fou.
+///
+/// Le dos n'y figure pas : en prolongement panoramique il porte la **même** image à la
+/// même largeur que les deux faces — c'est ce que garantit
+/// `le_panorama_pose_la_meme_image_au_meme_endroit_dans_les_trois_zones` — et le relever
+/// une troisième fois ne dirait rien de plus.
+///
+/// Une 4ème dont le prolongement échoue ne rend rien : `source` refusera la même chose
+/// deux lignes plus loin, et un relevé n'a pas à porter ce refus-là.
+pub fn images_posees<'a>(
+    cv: &Couverture,
+    g: &Gabarit,
+    image_une: Option<&'a Ressource>,
+    image_quatre: Option<&'a Ressource>,
+) -> Vec<(&'a Ressource, f64)> {
+    let fp = g.fond_perdu;
+    let mut v = Vec::new();
+    if let Some((_, geo, r)) = couverture::photo_quatre(
+        cv,
+        g.format,
+        image_quatre,
+        image_une,
+        Some(g.panorama(0.0)),
+        Boite::quatre(g.format, fp),
+    )
+    .ok()
+    .flatten()
+    {
+        v.push((r, geo.largeur));
+    }
+    if let (Some((_, geo)), Some(r)) = (
+        couverture::image_une(
+            cv,
+            g.format,
+            image_une,
+            Boite::une(g.format, fp),
+            Some(g.panorama(g.pli() + g.dos)),
+        ),
+        image_une,
+    ) {
+        v.push((r, geo.largeur));
+    }
+    v
+}
+
 pub fn source(
     livre: &Livre,
     cv: &Couverture,
@@ -966,6 +1028,71 @@ mod tests {
                 "zone {i} : photo à {v} mm au lieu de {} mm",
                 x[0]
             );
+        }
+    }
+
+    /// Les largeurs auxquelles la source compose ses images, telles qu'elles sont
+    /// écrites — la même chaîne que `mm` produit, sans reconversion qui arrondirait.
+    fn largeurs_des_images(s: &str) -> std::collections::BTreeSet<String> {
+        s.match_indices("image(\"")
+            .map(|(i, _)| {
+                s[i..]
+                    .split("width: ")
+                    .nth(1)
+                    .unwrap()
+                    .split(',')
+                    .next()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    /// **Le relevé ne vaut que s'il mesure ce qui s'imprime.** `images_posees` refait les
+    /// mêmes appels que `source` pour rendre les millimètres d'une image posée ; deux
+    /// chemins qui divergeraient donneraient un contrôle de résolution portant sur une
+    /// géométrie que personne n'imprime. Le seul garde-fou est de comparer les deux, et
+    /// c'est ce que fait ce test — y compris sous un zoom, qui est justement ce que la
+    /// mesure doit voir.
+    #[test]
+    fn chaque_image_composee_est_relevee_a_la_largeur_ou_elle_s_imprime() {
+        let g = gabarit("lulu", 244);
+        let quatrieme = Ressource {
+            fichier: "quatrieme.jpg".into(),
+            largeur: 900,
+            hauteur: 1400,
+        };
+
+        let zoomee = {
+            let mut cv = maquettes::fournie("bandeau");
+            cv.cadrage.zoom = 2.0;
+            cv
+        };
+        let en_image = {
+            let mut cv = maquettes::fournie("bandeau");
+            cv.quatrieme.fond = FondQuatre::Image;
+            cv.quatrieme.cadrage.zoom = 1.4;
+            cv
+        };
+        let panoramique = {
+            let mut cv = maquettes::fournie("bandeau");
+            cv.quatrieme.fond = FondQuatre::Panorama;
+            cv
+        };
+
+        for (quoi, cv, quatre) in [
+            ("1ère zoomée, 4ème sans image", &zoomee, None),
+            ("4ème en image propre", &en_image, Some(&quatrieme)),
+            ("prolongement panoramique", &panoramique, None),
+        ] {
+            let s = source(&livre(), cv, &g, Some(&photo()), quatre).unwrap();
+            let relevees: std::collections::BTreeSet<String> =
+                images_posees(cv, &g, Some(&photo()), quatre)
+                    .into_iter()
+                    .map(|(_, largeur)| mm(largeur))
+                    .collect();
+            assert_eq!(relevees, largeurs_des_images(&s), "{quoi}");
+            assert!(!relevees.is_empty(), "{quoi} : aucune image relevée");
         }
     }
 

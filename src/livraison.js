@@ -419,6 +419,17 @@ function afficherPackages(resultats) {
           + `${p.polices_introuvables.join(', ')}. Le PDF ne suit pas la maquette.`,
         'note alerte'));
       }
+      // Ce que la composition a relevé sans que le fichier soit faux : une image trop
+      // pauvre pour l'impression, un texte au dos sous le seuil de l'imprimeur. En gris
+      // et non en rouge, à la différence des deux alertes ci-dessus : celles-là disent
+      // qu'un PDF ne suit pas la maquette, celles-ci qu'un tirage juste ne plaira
+      // peut-être pas. C'est un jugement d'auteur, et le rouge des deux autres perdrait
+      // son sens à couvrir les deux.
+      //
+      // Les phrases viennent du Rust telles quelles : la fiche de téléversement les
+      // recopiera, et un dossier relu trois mois plus tard doit dire ce que l'écran
+      // disait.
+      for (const a of p.avertissements) infos.append(h('p', a, 'note'));
       for (const c of cheminsGroupes(p.chemins)) infos.append(h('p', c, 'chemin'));
       bloc.append(infos);
       // La planche telle qu'elle part à l'impression, avec le dos mesuré de ce

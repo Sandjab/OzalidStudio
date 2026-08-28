@@ -272,6 +272,11 @@ Un projet jamais enregistré ne peut donc rien composer, faute d'endroit où éc
 - **Une police hors liste est refusée** plutôt que remplacée. Le moteur, lui, composerait
   dans sa police par défaut sans lever la moindre erreur, et le livre sortirait faux en
   silence. Si une police manque malgré tout, un `⚠ repli` s'affiche au pied.
+- **Le compte rendu d'un package avertit sans refuser.** Une image posée sous 300 ppp
+  s'imprimera floue ; un texte au dos sous le seuil que l'imprimeur publie — 81 pages chez
+  Lulu, 79 chez KDP, rien chez les quatre autres — n'y est pas autorisé. Les deux
+  s'affichent en gris à côté des chemins : le fichier reste juste, c'est le tirage qui
+  déçoit, et c'est un jugement d'auteur. Le rouge, lui, reste à ce qui rend le PDF faux.
 - **Georgia et Helvetica ne sont pas disponibles.** Elles appartiennent au système, ne sont
   pas redistribuables, et Helvetica n'existe pas sous Windows.
 - **Le nombre de pages est pair chez les six imprimeurs du catalogue.** L'application ajoute au

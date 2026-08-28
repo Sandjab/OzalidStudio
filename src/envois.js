@@ -521,6 +521,10 @@ function afficherResultatEnvois(resultats) {
     // mesures.
     bloc.append(h('p', `envois/${r.dossier}/ — ${r.package.pages} pages, dos `
       + `${nb(r.package.dos)} mm`, 'chemin'));
+    // Ce que la composition a relevé sans échouer, la planche du livrable et l'image de
+    // cet exemplaire-ci comprises. C'est le seul endroit où l'avertissement d'un envoi
+    // peut se lire : une mesure prise et tue ne serait pas une mesure.
+    for (const a of r.package.avertissements) bloc.append(h('p', a, 'note'));
     if (r.vignette) {
       const img = h('img', undefined, 'vignette');
       img.src = r.vignette;

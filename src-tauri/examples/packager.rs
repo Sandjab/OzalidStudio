@@ -77,6 +77,11 @@ fn main() -> Result<(), String> {
                 ""
             }
         );
+        // Ce que la composition a relevé sans échouer : les mêmes phrases qu'à
+        // l'écran, pour que la chaîne en ligne de commande dise ce que l'interface dit.
+        for a in &p.avertissements {
+            println!("   ⚠ {a}");
+        }
         for c in &p.chemins {
             println!("   {c}");
         }

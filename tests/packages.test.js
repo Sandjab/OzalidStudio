@@ -150,6 +150,7 @@ function paquet(sur = {}) {
     chemins: ['/livres/LHC/lulu/interieur-lulu.pdf', '/livres/LHC/lulu/couverture-lulu.pdf'],
     vignette: '/livres/LHC/lulu/couverture-lulu.png',
     polices_introuvables: [],
+    avertissements: [],
     ...sur,
   };
 }
@@ -872,6 +873,42 @@ test('un package sans substitution n\'affiche aucune alerte de police', async ()
   });
   await els.get('btPackager').declenche('click');
   assert.doesNotMatch(els.get('packages').textContent, /repli/);
+});
+
+/**
+ * Les deux contrôles d'avant envoi — une image trop pauvre pour l'impression, un texte
+ * au dos que l'imprimeur n'autorise pas à cette pagination — se lisent sur le package
+ * qu'ils ont traversé, à côté de l'alerte de police et pour la même raison : ce PDF-là
+ * part chez l'imprimeur, et rien d'autre ne le dira avant l'exemplaire reçu.
+ *
+ * Les phrases viennent du Rust telles quelles : le compte rendu et la fiche de
+ * téléversement doivent dire la même chose, mot pour mot.
+ */
+test('un package porte les avertissements relevés à la composition', async () => {
+  const { els } = await ouvre([LULU], {
+    packager: () => [{
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', erreur: null,
+      package: paquet({
+        avertissements: [
+          'Image « couverture.jpg » posée à 168 ppp, sous les 300 ppp d\'une impression.',
+          'Texte au dos sur 64 pages : Lulu n\'en autorise qu\'à partir de 81.',
+        ],
+      }),
+    }],
+  });
+  await els.get('btPackager').declenche('click');
+
+  const t = els.get('packages').textContent;
+  assert.match(t, /168 ppp/, 'la résolution relevée doit se lire');
+  assert.match(t, /à partir de 81/, 'le seuil de dos doit se lire');
+});
+
+test('un package sans rien à signaler n\'affiche aucun avertissement', async () => {
+  const { els } = await ouvre([LULU], {
+    packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
+  });
+  await els.get('btPackager').declenche('click');
+  assert.doesNotMatch(els.get('packages').textContent, /ppp/);
 });
 
 /**

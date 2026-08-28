@@ -171,7 +171,15 @@ function atelier({
       case 'envoyer': return envois.liste.map((e) => ({
         dedicataire: e.dedicataire,
         dossier: e.dedicataire,
-        package: { pages: 262, dos: 16.513 },
+        package: {
+          pages: 262,
+          dos: 16.513,
+          // La règle du Rust, modélisée ici : une image d'envoi se mesure sur les
+          // millimètres où elle tombe, une main écrite n'a rien à mesurer.
+          avertissements: e.image
+            ? [`Image « ${e.image} » posée à 96 ppp, sous les 300 ppp d'une impression.`]
+            : [],
+        },
         vignette: null,
       }));
       case 'envoi_objet': return { image: 'data:image/png;base64,T0JK', ratio: 0.2 };
@@ -1821,6 +1829,31 @@ test('le compte rendu d\'un envoi écrit son dos à la française', async () => 
 
   const rendu = els.get('resultatEnvois').textContent;
   assert.ok(rendu.includes('dos 16,51 mm'), `dos écrit à l'anglaise : ${rendu}`);
+});
+
+/**
+ * L'exemplaire d'un dédicataire porte sa propre image, à sa propre taille : c'est le
+ * seul compte rendu où l'avertissement de résolution d'un envoi peut se lire. Sans lui,
+ * la mesure serait prise et tue — c'est-à-dire pas prise du tout.
+ */
+test('le compte rendu d\'un envoi porte ses avertissements', async () => {
+  const a = atelier({
+    sur: {
+      envois: {
+        gabarit: '',
+        liste: [{ dedicataire: 'Léa', main: { mode: 'image', police: null },
+          place: PLACE_DEFAUT, contenu: '', image: 'lea.png' }],
+      },
+    },
+  });
+  const { els } = await charge({ invoke: a.invoke });
+  await els.get('btNouveau').declenche('click');
+  await allerAuxEnvois(els);
+
+  await els.get('btEnvoyer').declenche('click');
+  await new Promise((r) => setImmediate(r));
+
+  assert.match(els.get('resultatEnvois').textContent, /96 ppp/);
 });
 
 /**
