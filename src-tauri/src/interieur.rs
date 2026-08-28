@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::catalogue::Provider;
+use crate::gabarit::Contexte;
 use crate::manuscrit::{echappe, echappe_chaine, inline, Bloc, Piece, Sorte, SCENE};
 use crate::projet::Livre;
 use crate::typst::MARQUEUR;
@@ -258,7 +259,7 @@ const CORPS_SUR_LARGEUR: f64 = 0.0648;
 
 /// Source Typst complète de l'intérieur.
 fn assemble(
-    livre: &Livre,
+    ctx: &Contexte,
     int: &Interieur,
     pr: &Provider,
     r: &Reglage,
@@ -315,10 +316,10 @@ fn assemble(
 "#,
         // Ces trois-là sont cités, non composés : la ligne de commentaire et la chaîne
         // de `#set document` demandent l'échappement de chaîne, pas celui du markup.
-        echappe_chaine(&livre.titre),
+        echappe_chaine(&ctx.livre.titre),
         pr.cle,
-        echappe_chaine(&livre.titre),
-        echappe_chaine(&livre.auteur),
+        echappe_chaine(&ctx.livre.titre),
+        echappe_chaine(&ctx.livre.auteur),
         pr.marge_haut,
         pr.marge_bas,
         r.gouttiere,
@@ -335,7 +336,7 @@ fn assemble(
         s.push_str(a);
     }
 
-    s.push_str(&liminaires(livre, int, liminaires_manuscrit));
+    s.push_str(&liminaires(ctx, int, liminaires_manuscrit));
 
     // — Corps, folio rétabli. La numérotation court depuis le faux-titre, seul son
     //   affichage était supprimé : le premier chapitre s'ouvre donc en page 5, ou en 7
@@ -513,7 +514,13 @@ pub fn source(
     pieces: &[Piece],
     envoi: Option<Trace>,
 ) -> String {
-    assemble(livre, int, pr, r, pieces, envoi, None)
+    // Ce qui part à l'impression connaît son imprimeur : c'est le seul endroit où il
+    // entre dans le livre, et il ne vient pas du livre mais du gabarit visé.
+    let ctx = Contexte {
+        livre,
+        imprimeur: Some(&pr.pod_nom),
+    };
+    assemble(&ctx, int, pr, r, pieces, envoi, None)
 }
 
 /// L'intérieur du livre précédé de sa couverture, **sans imposition**.
@@ -535,7 +542,12 @@ pub fn source_ebook(
         gouttiere: pr.exterieur,
         blanche: false,
     };
-    assemble(livre, int, pr, &r, pieces, None, Some(couverture))
+    // Aucun imprimeur : le format vient d'un gabarit, mais rien n'est imprimé.
+    let ctx = Contexte {
+        livre,
+        imprimeur: None,
+    };
+    assemble(&ctx, int, pr, &r, pieces, None, Some(couverture))
 }
 
 /// Les pages liminaires : faux-titre, blanche, page de titre, copyright, et — quand le
@@ -544,7 +556,7 @@ pub fn source_ebook(
 ///
 /// Toutes sans folio, et sans avoir à le dire : `footer: none`, posé par l'entête que
 /// `source` écrit, court jusqu'au `#set page(footer: …)` qui ouvre le corps.
-fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
+fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
     let mut s = String::new();
     s.push_str(&format!(
         r#"#v(42mm)
@@ -560,13 +572,14 @@ fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
 #align(center, emph(text(size: {}pt)[{}]))
 "#,
         int.faux_titre,
-        majuscules(&livre.titre),
+        majuscules(&ctx.livre.titre),
         int.page_titre_auteur,
-        majuscules(&livre.auteur),
+        majuscules(&ctx.livre.auteur),
         int.page_titre_titre,
-        majuscules(&livre.titre_page(None).replace('\n', "\u{1}")).replace('\u{1}', r" \ "),
+        majuscules(&ctx.livre.titre_page(ctx.imprimeur).replace('\n', "\u{1}"))
+            .replace('\u{1}', r" \ "),
         int.page_titre_genre,
-        echappe(&livre.genre),
+        echappe(&ctx.livre.genre),
     ));
 
     s.push_str("#pagebreak()\n\n");
@@ -584,14 +597,14 @@ fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
 
 "#,
         int.copyright,
-        echappe(&livre.copyright(None)).replace('\n', r" \ ")
+        echappe(&ctx.livre.copyright(ctx.imprimeur)).replace('\n', r" \ ")
     ));
 
     // La dédicace prend une belle page, son verso reste blanc — deux `#pagebreak()`
     // d'affilée, le dispositif de la blanche du faux-titre. Le corps s'ouvre donc en
     // page 7 au lieu de 5, et le dos en tient compte de lui-même puisqu'il découle de
     // la pagination mesurée, jamais d'une saisie.
-    if let Some(d) = livre.dedicace(None) {
+    if let Some(d) = ctx.livre.dedicace(ctx.imprimeur) {
         s.push_str(&format!(
             r#"#v(48mm)
 #align(right, emph(text(size: {}pt)[{}]))
@@ -888,6 +901,38 @@ mod tests {
         assert!(s.contains("outside: 15mm"));
         assert!(s.contains("costs: (orphan: 100%, widow: 100%)"), "veuves");
         assert!(s.trim_end().ends_with(MARQUEUR), "marqueur de pagination");
+    }
+
+    /// Le pavé de copyright de la page 4 cite l'imprimeur, et l'imprimeur vient du
+    /// gabarit visé : c'est la même mécanique que le dos, où le chiffre ne passe jamais
+    /// par un humain.
+    #[test]
+    fn le_copyright_de_l_interieur_cite_l_imprimeur_du_gabarit() {
+        let mut l = livre();
+        l.copyright = "Imprimé par %IMPRIMEUR%".into();
+        let pr = provider("bod").unwrap();
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(&l, &Interieur::default(), pr, &r, &[], None);
+        assert!(
+            s.contains(&pr.pod_nom),
+            "le nom de l'imprimeur manque à la page 4"
+        );
+        assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
+    }
+
+    /// L'ebook n'est pas imprimé : le jeton s'y efface. Le même livre, la même page 4,
+    /// et une mention qui n'a pas de sens sur un écran.
+    #[test]
+    fn l_ebook_n_a_pas_d_imprimeur() {
+        let mut l = livre();
+        l.copyright = "Imprimé par %IMPRIMEUR%".into();
+        let pr = provider("bod").unwrap();
+        let s = source_ebook(&l, &Interieur::default(), pr, &[], "");
+        assert!(!s.contains(&pr.pod_nom), "l'ebook a nommé un imprimeur");
+        assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
     }
 
     /// Le corps et l'interligne ne sont pas des faits d'imprimeur : ils étaient
@@ -1393,10 +1438,25 @@ mod tests {
     /// faux, et il ne se découvre qu'après tirage.
     #[test]
     fn une_dedicace_ajoute_une_belle_page_et_sa_blanche() {
-        let sans = liminaires(&livre(), &Interieur::default(), &[]);
+        let l0 = livre();
+        let sans = liminaires(
+            &Contexte {
+                livre: &l0,
+                imprimeur: None,
+            },
+            &Interieur::default(),
+            &[],
+        );
         let mut l = livre();
         l.dedicace = "À M., qui a tenu la lampe.".into();
-        let avec = liminaires(&l, &Interieur::default(), &[]);
+        let avec = liminaires(
+            &Contexte {
+                livre: &l,
+                imprimeur: None,
+            },
+            &Interieur::default(),
+            &[],
+        );
 
         assert_eq!(
             avec.matches("#pagebreak()").count(),
@@ -1414,12 +1474,27 @@ mod tests {
     /// du seul fait que le champ existe désormais.
     #[test]
     fn une_dedicace_vide_ou_blanche_ne_compose_rien() {
-        let sans = liminaires(&livre(), &Interieur::default(), &[]);
+        let l0 = livre();
+        let sans = liminaires(
+            &Contexte {
+                livre: &l0,
+                imprimeur: None,
+            },
+            &Interieur::default(),
+            &[],
+        );
         for creux in ["", "   ", "\n \n"] {
             let mut l = livre();
             l.dedicace = creux.into();
             assert_eq!(
-                liminaires(&l, &Interieur::default(), &[]),
+                liminaires(
+                    &Contexte {
+                        livre: &l,
+                        imprimeur: None,
+                    },
+                    &Interieur::default(),
+                    &[],
+                ),
                 sans,
                 "« {creux:?} » a été pris pour une dédicace"
             );
@@ -1433,7 +1508,14 @@ mod tests {
     fn une_dedicace_est_echappee_et_garde_ses_sauts_de_ligne() {
         let mut l = livre();
         l.dedicace = "À #M.,\nqui a tenu la lampe.".into();
-        let s = liminaires(&l, &Interieur::default(), &[]);
+        let s = liminaires(
+            &Contexte {
+                livre: &l,
+                imprimeur: None,
+            },
+            &Interieur::default(),
+            &[],
+        );
 
         assert!(s.contains(r"À \#M.,"), "dédicace non échappée : {s}");
         assert!(
@@ -1488,8 +1570,12 @@ mod tests {
             titre: t.into(),
             blocs: vec![Bloc::Paragraphe("Entrez.".into())],
         };
+        let l = livre();
         let s = liminaires(
-            &livre(),
+            &Contexte {
+                livre: &l,
+                imprimeur: None,
+            },
             &Interieur::default(),
             &[piece("Préface"), piece("Avant-propos")],
         );
