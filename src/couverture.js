@@ -329,9 +329,9 @@ function ecrire(obj, chemin, valeur) {
  * vient de cloner manquerait à la liste d'où on l'a tiré.
  *
  * Les personnalisées suivent les fournies : c'est l'ordre que le Rust rend, et la grille
- * le garde. Aucun séparateur ne les sépare — la mention sous chaque carte dit déjà
- * laquelle est fournie, et le menu d'avant n'en avait besoin que faute de pouvoir
- * l'écrire.
+ * le garde. Elle l'annonce en deux groupes plutôt que de le laisser deviner — une fournie
+ * et une personnalisée ne se distinguent autrement que par les gestes qu'elles offrent,
+ * et il faut les lire pour s'en apercevoir.
  */
 async function rafraichirMaquettes() {
   const maquettes = await invoke('maquettes_liste');
@@ -346,10 +346,31 @@ async function rafraichirMaquettes() {
   const pr = providers.find((x) => x.cle === livrableCourant()?.gabarit);
   if (pr) liste.style.setProperty('--ratio', String(pr.largeur / pr.hauteur));
   else liste.style.removeProperty('--ratio');
-  for (const m of maquettes) liste.append(carteMaquette(m));
+  const fournies = maquettes.filter((m) => m.fournie);
+  const miennes = maquettes.filter((m) => !m.fournie);
+  // Deux groupes annoncés seulement s'il y en a deux : « Fournies » seul en tête d'une
+  // grille qui n'a que ça nommerait une distinction qui n'existe pas encore, et c'est
+  // l'état d'une installation neuve.
+  const groupes = fournies.length && miennes.length
+    ? [['Fournies', fournies], ['Les vôtres', miennes]]
+    : [[null, maquettes]];
+  for (const [titre, groupe] of groupes) {
+    if (titre) liste.append(intertitre(titre));
+    for (const m of groupe) liste.append(carteMaquette(m));
+  }
   // Les vignettes ne se composent que le dialogue ouvert : la liste, elle, se refait au
   // démarrage et après chaque geste, et le dialogue est fermé la plupart du temps.
   if ($('dlgMaquettes').open) await poserVignettes();
+}
+
+/**
+ * L'annonce d'un groupe de la grille. Elle prend la largeur entière et pousse le groupe
+ * à la ligne : c'est le filet sous elle qui fait le séparateur.
+ */
+function intertitre(texte) {
+  const h = document.createElement('h3');
+  h.textContent = texte;
+  return h;
 }
 
 /* ---------- les vignettes ---------- */
@@ -479,11 +500,11 @@ function carteMaquette(m) {
   nom.textContent = m.libelle;
   ligne.append(nom);
 
-  // La mention existe toujours, même vide : c'est elle qui porte l'invite à confirmer,
-  // et une ligne qui naîtrait à ce moment-là décalerait la carte sous le curseur.
+  // Vide au repos, et l'élément existe quand même : c'est lui qui portera l'invite à
+  // confirmer, et une ligne qui naîtrait à ce moment-là décalerait la carte sous le
+  // curseur. Il ne redit pas « fournie » — l'intertitre du groupe l'a déjà écrit.
   const dit = document.createElement('p');
   dit.className = 'note';
-  dit.textContent = m.fournie ? 'fournie' : '';
   ligne.append(dit);
   bouton.addEventListener('click', () => armerOuRepartir(m, ligne, dit));
 

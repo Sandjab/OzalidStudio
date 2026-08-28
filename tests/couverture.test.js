@@ -1307,8 +1307,12 @@ test('reposer un texte du dos au même endroit ne modifie pas le projet', async 
 
 /* ---------- le menu des maquettes et le dialogue ---------- */
 
+/** Les cartes de la grille, sans les intertitres qui s'y rangent aussi. */
+const cartes = (els) => [...els.get('listeMaquettes').children]
+  .filter((c) => c.className.startsWith('maquette'));
+
 /** Ce que le dialogue montre : une carte par maquette, avec ses boutons. */
-const lignesMaquettes = (els) => [...els.get('listeMaquettes').children].map((l) => {
+const lignesMaquettes = (els) => cartes(els).map((l) => {
   const enfants = [...l.children];
   return {
     nom: enfants.find((e) => e.className === 'nom')?.textContent,
@@ -1475,7 +1479,7 @@ test('un refus de geste se lit dans le dialogue', async () => {
 const attendreVignettes = () => new Promise((r) => setTimeout(r, 0));
 
 /** Ce que chaque carte du dialogue montre : son nom, et la source de sa vignette. */
-const vignettes = (els) => [...els.get('listeMaquettes').children].map((c) => {
+const vignettes = (els) => cartes(els).map((c) => {
   // L'image est dans le bouton qui porte le geste, pas directement dans la carte.
   const bouton = [...c.children].find((e) => e.className === 'vignette');
   const img = [...(bouton?.children ?? [])].find((e) => e.tagName === 'IMG');
@@ -1589,8 +1593,7 @@ test('une vignette qui refuse ne retient pas les suivantes', async () => {
 
 /** Le bouton que porte la vignette de `nom` : c'est lui qui arme, puis applique. */
 const vignette = (els, nom) => {
-  const carte = [...els.get('listeMaquettes').children]
-    .find((c) => [...c.children].some((e) => e.textContent === nom));
+  const carte = cartes(els).find((c) => [...c.children].some((e) => e.textContent === nom));
   assert.ok(carte, `aucune carte « ${nom} »`);
   const b = [...carte.children].find((e) => e.className === 'vignette');
   assert.ok(b, `« ${nom} » n'a pas de vignette cliquable`);
@@ -1599,8 +1602,7 @@ const vignette = (els, nom) => {
 
 /** Ce que la carte de `nom` dit d'elle-même : « fournie », ou l'invite à confirmer. */
 const mention = (els, nom) => {
-  const carte = [...els.get('listeMaquettes').children]
-    .find((c) => [...c.children].some((e) => e.textContent === nom));
+  const carte = cartes(els).find((c) => [...c.children].some((e) => e.textContent === nom));
   return [...carte.children].find((e) => e.className === 'note')?.textContent;
 };
 
@@ -1653,7 +1655,7 @@ test('armer une autre vignette désarme la première', async () => {
   await vignette(els, 'Bandeau').declenche('click');
   await vignette(els, 'Filets').declenche('click');
 
-  assert.strictEqual(mention(els, 'Bandeau'), 'fournie', 'la première doit se désarmer');
+  assert.strictEqual(mention(els, 'Bandeau'), '', 'la première doit se désarmer');
   assert.strictEqual(mention(els, 'Filets'), 'Confirmer ?');
   assert.deepEqual(choisies, [], 'aucun des deux clics n\'a porté sur la même carte');
 });
@@ -1670,7 +1672,47 @@ test('rouvrir l\'overlay ne laisse aucune vignette armée', async () => {
   await els.get('btMaquettes').declenche('click');
   await attendreVignettes();
 
-  assert.strictEqual(mention(els, 'Surimpression'), 'fournie', 'la carte doit être désarmée');
+  assert.strictEqual(mention(els, 'Surimpression'), '', 'la carte doit être désarmée');
   await vignette(els, 'Surimpression').declenche('click');
   assert.deepEqual(choisies, [], 'le premier clic après réouverture ne doit rien écraser');
+});
+
+/**
+ * Ce que la grille montre, dans l'ordre : ses intertitres et le nom de ses cartes.
+ */
+const contenuListe = (els) => [...els.get('listeMaquettes').children]
+  .map((e) => (e.tagName === 'H3'
+    ? e.textContent
+    : [...e.children].find((x) => x.className === 'nom')?.textContent));
+
+/**
+ * Une fournie et une personnalisée ne se distinguent que par les gestes qu'elles
+ * offrent — et il faut les lire pour s'en apercevoir. La grille le dit d'avance, en
+ * deux groupes : c'est ce que le séparateur inerte du menu supprimé disait à sa façon.
+ */
+test('la grille annonce les fournies et les personnalisées', async () => {
+  const { els } = await ouvre(maquette(), {
+    maquettes_liste: AVEC_PERSONNALISEE,
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}`,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(contenuListe(els), [
+    'Fournies', 'Bandeau', 'Filets', 'Les vôtres', 'Ma collection',
+  ]);
+});
+
+/**
+ * Rien à séparer, rien à annoncer : sur une installation neuve, « Fournies » seul en
+ * tête d'une grille qui n'a que ça nommerait une distinction qui n'existe pas encore.
+ */
+test('sans personnalisée, la grille ne s\'annonce pas en deux groupes', async () => {
+  const { els } = await ouvre(maquette(), {
+    maquette_apercu: ({ cle }) => `data:image/png;base64,${cle}`,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await attendreVignettes();
+
+  assert.deepEqual(contenuListe(els), ['Bandeau', 'Filets', 'Surimpression']);
 });

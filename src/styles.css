@@ -1289,7 +1289,14 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .groupe { margin-bottom: 1.2rem; }
 
-.groupe h3 {
+/* Les intertitres de la grille des maquettes suivent ceux des groupes de réglages : même
+   capitale grise, même filet. C'est ce filet qui sépare les fournies des personnalisées,
+   là où le menu supprimé posait une option inerte. */
+.maquettes h3 { grid-column: 1 / -1; }
+.maquettes h3:not(:first-child) { margin-top: .6rem; }
+
+.groupe h3,
+.maquettes h3 {
   margin: 0 0 .5rem;
   font-size: .72rem;
   font-weight: 600;
