@@ -121,6 +121,12 @@ L'identité du livre et son texte.
 - **L'identité** : titre, auteur, genre, éditeur, collection, monogramme, prix, mention,
   dédicace, dépôt légal. Ces champs alimentent la couverture — une maquette dit *où* le
   titre paraît, jamais *quel* titre.
+- **Le pavé de copyright**, composé en page liminaire de l'intérieur, est un texte libre.
+  Il reconnaît les mêmes jetons que la 4ème, plus `%ISBN%`, `%DEPOT_LEGAL%` et
+  `%IMPRIMEUR%`. Les deux premiers se saisissent ici même, dans cet onglet ; le troisième
+  vient du livrable, si bien que le même livre composé chez deux imprimeurs porte deux
+  mentions sans qu'on ait rien retapé. Dans l'ebook, qui n'est imprimé nulle part,
+  `%IMPRIMEUR%` ne rend rien.
 - **La police de l'intérieur** se choisit parmi sept serifs de labeur : EB Garamond (par
   défaut), Crimson Pro, Alegreya, Cardo, Vollkorn, Spectral, Libre Baskerville. Un exemple
   montre l'écriture réelle, dans les octets que le moteur composera.
@@ -137,11 +143,8 @@ Quatre faces à régler : **1ère**, **4ème**, **Dos**, **Planche**.
   images — sauf l'identité du livre.
 - **La 4ème** porte un texte de présentation et, au-dessus, l'auteur, le titre et un filet,
   chacun activable séparément. Le texte reconnaît des jetons comme `%TITRE%` ou `%AUTEUR%`,
-  résolus à la composition. Le pavé de copyright reconnaît les mêmes jetons que la 4ème,
-  plus `%ISBN%`, `%DEPOT_LEGAL%` et `%IMPRIMEUR%`. Les deux premiers sont saisis une fois
-  dans l'onglet Livre ; le troisième vient du livrable, si bien que le même livre composé
-  chez deux imprimeurs porte deux mentions sans qu'on ait rien retapé. Dans l'ebook, qui
-  n'est imprimé nulle part, `%IMPRIMEUR%` ne rend rien.
+  résolus à la composition — les mêmes jetons que reconnaît le pavé de copyright, en
+  1 · Livre.
 - **Le dos se règle élément par élément.** Auteur, titre, éditeur et collection y ont
   chacun leur style, leur place, leur rang et leur sens de lecture. Place et sens se
   règlent **à la souris**, directement sur l'aperçu. Seule la **largeur** du dos échappe à
