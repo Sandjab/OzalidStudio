@@ -42,7 +42,9 @@ Le même chez tous les six :
    dos ni fond perdu, saisir en plus ce que vous avez relevé sur leur gabarit. Ces champs
    naissent vides ; la génération refuse en disant quoi mesurer, et à quelle pagination.
 2. **Générer les packages.** Chaque livrable reçoit son répertoire : l'intérieur PDF, la
-   planche PDF, et une vignette PNG pour vérifier que ça tient.
+   planche PDF, une vignette PNG pour vérifier que ça tient, et un `televersement.txt` qui
+   récapitule ce qu'il y a à saisir aux étapes 3 et 4 — le formulaire se remplit devant
+   lui, sans revenir à la fenêtre.
 3. **Créer le projet sur le site de l'imprimeur**, avec les réglages de son chapitre.
    **Le papier commandé doit être celui déclaré** : c'est lui qui porte l'épaisseur du dos.
 4. **Téléverser les deux PDF**, puis contrôler l'aperçu en ligne.

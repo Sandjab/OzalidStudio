@@ -130,6 +130,9 @@ fn compose(
         // BoD publie son dos et son fond perdu : le relevé est ignoré.
         Releve::default(),
         &pr.cle,
+        // Le témoin mesure une pagination, il ne prépare pas une commande : aucune
+        // finition à déclarer.
+        None,
         &int,
         sortie,
         typst,

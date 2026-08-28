@@ -155,6 +155,121 @@ fn verifie_pagination(cle: &str, pages: u32, pr: &Provider, papier: &Papier) -> 
     ))
 }
 
+/// La colonne où commence la valeur d'une ligne de fiche.
+///
+/// Dix-sept caractères : « Fond perdu » et « Gouttière », les deux plus longs libellés,
+/// y tiennent avec un blanc de respiration. Une fiche se lit à côté d'un formulaire
+/// qu'on remplit — la colonne est ce qui permet de descendre les yeux au lieu de
+/// chercher chaque valeur.
+const COLONNE: usize = 17;
+
+/// Un nombre tel que la fenêtre l'écrit : virgule décimale, nombre de décimales choisi.
+///
+/// Deux écritures d'un même millimètre — « 16,51 » à l'écran, « 16.51 » sur la fiche —
+/// se lisent comme deux mesures. C'est la même règle que `nb` dans `app.js`.
+fn nb(v: f64, d: usize) -> String {
+    format!("{v:.d$}").replace('.', ",")
+}
+
+/// Une ligne de fiche, ou rien quand la valeur est vide.
+///
+/// Une entrée vide sur un document qu'on lit devant le formulaire d'un imprimeur se
+/// lirait comme un réglage manqué : la finition suit à l'écran la même règle.
+fn ligne(cle: &str, valeur: &str) -> String {
+    if valeur.is_empty() {
+        return String::new();
+    }
+    format!("{cle:<COLONNE$}{valeur}\n")
+}
+
+/// Le nom d'un fichier, sans le répertoire qui le porte : la fiche vit à côté de lui.
+fn nom_seul(chemin: &str) -> &str {
+    chemin.rsplit(['/', '\\']).next().unwrap_or(chemin)
+}
+
+/// La fiche de téléversement d'un livrable : ce qu'il faut saisir chez l'imprimeur, et
+/// ce que la composition a mesuré pour ce livrable-là.
+///
+/// **Entièrement tirée du catalogue et des mesures, jamais du COOKBOOK** : celui-ci est
+/// de la prose relue par un humain, et en dupliquer les tableaux en données créerait
+/// deux vérités qui divergeraient au premier changement de guide.
+///
+/// Elle existe parce que le dossier livré ne porte que des PDF muets : ni le format
+/// commandé, ni le papier, ni le dos qu'ils supposent. Tout cela vivait à l'écran, et le
+/// formulaire de l'imprimeur se remplissait de mémoire, des semaines plus tard.
+///
+/// Les avertissements viennent tels quels du package : ils sont écrits une fois, en
+/// Rust, précisément pour que la fiche et la fenêtre disent la même chose mot pour mot.
+pub fn fiche(
+    livre: &crate::projet::Livre,
+    pr: &Provider,
+    finition: Option<&str>,
+    p: &Package,
+) -> String {
+    let (titre, auteur) = (livre.titre.trim(), livre.auteur.trim());
+    let entete = match (titre, auteur) {
+        ("", "") => String::new(),
+        (t, "") => t.to_owned(),
+        ("", a) => a.to_owned(),
+        (t, a) => format!("{t} — {a}"),
+    };
+
+    let mut s = String::new();
+    if !entete.is_empty() {
+        s.push_str(&format!("{entete}\n\n"));
+    }
+    s.push_str(&ligne("Imprimeur", &pr.pod_nom));
+    s.push_str(&ligne("Format", &pr.format_nom));
+    s.push_str(&ligne("Reliure", &pr.reliure_nom));
+    s.push_str(&ligne("Papier", &p.papier));
+    s.push_str(&ligne("Finition", finition.unwrap_or("")));
+
+    // La blanche de parité se dit là où il y en a une : c'est une page que l'auteur n'a
+    // pas écrite et qui se compte quand même, et elle explique un total impair devenu
+    // pair sous les yeux de qui relit la commande.
+    let pages = if p.blanche {
+        format!("{} (dont une blanche de parité)", p.pages)
+    } else {
+        p.pages.to_string()
+    };
+    s.push_str(&format!("\n{}", ligne("Pages", &pages)));
+    s.push_str(&ligne("Dos", &format!("{} mm", nb(p.dos, 2))));
+    s.push_str(&ligne("Gouttière", &format!("{} mm", nb(p.gouttiere, 1))));
+    s.push_str(&ligne("Fond perdu", &format!("{} mm", nb(p.fond_perdu, 3))));
+    s.push_str(&ligne(
+        "Planche",
+        &format!("{} × {} mm", nb(p.planche.0, 2), nb(p.planche.1, 2)),
+    ));
+
+    // Les fichiers qui partent chez l'imprimeur, et eux seuls : la vignette n'est pas
+    // dans `chemins`, et la fiche ne se liste pas elle-même — elle y entre après avoir
+    // été écrite.
+    s.push('\n');
+    for (i, c) in p.chemins.iter().enumerate() {
+        let cle = if i == 0 { "Fichiers" } else { "" };
+        s.push_str(&format!("{cle:<COLONNE$}{}\n", nom_seul(c)));
+    }
+
+    s.push_str(
+        "\nLe papier commandé doit être celui déclaré : c'est lui qui porte l'épaisseur \
+         du dos.\n",
+    );
+
+    // Ce que la composition a relevé sans échouer. La phrase du repli est celle de
+    // `livraison.js` : la même alerte, dans le dossier qu'elle a traversé.
+    if !p.polices_introuvables.is_empty() {
+        s.push_str(&format!(
+            "\nPolice introuvable, composé dans une écriture de repli : {}. Le PDF ne \
+             suit pas la maquette.\n",
+            p.polices_introuvables.join(", ")
+        ));
+    }
+    for a in &p.avertissements {
+        s.push_str(&format!("\n{a}\n"));
+    }
+    s
+}
+
 /// La résolution sous laquelle une image imprimée se voit.
 ///
 /// **Convention d'Ozalid, et non un seuil relevé chez un imprimeur** : aucun des six ne
@@ -283,6 +398,7 @@ pub fn assembler(
     papier: &Papier,
     releve: Releve,
     cle: &str,
+    finition: Option<&str>,
     interieur: &InterieurCompose,
     dossier: &Path,
     typst: &Typst,
@@ -346,7 +462,7 @@ pub fn assembler(
     let png_pl = dossier.join(nom(cle, "couverture", "png"));
     typst.apercu(&src_pl, &png_pl, 1, 72)?;
 
-    Ok(Package {
+    let mut p = Package {
         cle: cle.to_string(),
         libelle: pr.libelle.clone(),
         papier: papier.nom.clone(),
@@ -370,7 +486,32 @@ pub fn assembler(
             quatre.as_ref(),
         ),
         interieur_partage,
-    })
+    };
+
+    // 5. La fiche, écrite en dernier : elle recopie ce que le package vient de mesurer,
+    // avertissements compris, et elle n'entre dans ses chemins qu'après — une fiche qui
+    // se listerait elle-même parmi les fichiers à téléverser enverrait déposer un
+    // mémo chez l'imprimeur.
+    p.chemins
+        .push(ecrire_fiche(livre, pr, finition, &p, dossier)?);
+    Ok(p)
+}
+
+/// Écrit la fiche de téléversement à côté des PDF, et rend son chemin.
+///
+/// Le nom ne porte pas la clé du livrable, contrairement aux PDF : il n'y a qu'une fiche
+/// par répertoire, et c'est elle qui dit de quel livrable il s'agit — dès sa première
+/// ligne.
+fn ecrire_fiche(
+    livre: &crate::projet::Livre,
+    pr: &Provider,
+    finition: Option<&str>,
+    p: &Package,
+    dossier: &Path,
+) -> Result<String, String> {
+    let chemin = dossier.join("televersement.txt");
+    ecrire(&chemin, &fiche(livre, pr, finition, p))?;
+    Ok(affiche(&chemin))
 }
 
 /// Un livrable prêt à packager : sa vue plate, son papier, son relevé et ses clés.
@@ -381,6 +522,11 @@ pub struct Cible {
     pub pr: Provider,
     pub papier: Papier,
     pub releve: Releve,
+    /// La finition du livrable sous son **nom d'imprimeur**, quand il en porte une :
+    /// c'est « Pelliculage mat » qu'on coche sur un bon de commande, pas « mat ». Elle
+    /// ne change pas un octet du PDF — c'est une donnée de commande —, et c'est à ce
+    /// titre qu'elle entre sur la fiche de téléversement.
+    pub finition: Option<String>,
     pub cle: String,
     pub cle_gabarit: String,
 }
@@ -410,7 +556,15 @@ pub fn lot(
                 .expect("vient d'être inséré si absent");
             debug_assert_eq!(*pr, c.pr, "deux gabarits de même clé, providers différents");
             assembler(
-                projet, &c.pr, &c.papier, c.releve, &c.cle, interieur, &dossier, typst,
+                projet,
+                &c.pr,
+                &c.papier,
+                c.releve,
+                &c.cle,
+                c.finition.as_deref(),
+                interieur,
+                &dossier,
+                typst,
             )
         })
         .collect()
@@ -522,12 +676,18 @@ fn verifie_pages(liste: &[crate::envoi::Envoi], pages: u32) -> Result<(), String
 /// pas créer de page : la gouttière, la parité, le compte de pages, le dos et la
 /// planche sont donc les mêmes pour tous. Converger M fois ne coûterait pas seulement
 /// M fois le temps — cela laisserait croire que le résultat pourrait différer.
+// Huitième argument depuis que la fiche est écrite ici aussi : la finition est une
+// donnée de commande, elle ne change pas un octet du PDF mais elle se recopie sur la
+// fiche. Elle tombera avec les six autres le jour où ces deux fonctions prendront la
+// `Cible` que `lot` tient déjà — le même nettoyage qu'`assembler` annonce.
+#[expect(clippy::too_many_arguments)]
 pub fn assembler_envois(
     projet: &Projet,
     pr: &Provider,
     papier: &Papier,
     releve: Releve,
     cle: &str,
+    finition: Option<&str>,
     racine: &Path,
     typst: &Typst,
 ) -> Result<Vec<(String, Package)>, String> {
@@ -541,7 +701,9 @@ pub fn assembler_envois(
     // compose la planche. Les envois n'en reprennent que le réglage et les fichiers.
     let reference = racine.join(".reference");
     let int = composer_interieur(projet, pr, cle, &reference, typst)?;
-    let base = assembler(projet, pr, papier, releve, cle, &int, &reference, typst)?;
+    let base = assembler(
+        projet, pr, papier, releve, cle, finition, &int, &reference, typst,
+    )?;
 
     // Le compte de pages n'existe qu'après la convergence : le contrôle ne peut pas
     // avoir lieu plus tôt, et refuser ici coûte une composition de moins qu'un tirage
@@ -596,6 +758,12 @@ pub fn assembler_envois(
             copier(&reference, &dossier, &nom(cle, "couverture", "pdf"))?,
         ];
         p.vignette = copier(&reference, &dossier, &nom(cle, "couverture", "png"))?;
+        p.chemins
+            .push(ecrire_fiche(livre, pr, finition, &p, &dossier)?);
+        // Réécrite et non recopiée : celle de la référence ne porte ni l'avertissement
+        // de cet exemplaire-ci ni sa police de repli, et un dossier livré doit dire ce
+        // qu'il contient, lui et pas un autre.
+
         sorties.push((nom_dossier, p));
     }
     Ok(sorties)
@@ -790,6 +958,9 @@ mod tests {
             pages_min: 1,
             pages_max: 900,
             dos_texte_pages: None,
+            pod_nom: "Essai".into(),
+            format_nom: "Livre d'essai".into(),
+            reliure_nom: "Broché d'essai".into(),
             papiers: vec![Papier {
                 cle: "creme".into(),
                 nom: "Crème d'essai".into(),
@@ -859,6 +1030,122 @@ mod tests {
             ..p.meta.envois.liste[0].clone()
         };
         assert_eq!(image_d_envoi_pauvre(&p, &manuscrit, 135.0), None);
+    }
+
+    /// Un package abouti, tel qu'`assembler` le rend : de quoi éprouver la fiche sans
+    /// composer. Les chiffres sont ceux d'un vrai livrable BoD de 164 pages.
+    fn package_d_essai() -> Package {
+        Package {
+            cle: "bod-135x215-broche-creme-90".into(),
+            libelle: "BoD — 13,5 × 21,5 cm".into(),
+            papier: "Crème 90 g".into(),
+            pages: 164,
+            gouttiere: 25.4,
+            blanche: true,
+            dos: 10.9125,
+            dos_requis: None,
+            fond_perdu: 3.175,
+            planche: (238.8625, 181.35),
+            chemins: vec![
+                "/livres/LHC/bod/interieur-bod-135x215-broche-creme-90.pdf".into(),
+                "/livres/LHC/bod/couverture-bod-135x215-broche-creme-90.pdf".into(),
+            ],
+            vignette: "/livres/LHC/bod/couverture-bod-135x215-broche-creme-90.png".into(),
+            polices_introuvables: vec![],
+            avertissements: vec![],
+            interieur_partage: false,
+        }
+    }
+
+    fn provider_bod() -> Provider {
+        crate::catalogue::resout(&crate::catalogue::Fabrication {
+            pod: "bod".into(),
+            format: "135x215".into(),
+            reliure: "broche".into(),
+            papier: "creme-90".into(),
+        })
+        .unwrap()
+        .provider()
+    }
+
+    /// **Ce que le dossier livré ne disait pas.** Les PDF sont muets : ils ne portent ni
+    /// le format commandé, ni le papier, ni le dos qu'ils supposent. Tout cela vivait à
+    /// l'écran, et le formulaire de l'imprimeur se remplissait de mémoire.
+    ///
+    /// Les noms sont ceux du catalogue, jamais ceux du COOKBOOK : celui-ci est de la
+    /// prose relue par un humain, et en dupliquer les tableaux en données créerait deux
+    /// vérités qui divergeraient au premier changement de guide.
+    #[test]
+    fn la_fiche_porte_ce_qu_il_faut_saisir_chez_l_imprimeur() {
+        let f = fiche(
+            &livre_au_dos_ecrit(),
+            &provider_bod(),
+            Some("Pelliculage mat"),
+            &package_d_essai(),
+        );
+
+        assert!(f.starts_with("Les Heures creuses — Ivan Pjig\n"), "{f}");
+        for attendu in [
+            "Imprimeur        BoD",
+            "Format           13,5 × 21,5 cm",
+            "Reliure          Broché — dos carré collé",
+            "Papier           Crème 90 g",
+            "Finition         Pelliculage mat",
+            "Pages            164 (dont une blanche de parité)",
+            "Dos              10,91 mm",
+            "Gouttière        25,4 mm",
+            "Fond perdu       3,175 mm",
+            "Planche          238,86 × 181,35 mm",
+            "Fichiers         interieur-bod-135x215-broche-creme-90.pdf",
+            "                 couverture-bod-135x215-broche-creme-90.pdf",
+        ] {
+            assert!(f.contains(attendu), "ligne « {attendu} » absente de :\n{f}");
+        }
+        assert!(
+            f.contains("Le papier commandé doit être celui déclaré"),
+            "{f}"
+        );
+    }
+
+    /// Une ligne sans contenu ne paraît pas, comme la finition à l'écran : une entrée
+    /// vide sur un document qu'on lit devant un formulaire se lirait comme un réglage
+    /// manqué. La blanche de parité suit la même règle — elle ne se dit que là où il y
+    /// en a une.
+    #[test]
+    fn une_ligne_sans_contenu_ne_parait_pas_sur_la_fiche() {
+        let mut p = package_d_essai();
+        p.blanche = false;
+        let f = fiche(&livre_au_dos_ecrit(), &provider_bod(), None, &p);
+
+        assert!(!f.contains("Finition"), "{f}");
+        assert!(f.contains("Pages            164\n"), "{f}");
+        assert!(!f.contains("blanche"), "{f}");
+    }
+
+    /// **La fiche dit ce que l'écran disait.** Un dossier relu trois mois plus tard n'a
+    /// plus la fenêtre sous les yeux : les avertissements de la composition doivent
+    /// voyager avec les PDF, et mot pour mot — c'est pour cela qu'ils sont écrits une
+    /// fois, en Rust, et recopiés ici.
+    #[test]
+    fn la_fiche_recopie_les_avertissements_et_les_polices_de_repli() {
+        let mut p = package_d_essai();
+        p.avertissements = vec!["Image « couverture.png » posée à 91 ppp.".into()];
+        p.polices_introuvables = vec!["plume ivan".into()];
+        let f = fiche(&livre_au_dos_ecrit(), &provider_bod(), None, &p);
+
+        assert!(
+            f.contains("Image « couverture.png » posée à 91 ppp."),
+            "{f}"
+        );
+        assert!(f.contains("plume ivan"), "{f}");
+        assert!(f.contains("repli"), "{f}");
+        // **En queue de fiche, après la consigne sur le papier.** Ce qui se lit avant
+        // elle est ce qu'on saisit chez l'imprimeur ; ce qui la suit est ce qu'on décide
+        // avant de téléverser. Intercalés, les avertissements couperaient en deux ce
+        // qu'on recopie.
+        let consigne = f.find("Le papier commandé").expect("la consigne du papier");
+        assert!(consigne < f.find("plume ivan").unwrap(), "{f}");
+        assert!(consigne < f.find("91 ppp").unwrap(), "{f}");
     }
 
     /// Le `Provider` d'essai, doté du seuil de texte au dos qu'un POD publierait.
@@ -1275,12 +1562,69 @@ mod tests {
             &pr.papiers[0],
             Releve::default(),
             "essai",
+            None,
             &pret,
             dir.path(),
             &Typst::new("typst-qui-n-existe-pas"),
         )
         .unwrap_err();
         assert!(e.contains("maquette"), "l'intérieur a été recomposé : {e}");
+    }
+
+    /// **Un dossier livré dit ce qu'il contient, lui et pas un autre.** L'exemplaire
+    /// d'un dédicataire porte son propre intérieur et sa propre fiche : recopier celle
+    /// de la référence y mettrait les avertissements d'un autre exemplaire — ou pas les
+    /// siens. Composition réelle, parce que c'est le seul chemin qui passe par
+    /// `assembler_envois`.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn chaque_exemplaire_d_envoi_porte_sa_propre_fiche() {
+        let mut projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        projet.meta.couverture.maquette = Some(
+            crate::maquettes::par_cle(None, "filets")
+                .expect("maquette fournie « filets »")
+                .couverture,
+        );
+        projet.meta.envois.liste = ["Léa", "Rex"]
+            .into_iter()
+            .map(|qui| crate::envoi::Envoi {
+                dedicataire: qui.into(),
+                contenu: format!("À {qui}."),
+                main: crate::envoi::Main::Police {
+                    police: "Caveat".into(),
+                },
+                ..Default::default()
+            })
+            .collect();
+
+        let racine = tempfile::tempdir().unwrap();
+        let typst = Typst::new("typst")
+            .avec_polices(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+        let pr = provider_d_essai();
+        let sorties = assembler_envois(
+            &projet,
+            &pr,
+            &pr.papiers[0],
+            Releve::default(),
+            "essai-livre-broche-creme",
+            Some("Pelliculage d'essai"),
+            racine.path(),
+            &typst,
+        )
+        .expect("les deux exemplaires");
+
+        assert_eq!(sorties.len(), 2);
+        for (dossier, p) in &sorties {
+            let fiche = racine.path().join(dossier).join("televersement.txt");
+            let lu = std::fs::read_to_string(&fiche)
+                .unwrap_or_else(|e| panic!("{} : {e}", fiche.display()));
+            assert!(lu.contains("Pelliculage d'essai"), "{lu}");
+            assert!(
+                p.chemins.iter().any(|c| c.ends_with("televersement.txt")),
+                "la fiche doit paraître au compte rendu : {:?}",
+                p.chemins
+            );
+        }
     }
 
     /// Spec § 9 : deux livrables du même gabarit d'intérieur ne déclenchent **qu'une**
@@ -1319,6 +1663,7 @@ mod tests {
                 pr: pr.clone(),
                 papier: creme,
                 releve: Releve::default(),
+                finition: None,
                 cle: "essai-livre-broche-creme".into(),
                 cle_gabarit: "essai-livre-broche".into(),
             },
@@ -1326,6 +1671,7 @@ mod tests {
                 pr,
                 papier: blanc,
                 releve: Releve::default(),
+                finition: None,
                 cle: "essai-livre-broche-blanc-essai".into(),
                 cle_gabarit: "essai-livre-broche".into(),
             },
@@ -1362,6 +1708,7 @@ mod tests {
             pr: pr.clone(),
             papier: pr.papiers[0].clone(),
             releve: Releve::default(),
+            finition: None,
             cle: cle.into(),
             cle_gabarit: "essai-livre-broche".into(),
         };

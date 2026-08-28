@@ -248,7 +248,7 @@ Elles ne sont **pas** dans l'archive. Elles se posent à côté :
 
 ```
 <nom-du-projet>/
-    <livrable>/     intérieur, planche, vignette — un répertoire par livrable
+    <livrable>/     intérieur, planche, vignette, fiche — un répertoire par livrable
     ebook/          le PDF et l'EPUB du livre entier
     epreuve.pdf     l'épreuve de relecture
 ```
@@ -272,6 +272,11 @@ Un projet jamais enregistré ne peut donc rien composer, faute d'endroit où éc
 - **Une police hors liste est refusée** plutôt que remplacée. Le moteur, lui, composerait
   dans sa police par défaut sans lever la moindre erreur, et le livre sortirait faux en
   silence. Si une police manque malgré tout, un `⚠ repli` s'affiche au pied.
+- **Chaque répertoire livré porte sa fiche de téléversement.** `televersement.txt` dit
+  l'imprimeur, le format, la reliure, le papier, la finition, puis ce que la composition a
+  mesuré — pages, dos, gouttière, fond perdu, planche —, et enfin les avertissements du
+  compte rendu. C'est ce qu'on recopie dans le formulaire de l'imprimeur, des semaines plus
+  tard : les PDF, eux, sont muets. Rien n'y vient du cookbook, tout du catalogue.
 - **Le compte rendu d'un package avertit sans refuser.** Une image posée sous 300 ppp
   s'imprimera floue ; un texte au dos sous le seuil que l'imprimeur publie — 81 pages chez
   Lulu, 79 chez KDP, rien chez les quatre autres — n'y est pas autorisé. Les deux

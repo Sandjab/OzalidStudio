@@ -1419,10 +1419,9 @@ pub struct Resultat {
 /// mot brut se lit encore, une ligne absente ne se lit pas.
 fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<String> {
     let cle = livrable.finition.as_deref()?;
-    Some(
-        pod.and_then(|p| p.finitions.iter().find(|f| f.cle == cle))
-            .map_or_else(|| cle.to_owned(), |f| f.nom.clone()),
-    )
+    // La règle vit sur le `Pod` : la fiche de téléversement la lit au même endroit, et
+    // deux résolutions d'une même clé finiraient par ne plus donner le même nom.
+    Some(pod.map_or_else(|| cle.to_owned(), |p| p.nom_finition(cle)))
 }
 
 /// Ce que rend la génération : les packages, et le projet tel qu'elle l'a laissé.
@@ -1464,6 +1463,9 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
                     dos: d.dos_mm,
                     fond_perdu: d.fond_perdu_mm,
                 },
+                // Le nom d'imprimeur, pas la clé : c'est lui que la fiche de
+                // téléversement porte, et « mat » ne se coche sur aucun bon de commande.
+                finition: nom_finition(d, Some(r.pod)),
                 cle: d.cle(),
                 cle_gabarit: d.fabrication.cle_gabarit(),
             }),
@@ -2122,6 +2124,7 @@ pub fn envoyer(atelier: State<Atelier>) -> Result<Vec<ResultatEnvoi>, String> {
             fond_perdu: d.fond_perdu_mm,
         },
         &d.cle(),
+        nom_finition(d, catalogue::pod(&d.fabrication.pod)).as_deref(),
         &racine,
         &typst,
     )?;

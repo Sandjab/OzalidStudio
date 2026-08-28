@@ -59,6 +59,9 @@ fn main() -> Result<(), String> {
             resolu.papier,
             releve,
             &pr.cle,
+            // L'exemple ne déclare pas de finition : c'est une donnée de commande, et
+            // elle vit sur le livrable du projet, pas sur un gabarit.
+            None,
             &int,
             &sortie,
             &typst,

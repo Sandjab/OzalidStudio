@@ -725,6 +725,16 @@ pub fn fournis() -> Result<Vec<Pod>, String> {
 pub struct Provider {
     pub cle: String,
     pub libelle: String,
+    /// Les trois noms que le libellé fond ou tait, tels que le catalogue les écrit.
+    ///
+    /// Ils sont ici et non retrouvés par `catalogue::resout` chez l'appelant : `package`
+    /// écrit une fiche de téléversement qui les porte, et la vue plate existe justement
+    /// pour que ses consommateurs n'aient rien à retraduire. Un `Provider` bâti à la
+    /// main — un essai — resterait sinon incapable de composer, faute de résoudre contre
+    /// une table qu'il ne peuple pas.
+    pub pod_nom: String,
+    pub format_nom: String,
+    pub reliure_nom: String,
     pub format: (f64, f64),
     pub marge_haut: f64,
     pub marge_bas: f64,
@@ -815,6 +825,9 @@ pub fn aplatit(pods: &[Pod]) -> Vec<Provider> {
                     // donc le même nom. Le libellé du **livrable**, qui sert le pied et
                     // les comptes rendus de package, est un autre libellé.
                     libelle: format!("{} — {}", pod.nom, f.nom),
+                    pod_nom: pod.nom.clone(),
+                    format_nom: f.nom.clone(),
+                    reliure_nom: r.nom.clone(),
                     // La vue plate garde les tuples de la table historique : c'est ce qui
                     // dispense `interieur` de traduire quoi que ce soit pour les lire.
                     format: (f.mm.largeur, f.mm.hauteur),
@@ -942,6 +955,20 @@ pub fn pod(cle: &str) -> Option<&'static Pod> {
     pods().iter().find(|p| p.cle == cle)
 }
 
+impl Pod {
+    /// Le nom d'imprimeur d'une finition, tel qu'on le coche sur un bon de commande.
+    ///
+    /// La clé du `.ozalid` ne se montre pas : c'est « Pelliculage mat » qu'on commande,
+    /// pas « mat ». À défaut de nom — une finition que le catalogue ne porte plus —, la
+    /// clé telle quelle : un mot brut se lit encore, une ligne absente ne se lit pas.
+    pub fn nom_finition(&self, cle: &str) -> String {
+        self.finitions
+            .iter()
+            .find(|f| f.cle == cle)
+            .map_or_else(|| cle.to_owned(), |f| f.nom.clone())
+    }
+}
+
 /// Un livrable résolu contre le catalogue : quatre références dans une table qui vit
 /// aussi longtemps que le processus. `Copy` — rien ici n'est possédé.
 #[derive(Debug, Clone, Copy)]
@@ -1022,6 +1049,9 @@ impl Resolu {
         Provider {
             cle: fabrication.cle_gabarit(),
             libelle: format!("{} — {}", self.pod.nom, self.format.nom),
+            pod_nom: self.pod.nom.clone(),
+            format_nom: self.format.nom.clone(),
+            reliure_nom: self.reliure.nom.clone(),
             format: (self.format.mm.largeur, self.format.mm.hauteur),
             marge_haut: self.format.marges.haut,
             marge_bas: self.format.marges.bas,
@@ -2978,6 +3008,18 @@ non_outille = "géométrie du casewrap non relevée"
             })
             .unwrap_or_else(|e| panic!("{heritee} : {e}"));
         }
+    }
+
+    /// La finition se montre sous son nom d'imprimeur : c'est « Pelliculage mat » qu'on
+    /// coche sur un bon de commande, pas « mat ». Une clé que le catalogue ne porte plus
+    /// se rend telle quelle — un mot brut se lit encore, une ligne absente ne se lit pas.
+    #[test]
+    fn une_finition_se_nomme_comme_l_imprimeur_la_nomme() {
+        // `super::pod` : le module de test a son propre helper `pod`, qui fabrique un
+        // TOML et masque celui du catalogue.
+        let bod = super::pod("bod").expect("BoD est au catalogue");
+        assert_eq!(bod.nom_finition("mat"), "Pelliculage mat");
+        assert_eq!(bod.nom_finition("velours"), "velours");
     }
 
     /// Le seuil de texte au dos remonte du fichier de POD jusqu'à la vue plate : c'est
