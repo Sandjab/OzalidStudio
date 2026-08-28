@@ -516,6 +516,33 @@ test('l\'ISBN part rogné, jamais reformaté ni null', async () => {
 });
 
 /**
+ * Le dépôt légal part **rogné**, en chaîne, jamais `null`.
+ *
+ * C'est une date d'acte recopiée telle qu'elle sera imprimée — « septembre 2026 » —, que
+ * rien dans l'application ne sait reformater. Un front qui enverrait `null` ferait échouer
+ * la désérialisation au premier caractère tapé, comme pour l'ISBN.
+ */
+test('le dépôt légal part rogné, jamais null', async () => {
+  let envoye = null;
+  const capte = async (cmd, args) => {
+    if (cmd === 'livre_modifier') {
+      envoye = args.livre;
+      return PROJET;
+    }
+    return invoke(cmd, args);
+  };
+  const { els } = await charge({ invoke: capte, open: async () => null });
+
+  els.get('inDepotLegal').value = '';
+  await els.get('inDepotLegal').declenche('change');
+  assert.strictEqual(envoye.depot_legal, '', 'dépôt légal vide envoyé en null');
+
+  els.get('inDepotLegal').value = '  septembre 2026  ';
+  await els.get('inDepotLegal').declenche('change');
+  assert.strictEqual(envoye.depot_legal, 'septembre 2026', 'espaces gardés');
+});
+
+/**
  * Les cinq textes déplacés ne doivent plus être offerts par l'onglet Couverture.
  *
  * Les y laisser ferait deux endroits où saisir un éditeur, qui peuvent se contredire —

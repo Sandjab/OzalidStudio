@@ -593,6 +593,7 @@ function afficherProjet(p) {
   $('inCopyright').value = p.livre.copyright;
   $('inPrix').value = p.livre.prix;
   $('inIsbn').value = p.livre.isbn ?? '';
+  $('inDepotLegal').value = p.livre.depot_legal ?? '';
   $('inMention').value = p.livre.mention;
   // Le champ est absent du JSON quand le livre n'a pas de dédicace : `skip_serializing_if`.
   $('inDedicace').value = p.livre.dedicace ?? '';
@@ -1042,6 +1043,9 @@ function livre() {
     // c'est cette forme-là qui s'imprime en clair au-dessus des barres. Le Rust les
     // ignore pour calculer, et les recopie pour composer.
     isbn: $('inIsbn').value.trim(),
+    // Rogné, jamais reformaté : « septembre 2026 » est ce qui s'imprimera, et rien ici ne
+    // sait lire une date. Le champ vide part en chaîne vide, pas en null.
+    depot_legal: $('inDepotLegal').value.trim(),
     mention: $('inMention').value.trim(),
     // Non rognée : c'est le Rust qui rogne, en un seul endroit — et il substitue les
     // jetons avant de rogner, ce que le front ne saurait pas faire.
@@ -1508,8 +1512,8 @@ construireFaces();
 cablerPrises();
 cablerPlacement();
 for (const id of ['inTitre', 'inTitrePage', 'inAuteur', 'inGenre', 'inEditeur',
-  'inCollection', 'inMonogramme', 'inCopyright', 'inPrix', 'inIsbn', 'inMention',
-  'inDedicace', 'inChapitres']) {
+  'inCollection', 'inMonogramme', 'inCopyright', 'inPrix', 'inIsbn', 'inDepotLegal',
+  'inMention', 'inDedicace', 'inChapitres']) {
   $(id).addEventListener('change', majLivre);
 }
 /**
