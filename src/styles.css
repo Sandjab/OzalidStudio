@@ -29,6 +29,12 @@
   --gris: #5f5f5c;
   --gris-fort: #4f4f4c;
   --rouge: #c00000;
+  /* Les deux états d'enregistrement de l'entête. Ce sont des `--gris` teintés, pas un
+     rouge et un vert : la couleur de l'écran reste à la couverture et le rouge franc à
+     l'alerte — celui-ci ne dit pas « erreur », il dit « pas encore sur le disque ».
+     Teintés à luminance voisine de `--gris`, ils tiennent le 4,5:1 exigé plus haut. */
+  --gris-modifie: #734b48;
+  --gris-enregistre: #3f6249;
   --trait: #d3d3d0;
   --survol: #ddddda;
   --eteint: #e2e2df;
@@ -529,6 +535,11 @@ button.nu:hover:not(:disabled) { color: var(--rouge); }
 }
 
 .etat { font-size: .85rem; color: var(--gris); }
+/* L'état d'enregistrement se voit avant de se lire — c'est la seule mention de l'entête
+   qu'on cherche du coin de l'œil. « jamais enregistré » reste gris : il n'y a rien à
+   perdre. */
+.etat.modifie { color: var(--gris-modifie); }
+.etat.enregistre { color: var(--gris-enregistre); }
 
 /* La taille de la fenêtre : des chiffres qu'on lit pour les recopier, donc alignés et
    à chasse fixe. Elle ne parle pas du livre — c'est la seule mention de l'entête dans

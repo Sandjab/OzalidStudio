@@ -575,6 +575,11 @@ function afficherProjet(p) {
   $('etatEnregistrement').textContent = p.modifie
     ? 'modifié'
     : (p.chemin ? 'enregistré' : 'jamais enregistré');
+  // La teinte double le mot : le travail non enregistré tire sur le rouge, ce qui est
+  // sur le disque sur le vert. « jamais enregistré » reste gris — il n'y a rien à perdre.
+  $('etatEnregistrement').className = p.modifie
+    ? 'etat modifie'
+    : (p.chemin ? 'etat enregistre' : 'etat');
 
   $('inTitre').value = p.livre.titre;
   $('inTitrePage').value = p.livre.titre_page;
@@ -877,6 +882,7 @@ async function afficherAucunProjet() {
   $('cheminProjet').textContent = 'aucun projet ouvert';
   $('cheminProjet').title = '';
   $('etatEnregistrement').textContent = '';
+  $('etatEnregistrement').className = 'etat';
   majEtapes();
   await afficherRecents();
   majPied();
