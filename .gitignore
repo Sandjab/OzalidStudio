@@ -7,3 +7,5 @@ node_modules/
 # Ressources et répertoires de travail (manuscrits, couvertures, sorties) —
 # le code est versionné, pas les romans.
 build/
+.claude/worktrees/
+.superpowers/
