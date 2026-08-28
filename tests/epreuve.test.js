@@ -28,7 +28,15 @@ const PROJET = {
   couverture: null,
   couverture_importee: false,
   images: ['couverture.jpg'],
-  interieur: { police: 'Alegreya' },
+  // Les onze tailles telles que le Rust les sert : `Interieur` n'en tait aucune, et
+  // une fixture qui en oublierait ferait paraître des champs vides là où l'application
+  // en montre toujours onze.
+  interieur: {
+    police: 'Alegreya',
+    corps: 9.5, faux_titre: 11, page_titre_auteur: 10.5, page_titre_titre: 15,
+    page_titre_genre: 10, copyright: 8, dedicace: 9.5, numero: 13,
+    titre_section: 10, ouverture_piece: 10, folio: 8,
+  },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
   livraison: {
     livrables: [{
@@ -134,8 +142,42 @@ test('changer la police enregistre le réglage dans le projet', async () => {
   els.get('inPoliceInterieur').value = 'Cardo';
   await els.get('inPoliceInterieur').declenche('change');
   // Recopié : l'objet vient du contexte où s'exécute app.js, donc d'un autre realm.
-  assert.deepStrictEqual({ ...recu }, { police: 'Cardo' });
+  // Les tailles voyagent avec, inchangées : le formulaire commet l'intérieur entier à
+  // chaque geste, et en omettre une la ramènerait à son défaut sans le dire.
+  assert.deepStrictEqual({ ...recu }, { ...PROJET.interieur, police: 'Cardo' });
   assert.strictEqual(els.get('inPoliceInterieur').value, 'Cardo');
+});
+
+/**
+ * Une taille saisie doit atteindre le Rust, et elle seule : c'est la pagination
+ * qu'elle déplace, donc l'épaisseur du dos. Un champ qui changerait d'apparence sans
+ * rien enregistrer laisserait composer dans le corps qu'on ne voit plus.
+ *
+ * Le champ est lu en nombre et non en chaîne — `Interieur` attend des `f64`, et serde
+ * refuse `"10.5"`. Le test le vérifie par le type, pas seulement par la valeur.
+ */
+test('changer une taille enregistre le réglage dans le projet', async () => {
+  let recu = null;
+  const { els } = await charge({
+    invoke: faux([LULU], {
+      projet_importer: PROJET,
+      interieur_modifier: (args) => {
+        recu = args.interieur;
+        return { ...PROJET, interieur: args.interieur };
+      },
+    }),
+    open: async () => '/dev/ozalid/build/LHC/livre.toml',
+  });
+  await els.get('btImporter').declenche('click');
+  els.get('inTailleTitre').value = '18.5';
+  await els.get('inTailleTitre').declenche('change');
+  assert.deepStrictEqual(
+    { ...recu },
+    { ...PROJET.interieur, page_titre_titre: 18.5 },
+    'la taille saisie part seule, les dix autres inchangées',
+  );
+  assert.strictEqual(typeof recu.page_titre_titre, 'number');
+  assert.strictEqual(els.get('inTailleTitre').value, '18.5');
 });
 
 /**

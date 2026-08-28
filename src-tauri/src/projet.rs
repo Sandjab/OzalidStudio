@@ -1484,6 +1484,7 @@ dos = 7.21
         p.meta.couverture.maquette = Some(crate::maquettes::fournie("bandeau"));
         p.meta.interieur = crate::interieur::Interieur {
             police: "Cardo".into(),
+            ..Default::default()
         };
         p.meta.envois = crate::envoi::Envois {
             gabarit: "une écriture à l'encre bleue : {envoi}".into(),
@@ -1740,6 +1741,35 @@ auteur = "Ivan Pjig"
 "#;
         let m: Metadonnees = toml::from_str(toml).expect("projet sans [interieur] refusé");
         assert_eq!(m.interieur.police, "EB Garamond");
+    }
+
+    /// Un `.ozalid` écrit avant que les tailles ne soient réglables porte un
+    /// `[interieur]` qui ne dit que sa police. C'est le fichier que l'utilisateur a sur
+    /// son disque : il doit s'ouvrir sur les tailles d'alors — celles qui vivaient en
+    /// dur dans le module —, et non être refusé pour onze champs manquants. C'est aussi
+    /// la raison pour laquelle `VERSION` n'a pas bougé.
+    #[test]
+    fn un_interieur_sans_tailles_prend_celles_qui_etaient_codees_en_dur() {
+        let toml = r#"
+[ozalid]
+version = 5
+
+[livre]
+titre = "Les Heures creuses"
+auteur = "Ivan Pjig"
+
+[interieur]
+police = "Cardo"
+"#;
+        let m: Metadonnees = toml::from_str(toml).expect("intérieur sans tailles refusé");
+        assert_eq!(
+            m.interieur,
+            crate::interieur::Interieur {
+                police: "Cardo".into(),
+                ..Default::default()
+            },
+            "la police écrite survit, les tailles reviennent à leurs défauts"
+        );
     }
 
     /// Une fabrication écrite en clair : les quatre axes, dans l'ordre de la clé.
@@ -2010,6 +2040,7 @@ blanche = true
         let mut p = neuf();
         p.modifier_interieur(crate::interieur::Interieur {
             police: "Cardo".into(),
+            ..Default::default()
         });
         assert!(!reste(&p), "la police n'a rien périmé");
 

@@ -368,6 +368,7 @@ mod tests {
             &livre(),
             &Interieur {
                 police: "Alegreya".into(),
+                ..Default::default()
             },
             &chapitres(),
             12.0,

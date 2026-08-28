@@ -318,7 +318,7 @@ résultats. Tout le reste se teste sans fenêtre.
 | `image` / `png` | Dimensions et cadrage ; lecture des réglages inscrits dans un PNG |
 | `couverture` | Maquette typée → source Typst des deux faces |
 | `maquettes` | Le format `.maquette`, les livrées, les personnalisées |
-| `interieur` | Source Typst de l'intérieur, police, convergence gouttière/parité |
+| `interieur` | Source Typst de l'intérieur, police et tailles, convergence gouttière/parité |
 | `typst` | Invocation du sidecar : mesurer, compiler, rendre un aperçu |
 | `planche` | Assemblage 4ème \| dos \| 1ère, et dos composé élément par élément |
 | `package` | Un livrable, un intérieur, une planche, dans son répertoire |

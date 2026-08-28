@@ -142,6 +142,40 @@
       <p class="echantillon" id="echantillonPolice" hidden>L’aube naît, et le cœur
         s’étonne : « où donc allions-nous ? »</p>
       <p class="note alerte" id="echantillonAbsent" hidden></p>
+
+      <!-- Les onze tailles, dans l'ordre où le livre les rencontre : le texte d'abord,
+           puis les liminaires page à page, puis ce qui ouvre une section, le folio pour
+           finir. Elles viennent après l'échantillon, et non entre lui et le sélecteur :
+           l'échantillon est l'image de l'écriture choisie, les séparer briserait le seul
+           couple de cette boîte qui se lise d'un coup d'œil.
+           Chacune est un levier sur le dos : le corps du texte évidemment, mais aussi le
+           titre d'un chapitre, qui pousse une ligne à la page suivante trois cents fois.
+           Les bornes du champ sont celles de `Interieur::verifie` — c'est le Rust qui
+           refuse, le champ ne fait que le dire plus tôt. -->
+      <p class="note">Les tailles sont en points. Chacune relance la composition, donc
+        recalcule le dos : ce sont onze leviers sur son épaisseur.</p>
+      <label><span>Texte</span>
+        <input type="number" id="inTailleCorps" min="4" max="48" step="0.5"></label>
+      <label><span>Faux-titre</span>
+        <input type="number" id="inTailleFauxTitre" min="4" max="48" step="0.5"></label>
+      <label><span>Auteur, page de titre</span>
+        <input type="number" id="inTailleAuteur" min="4" max="48" step="0.5"></label>
+      <label><span>Titre, page de titre</span>
+        <input type="number" id="inTailleTitre" min="4" max="48" step="0.5"></label>
+      <label><span>Genre, page de titre</span>
+        <input type="number" id="inTailleGenre" min="4" max="48" step="0.5"></label>
+      <label><span>Copyright</span>
+        <input type="number" id="inTailleCopyright" min="4" max="48" step="0.5"></label>
+      <label><span>Dédicace</span>
+        <input type="number" id="inTailleDedicace" min="4" max="48" step="0.5"></label>
+      <label><span>Numéro de partie ou de chapitre</span>
+        <input type="number" id="inTailleNumero" min="4" max="48" step="0.5"></label>
+      <label><span>Titre de partie ou de chapitre</span>
+        <input type="number" id="inTailleTitreSection" min="4" max="48" step="0.5"></label>
+      <label><span>Titre de préface ou de postface</span>
+        <input type="number" id="inTailleOuverture" min="4" max="48" step="0.5"></label>
+      <label><span>Folio</span>
+        <input type="number" id="inTailleFolio" min="4" max="48" step="0.5"></label>
     </div>
   </section>
 

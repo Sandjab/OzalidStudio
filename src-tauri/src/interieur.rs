@@ -48,40 +48,121 @@ fn police_defaut() -> String {
     "EB Garamond".into()
 }
 
+/// Les bornes qu'une taille d'intérieur ne franchit pas, en points.
+///
+/// Elles ne cherchent pas le bon goût — 4 pt est illisible et 48 pt grotesque, mais ni
+/// l'un ni l'autre ne casse la composition. Elles gardent de ce qui la casse : un 0 ou
+/// un négatif, que Typst compose sans lever d'erreur, en rendant un PDF blanc dont la
+/// pagination donne un dos faux.
+pub const MIN_PT: f64 = 4.0;
+pub const MAX_PT: f64 = 48.0;
+
 /// Réglages d'intérieur du projet.
 ///
-/// L'imprimeur impose le format, les marges, la gouttière et le corps ; le livre
-/// choisit son caractère. C'est la raison pour laquelle la police n'est pas un champ
-/// de `Provider`.
+/// L'imprimeur impose le format, les marges et la gouttière ; le livre choisit son
+/// caractère et ses tailles. C'est la raison pour laquelle rien de ceci n'est un champ
+/// de `Provider` — le corps, en particulier, était identique dans les quatorze entrées
+/// de la table.
+///
+/// **Chacune de ces tailles déplace la pagination, donc le dos** : `modifier_interieur`
+/// oublie les mesures pour cette raison, comme il le fait pour la police.
+///
+/// `#[serde(default)]` porte sur la structure entière : un `.ozalid` écrit avant ces
+/// champs les reçoit de `Default`, et lit donc le livre qu'il composait. `VERSION` n'a
+/// pas à bouger — même dispositif que `titre_page`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Interieur {
-    #[serde(default = "police_defaut")]
     pub police: String,
+    /// Le texte courant.
+    pub corps: f64,
+    /// Le faux-titre, seul sur la page 1.
+    pub faux_titre: f64,
+    /// L'auteur, en tête de la page de titre.
+    pub page_titre_auteur: f64,
+    /// Le titre, au milieu de la page de titre.
+    pub page_titre_titre: f64,
+    /// La mention de genre, sous le titre.
+    pub page_titre_genre: f64,
+    /// Le pavé de copyright, au bas de son verso.
+    pub copyright: f64,
+    /// La dédicace, quand le livre en porte une.
+    pub dedicace: f64,
+    /// Le numéro d'une page de partie **et** celui d'un chapitre : deux niveaux du même
+    /// gabarit, un seul réglage.
+    pub numero: f64,
+    /// Le titre qui suit ce numéro, pour la partie comme pour le chapitre.
+    pub titre_section: f64,
+    /// Le titre d'une pièce à texte — préface, postface : le mot occupe la ligne du
+    /// numéro, mais composé comme un titre, d'où sa taille à lui.
+    pub ouverture_piece: f64,
+    /// Le folio.
+    pub folio: f64,
 }
 
 impl Default for Interieur {
     fn default() -> Self {
         Self {
             police: police_defaut(),
+            corps: CORPS_PT,
+            faux_titre: 11.0,
+            page_titre_auteur: 10.5,
+            page_titre_titre: 15.0,
+            page_titre_genre: 10.0,
+            copyright: 8.0,
+            dedicace: 9.5,
+            numero: 13.0,
+            titre_section: 10.0,
+            ouverture_piece: 10.0,
+            folio: FOLIO_PT,
         }
     }
 }
 
 impl Interieur {
-    /// Refuse une police absente de la liste.
+    /// Les onze tailles, chacune sous le nom que l'interface lui donne.
     ///
-    /// Sans ce contrôle, Typst composerait dans sa police par défaut **sans lever
-    /// d'erreur** : `--ignore-system-fonts` empêche une substitution par le système,
-    /// pas une substitution par le défaut du binaire.
+    /// Une liste plutôt que onze conditions recopiées : le message d'erreur nomme le
+    /// champ fautif, et un douzième réglage s'ajoute ici en une ligne.
+    fn tailles(&self) -> [(&'static str, f64); 11] {
+        [
+            ("corps du texte", self.corps),
+            ("faux-titre", self.faux_titre),
+            ("auteur en page de titre", self.page_titre_auteur),
+            ("titre en page de titre", self.page_titre_titre),
+            ("genre en page de titre", self.page_titre_genre),
+            ("copyright", self.copyright),
+            ("dédicace", self.dedicace),
+            ("numéro de partie ou de chapitre", self.numero),
+            ("titre de partie ou de chapitre", self.titre_section),
+            ("titre de préface ou de postface", self.ouverture_piece),
+            ("folio", self.folio),
+        ]
+    }
+
+    /// Refuse une police absente de la liste, et une taille hors bornes.
+    ///
+    /// Sans le premier contrôle, Typst composerait dans sa police par défaut **sans
+    /// lever d'erreur** : `--ignore-system-fonts` empêche une substitution par le
+    /// système, pas une substitution par le défaut du binaire. Sans le second, un 0
+    /// tapé dans un champ passerait de même — le formulaire pose les mêmes bornes,
+    /// mais un `.ozalid` retouché à la main ne passe pas par le formulaire.
     pub fn verifie(&self) -> Result<(), String> {
-        if POLICES_TEXTE.contains(&self.police.as_str()) {
-            return Ok(());
+        if !POLICES_TEXTE.contains(&self.police.as_str()) {
+            return Err(format!(
+                "police d'intérieur inconnue : « {} ». Attendu : {}.",
+                self.police,
+                POLICES_TEXTE.join(", ")
+            ));
         }
-        Err(format!(
-            "police d'intérieur inconnue : « {} ». Attendu : {}.",
-            self.police,
-            POLICES_TEXTE.join(", ")
-        ))
+        for (quoi, pt) in self.tailles() {
+            if !(MIN_PT..=MAX_PT).contains(&pt) {
+                return Err(format!(
+                    "taille du {quoi} hors bornes : {pt} pt. Attendu entre {MIN_PT} et {MAX_PT} pt."
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -192,7 +273,7 @@ fn assemble(
     let lead = INTERLIGNE - 1.0;
     let folio = format!(
         r#"context align(center, text(size: {}pt, counter(page).display()))"#,
-        FOLIO_PT
+        int.folio
     );
 
     // Les zones sont déjà validées par `decoupe` : le découpage n'a qu'à les suivre.
@@ -244,7 +325,7 @@ fn assemble(
         pr.exterieur,
         // La police est validée en amont par `Interieur::verifie` : pas d'échappement.
         int.police,
-        CORPS_PT,
+        int.corps,
         fg = foreground(envoi, fw),
     ));
 
@@ -254,7 +335,7 @@ fn assemble(
         s.push_str(a);
     }
 
-    s.push_str(&liminaires(livre, liminaires_manuscrit));
+    s.push_str(&liminaires(livre, int, liminaires_manuscrit));
 
     // — Corps, folio rétabli. La numérotation court depuis le faux-titre, seul son
     //   affichage était supprimé : le premier chapitre s'ouvre donc en page 5, ou en 7
@@ -290,9 +371,10 @@ fn assemble(
                 }
                 s.push_str(&format!(
                     "#page(footer: none)[\n#v(22mm)\n\
-                     #align(center, text(size: 13pt)[{r}])\n"
+                     #align(center, text(size: {}pt)[{r}])\n",
+                    int.numero
                 ));
-                s.push_str(&titre_sous_numero(&p.titre));
+                s.push_str(&titre_sous_numero(&p.titre, int.titre_section));
                 s.push_str("]\n#page(footer: none)[]\n");
                 apres_page = true;
             }
@@ -303,9 +385,10 @@ fn assemble(
                     s.push_str("#pagebreak()\n");
                 }
                 s.push_str(&format!(
-                    "#v(22mm)\n#align(center, text(size: 13pt)[{numero}])\n"
+                    "#v(22mm)\n#align(center, text(size: {}pt)[{numero}])\n",
+                    int.numero
                 ));
-                s.push_str(&titre_sous_numero(&p.titre));
+                s.push_str(&titre_sous_numero(&p.titre, int.titre_section));
                 s.push_str("#v(11mm)\n");
                 s.push_str(&blocs_typst(&p.blocs));
                 apres_page = false;
@@ -325,7 +408,7 @@ fn assemble(
             if i > 0 {
                 s.push_str("#pagebreak()\n");
             }
-            s.push_str(&ouverture_piece(&p.titre));
+            s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
             s.push_str(&blocs_typst(&p.blocs));
         }
     }
@@ -461,24 +544,28 @@ pub fn source_ebook(
 ///
 /// Toutes sans folio, et sans avoir à le dire : `footer: none`, posé par l'entête que
 /// `source` écrit, court jusqu'au `#set page(footer: …)` qui ouvre le corps.
-fn liminaires(livre: &Livre, pieces: &[Piece]) -> String {
+fn liminaires(livre: &Livre, int: &Interieur, pieces: &[Piece]) -> String {
     let mut s = String::new();
     s.push_str(&format!(
         r#"#v(42mm)
-#align(center, text(size: 11pt, tracking: 0.12em)[{}])
+#align(center, text(size: {}pt, tracking: 0.12em)[{}])
 #pagebreak()
 #pagebreak()
 
 #v(30mm)
-#align(center, text(size: 10.5pt, tracking: 0.1em)[{}])
+#align(center, text(size: {}pt, tracking: 0.1em)[{}])
 #v(14mm)
-#align(center, text(size: 15pt, tracking: 0.06em)[{}])
+#align(center, text(size: {}pt, tracking: 0.06em)[{}])
 #v(10mm)
-#align(center, emph(text(size: 10pt)[{}]))
+#align(center, emph(text(size: {}pt)[{}]))
 "#,
+        int.faux_titre,
         majuscules(&livre.titre),
+        int.page_titre_auteur,
         majuscules(&livre.auteur),
+        int.page_titre_titre,
         majuscules(&livre.titre_page().replace('\n', "\u{1}")).replace('\u{1}', r" \ "),
+        int.page_titre_genre,
         echappe(&livre.genre),
     ));
 
@@ -491,11 +578,12 @@ fn liminaires(livre: &Livre, pieces: &[Piece]) -> String {
     s.push_str(&format!(
         r#"#place(bottom + center, block(width: 100%)[
   #set par(leading: 0.5em, spacing: 0.5em, first-line-indent: 0pt, justify: false)
-  #align(center, text(size: 8pt)[{}])
+  #align(center, text(size: {}pt)[{}])
 ])
 #pagebreak()
 
 "#,
+        int.copyright,
         echappe(&livre.copyright()).replace('\n', r" \ ")
     ));
 
@@ -506,11 +594,12 @@ fn liminaires(livre: &Livre, pieces: &[Piece]) -> String {
     if let Some(d) = livre.dedicace() {
         s.push_str(&format!(
             r#"#v(48mm)
-#align(right, emph(text(size: 9.5pt)[{}]))
+#align(right, emph(text(size: {}pt)[{}]))
 #pagebreak()
 #pagebreak()
 
 "#,
+            int.dedicace,
             echappe(&d).replace('\n', r" \ ")
         ));
     }
@@ -518,7 +607,7 @@ fn liminaires(livre: &Livre, pieces: &[Piece]) -> String {
     // Les pièces liminaires du manuscrit ferment la série : `footer: none` court encore,
     // le folio ne sera rétabli qu'au premier chapitre.
     for p in pieces {
-        s.push_str(&ouverture_piece(&p.titre));
+        s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
         s.push_str(&blocs_typst(&p.blocs));
         // Ce qui suit une pièce liminaire ouvre en belle page — le corps, ou la pièce
         // suivante. Sa longueur, elle, dépend d'un texte que l'auteur retouche : une
@@ -546,12 +635,15 @@ fn majuscules(s: &str) -> String {
 /// L'ouverture d'une pièce à texte — préface, postface.
 ///
 /// Le mot occupe la ligne du numéro, mais composé comme un **titre** de chapitre : ce
-/// sont la casse et l'espacement qui font le titre, les 13 pt du gabarit étant la
-/// taille d'un chiffre isolé. Le blanc de 14,5 mm est la somme des deux blancs du
-/// gabarit (3,5 + 11) : le texte s'ouvre à la même hauteur que celui d'un chapitre.
-fn ouverture_piece(titre: &str) -> String {
+/// sont la casse et l'espacement qui font le titre, la taille du numéro étant celle
+/// d'un chiffre isolé. Le blanc de 14,5 mm est la somme des deux blancs du gabarit
+/// (3,5 + 11) : le texte s'ouvre à la même hauteur que celui d'un chapitre.
+///
+/// Sa taille se règle à part de `titre_section` bien qu'elles vaillent la même chose
+/// par défaut : ici le mot est seul sur sa ligne, là il vient sous un numéro.
+fn ouverture_piece(titre: &str, pt: f64) -> String {
     format!(
-        "#v(22mm)\n#align(center, text(size: 10pt, tracking: 0.14em)[{}])\n#v(14.5mm)\n",
+        "#v(22mm)\n#align(center, text(size: {pt}pt, tracking: 0.14em)[{}])\n#v(14.5mm)\n",
         majuscules(titre)
     )
 }
@@ -559,12 +651,12 @@ fn ouverture_piece(titre: &str) -> String {
 /// Le titre sous le numéro d'une partie ou d'un chapitre — même casse, même espacement
 /// que l'un ou l'autre, puisque c'est le même gabarit qui les compose. Absent si la
 /// pièce n'a pas de titre : c'est le cas admis par le format (`## 7`, `## Partie I`).
-fn titre_sous_numero(titre: &str) -> String {
+fn titre_sous_numero(titre: &str, pt: f64) -> String {
     if titre.is_empty() {
         return String::new();
     }
     format!(
-        "#v(3.5mm)\n#align(center, text(size: 10pt, tracking: 0.14em)[{}])\n",
+        "#v(3.5mm)\n#align(center, text(size: {pt}pt, tracking: 0.14em)[{}])\n",
         majuscules(titre)
     )
 }
@@ -842,6 +934,177 @@ mod tests {
         );
     }
 
+    /// Le livre et le manuscrit qui font paraître les onze rôles d'un coup : la dédicace
+    /// pour sa page, une pièce liminaire pour son ouverture, une page de partie et un
+    /// chapitre pour le numéro et le titre qu'ils partagent.
+    fn livre_complet() -> Livre {
+        Livre {
+            dedicace: "À M., qui a tenu la lampe.".into(),
+            ..livre()
+        }
+    }
+
+    fn pieces_completes() -> Vec<Piece> {
+        vec![
+            Piece {
+                sorte: Sorte::Liminaire,
+                titre: "Préface".into(),
+                blocs: vec![Bloc::Paragraphe("Avant.".into())],
+            },
+            Piece {
+                sorte: Sorte::Partie("I".into()),
+                titre: "Première".into(),
+                blocs: vec![],
+            },
+            Piece {
+                sorte: Sorte::Chapitre(1),
+                titre: "Un".into(),
+                blocs: vec![Bloc::Paragraphe("Texte.".into())],
+            },
+        ]
+    }
+
+    /// La source complète d'un livre qui porte les onze rôles.
+    fn source_complete(int: &Interieur) -> String {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        source(
+            &livre_complet(),
+            int,
+            provider("bod").unwrap(),
+            &r,
+            &pieces_completes(),
+            None,
+        )
+    }
+
+    /// Les onze tailles deviennent des réglages **sans que la page bouge** : les défauts
+    /// de `Interieur` rendent exactement les littéraux qui vivaient dans le module.
+    ///
+    /// C'est le témoin de la migration, et il est écrit en clair : reprendre les
+    /// constantes ferait une assertion qui ne dit rien, et une valeur déplacée par
+    /// mégarde passerait sans un mot — en déplaçant la pagination, donc le dos.
+    #[test]
+    fn les_defauts_reproduisent_les_tailles_codees_en_dur() {
+        let s = source_complete(&Interieur::default());
+        for attendu in [
+            r#"size: 9.5pt, lang: "fr""#,
+            "text(size: 11pt, tracking: 0.12em)",
+            "text(size: 10.5pt, tracking: 0.1em)",
+            "text(size: 15pt, tracking: 0.06em)",
+            "emph(text(size: 10pt)",
+            "text(size: 8pt)[©",
+            "emph(text(size: 9.5pt)[À M.",
+            "text(size: 13pt)[I]",
+            "text(size: 10pt, tracking: 0.14em)",
+            "text(size: 8pt, counter(page).display())",
+        ] {
+            assert!(s.contains(attendu), "taille déplacée : {attendu}\n{s}");
+        }
+    }
+
+    /// Chaque rôle typographique prend la taille qu'on lui règle, et lui seule.
+    ///
+    /// Onze valeurs distinctes, parce que trois rôles partagent aujourd'hui la même :
+    /// le genre, le titre sous le numéro et l'ouverture de pièce valent tous 10 pt par
+    /// défaut, et un test écrit sur les défauts ne saurait pas dire lequel a bougé.
+    ///
+    /// Les deux mutualisations voulues sont vérifiées par le compte : le numéro sert à
+    /// la page de partie **et** au chapitre, le titre de section aux deux également.
+    #[test]
+    fn chaque_role_typographique_prend_sa_taille() {
+        let int = Interieur {
+            corps: 11.25,
+            faux_titre: 12.25,
+            page_titre_auteur: 13.25,
+            page_titre_titre: 14.25,
+            page_titre_genre: 15.25,
+            copyright: 16.25,
+            dedicace: 17.25,
+            numero: 18.25,
+            titre_section: 19.25,
+            ouverture_piece: 20.25,
+            folio: 21.25,
+            ..Interieur::default()
+        };
+        let s = source_complete(&int);
+        for attendu in [
+            r#"size: 11.25pt, lang: "fr""#,
+            "text(size: 12.25pt, tracking: 0.12em)",
+            "text(size: 13.25pt, tracking: 0.1em)",
+            "text(size: 14.25pt, tracking: 0.06em)",
+            "emph(text(size: 15.25pt)",
+            "text(size: 16.25pt)[©",
+            "emph(text(size: 17.25pt)[À M.",
+            "text(size: 20.25pt, tracking: 0.14em)",
+            "text(size: 21.25pt, counter(page).display())",
+        ] {
+            assert!(s.contains(attendu), "taille ignorée : {attendu}\n{s}");
+        }
+        assert_eq!(
+            s.matches("text(size: 18.25pt)").count(),
+            2,
+            "le numéro vaut pour la partie et pour le chapitre\n{s}"
+        );
+        assert_eq!(
+            s.matches("text(size: 19.25pt, tracking: 0.14em)").count(),
+            2,
+            "le titre de section vaut pour la partie et pour le chapitre\n{s}"
+        );
+    }
+
+    /// Une taille hors bornes est refusée à la saisie, et nommée.
+    ///
+    /// Sans ce contrôle, un 0 tapé dans un champ ne produit pas d'erreur : Typst compose
+    /// un texte de corps nul, le PDF sort blanc, et la pagination qui en découle donne
+    /// un dos faux. Le champ du formulaire pose les mêmes bornes, mais un `.ozalid`
+    /// écrit à la main ne passe pas par le champ.
+    #[test]
+    fn une_taille_hors_bornes_est_refusee_et_nommee() {
+        for (quoi, mauvais) in [
+            (
+                "corps",
+                Interieur {
+                    corps: 0.0,
+                    ..Interieur::default()
+                },
+            ),
+            (
+                "copyright",
+                Interieur {
+                    copyright: MIN_PT - 0.1,
+                    ..Interieur::default()
+                },
+            ),
+            (
+                "folio",
+                Interieur {
+                    folio: MAX_PT + 0.1,
+                    ..Interieur::default()
+                },
+            ),
+            (
+                "dédicace",
+                Interieur {
+                    dedicace: f64::NAN,
+                    ..Interieur::default()
+                },
+            ),
+        ] {
+            let err = mauvais.verifie().unwrap_err();
+            assert!(err.contains(quoi), "l'erreur doit nommer le rôle : {err}");
+        }
+        for bord in [MIN_PT, MAX_PT] {
+            let int = Interieur {
+                corps: bord,
+                ..Interieur::default()
+            };
+            assert!(int.verifie().is_ok(), "{bord} pt est admis");
+        }
+    }
+
     /// L'ebook est le livre **sans son imposition** : la gouttière revient à la marge
     /// extérieure, et il n'y a pas de blanche de parité. Les deux n'ont de sens qu'une fois
     /// le livre relié — à l'écran, l'une décale le texte une page sur deux et l'autre ajoute
@@ -1002,6 +1265,7 @@ mod tests {
     fn une_police_hors_liste_est_refusee_et_non_substituee() {
         let i = Interieur {
             police: "Comic Sans MS".into(),
+            ..Default::default()
         };
         let e = i.verifie().unwrap_err();
         assert!(
@@ -1021,6 +1285,7 @@ mod tests {
         for p in POLICES_TEXTE {
             let i = Interieur {
                 police: (*p).into(),
+                ..Default::default()
             };
             assert!(i.verifie().is_ok(), "{p} offerte mais refusée");
         }
@@ -1038,6 +1303,7 @@ mod tests {
         };
         let int = Interieur {
             police: "Cardo".into(),
+            ..Default::default()
         };
         let s = source(&livre(), &int, pr, &r, &chapitres(), None);
         assert_eq!(s.matches("font:").count(), 1);
@@ -1126,10 +1392,10 @@ mod tests {
     /// faux, et il ne se découvre qu'après tirage.
     #[test]
     fn une_dedicace_ajoute_une_belle_page_et_sa_blanche() {
-        let sans = liminaires(&livre(), &[]);
+        let sans = liminaires(&livre(), &Interieur::default(), &[]);
         let mut l = livre();
         l.dedicace = "À M., qui a tenu la lampe.".into();
-        let avec = liminaires(&l, &[]);
+        let avec = liminaires(&l, &Interieur::default(), &[]);
 
         assert_eq!(
             avec.matches("#pagebreak()").count(),
@@ -1147,12 +1413,12 @@ mod tests {
     /// du seul fait que le champ existe désormais.
     #[test]
     fn une_dedicace_vide_ou_blanche_ne_compose_rien() {
-        let sans = liminaires(&livre(), &[]);
+        let sans = liminaires(&livre(), &Interieur::default(), &[]);
         for creux in ["", "   ", "\n \n"] {
             let mut l = livre();
             l.dedicace = creux.into();
             assert_eq!(
-                liminaires(&l, &[]),
+                liminaires(&l, &Interieur::default(), &[]),
                 sans,
                 "« {creux:?} » a été pris pour une dédicace"
             );
@@ -1166,7 +1432,7 @@ mod tests {
     fn une_dedicace_est_echappee_et_garde_ses_sauts_de_ligne() {
         let mut l = livre();
         l.dedicace = "À #M.,\nqui a tenu la lampe.".into();
-        let s = liminaires(&l, &[]);
+        let s = liminaires(&l, &Interieur::default(), &[]);
 
         assert!(s.contains(r"À \#M.,"), "dédicace non échappée : {s}");
         assert!(
@@ -1221,7 +1487,11 @@ mod tests {
             titre: t.into(),
             blocs: vec![Bloc::Paragraphe("Entrez.".into())],
         };
-        let s = liminaires(&livre(), &[piece("Préface"), piece("Avant-propos")]);
+        let s = liminaires(
+            &livre(),
+            &Interieur::default(),
+            &[piece("Préface"), piece("Avant-propos")],
+        );
         assert_eq!(
             s.matches(r#"#pagebreak(to: "odd", weak: true)"#).count(),
             2,

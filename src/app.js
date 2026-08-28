@@ -598,6 +598,7 @@ function afficherProjet(p) {
   $('inDedicace').value = p.livre.dedicace ?? '';
   $('inChapitres').value = p.livre.chapitres ?? '';
   $('inPoliceInterieur').value = p.interieur.police;
+  for (const [champ, id] of Object.entries(TAILLES)) $(id).value = p.interieur[champ];
   // Sans attendre : l'échantillon est une image de l'écriture, pas une donnée du projet,
   // et le reste de l'affichage n'a pas à tenir derrière une police de huit cent kilo-octets.
   montrerEchantillon(p.interieur.police);
@@ -1114,10 +1115,37 @@ async function choisirManuscrit() {
 
 /* ---------- intérieur ---------- */
 
+/**
+ * Les onze tailles de l'intérieur : le champ du projet, et celui du formulaire.
+ *
+ * Une table plutôt que vingt-deux lignes recopiées entre l'envoi et l'affichage : c'est
+ * exactement là qu'un réglage se met à ne plus faire l'aller-retour, et le symptôme —
+ * une valeur qui se repose toute seule à l'ancienne au premier affichage — ne se
+ * distingue pas d'un refus du Rust.
+ *
+ * Les noms de gauche sont ceux de `Interieur` côté Rust : serde les lit tels quels.
+ */
+const TAILLES = {
+  corps: 'inTailleCorps',
+  faux_titre: 'inTailleFauxTitre',
+  page_titre_auteur: 'inTailleAuteur',
+  page_titre_titre: 'inTailleTitre',
+  page_titre_genre: 'inTailleGenre',
+  copyright: 'inTailleCopyright',
+  dedicace: 'inTailleDedicace',
+  numero: 'inTailleNumero',
+  titre_section: 'inTailleTitreSection',
+  ouverture_piece: 'inTailleOuverture',
+  folio: 'inTailleFolio',
+};
+
 async function majInterieur() {
-  await tente(async () => afficherProjet(await invoke('interieur_modifier', {
-    interieur: { police: $('inPoliceInterieur').value },
-  })));
+  const interieur = { police: $('inPoliceInterieur').value };
+  // Un champ vidé donne 0, que `Interieur::verifie` refuse en nommant le rôle. C'est
+  // voulu : le laisser tomber en silence sur l'ancienne valeur ferait un champ qui
+  // paraît accepter tout et n'obéit qu'à moitié.
+  for (const [champ, id] of Object.entries(TAILLES)) interieur[champ] = Number($(id).value);
+  await tente(async () => afficherProjet(await invoke('interieur_modifier', { interieur })));
 }
 
 /**
@@ -1349,6 +1377,9 @@ $('btPackager').addEventListener('click', packager);
 $('btEbooks').addEventListener('click', ebooks);
 $('btEpreuve').addEventListener('click', epreuve);
 $('inPoliceInterieur').addEventListener('change', majInterieur);
+// `change` et non `input` : chaque frappe dans un champ de taille relancerait la
+// composition, et une taille se tape chiffre à chiffre — 1, puis 12.
+for (const id of Object.values(TAILLES)) $(id).addEventListener('change', majInterieur);
 // Changer de livrable déplace le format de l'aperçu et l'épaisseur du dos : c'est
 // le projet qui les porte, et `afficherProjet` suffit à les remettre d'accord.
 // Les vignettes du rail, elles, ne sont pas dans le projet : ce sont les pages d'une
