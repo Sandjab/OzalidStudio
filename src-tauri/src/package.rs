@@ -554,6 +554,25 @@ pub struct Cible {
     pub cle: String,
 }
 
+/// Les deux `Provider` décrivent-ils le même gabarit d'intérieur ?
+///
+/// Séparé de `lot` pour être éprouvé sans Typst, comme `dossiers_d_envoi` l'est du
+/// disque : c'est ici que se joue le fait qu'un intérieur mémoïsé ne soit pas resservi à
+/// un gabarit qui n'est pas le sien.
+///
+/// La `fabrication` est le seul champ qui varie légitimement entre deux `Provider` de
+/// même clé, et c'est par elle que la comparaison entière échouait : `Resolu::provider`
+/// pose la clé sur le triplet mais garde la fabrication du **livrable**, papier compris —
+/// or un intérieur pour N papiers est précisément ce que `lot` mémoïse. La neutraliser
+/// laisse porter la comparaison sur tout le reste du `Provider`, champ neuf compris, sans
+/// qu'il faille les énumérer ici ; ses trois autres segments, eux, sont déjà dans `cle`.
+fn meme_gabarit(a: &Provider, b: &Provider) -> bool {
+    *a == Provider {
+        fabrication: a.fabrication.clone(),
+        ..b.clone()
+    }
+}
+
 /// Packager un lot de livrables, l'intérieur composé **une fois par gabarit**.
 ///
 /// Le premier livrable d'un gabarit compose dans son répertoire ; les suivants copient.
@@ -575,7 +594,10 @@ pub fn lot(
                 prets.insert(c.pr.cle.clone(), (c.pr.clone(), i));
             }
             let (pr, interieur) = prets.get(&c.pr.cle).expect("vient d'être inséré si absent");
-            debug_assert_eq!(*pr, c.pr, "deux gabarits de même clé, providers différents");
+            debug_assert!(
+                meme_gabarit(pr, &c.pr),
+                "deux gabarits de même clé, providers différents"
+            );
             assembler(projet, c, interieur, &dossier, typst)
         })
         .collect()
@@ -1677,14 +1699,26 @@ mod tests {
             pages: None,
             source: None,
         };
+        // Chaque cible porte **son** `Provider`, comme `commands::packager` les fabrique
+        // par `Resolu::provider` : deux vues plates d'un même gabarit qui ne diffèrent
+        // que par le papier de leur fabrication. Le même `pr` des deux côtés cachait le
+        // seul cas où la mémoïsation avait à distinguer clé de gabarit et clé de
+        // livrable — et laissait passer une génération qui plantait sur les vrais.
+        let vue_plate = |papier: &str| Provider {
+            fabrication: crate::catalogue::Fabrication {
+                papier: papier.into(),
+                ..pr.fabrication.clone()
+            },
+            ..pr.clone()
+        };
         let cibles = [
             Cible {
                 papier: creme,
-                ..cible_d_essai(&pr, "essai-livre-broche-creme")
+                ..cible_d_essai(&vue_plate("creme"), "essai-livre-broche-creme")
             },
             Cible {
                 papier: blanc,
-                ..cible_d_essai(&pr, "essai-livre-broche-blanc-essai")
+                ..cible_d_essai(&vue_plate("blanc-essai"), "essai-livre-broche-blanc-essai")
             },
         ];
         let sorties = lot(&projet, &cibles, racine.path(), &typst);
@@ -1730,6 +1764,37 @@ mod tests {
                 .unwrap_or_else(|| panic!("cible {i} aurait dû échouer"));
             assert!(e.contains("typst-absent"), "cible {i} : {e}");
         }
+    }
+
+    /// Le cas qui faisait planter la génération : deux livrables du même gabarit sur
+    /// deux papiers différents. `Resolu::provider` pose la clé sur le triplet mais garde
+    /// la fabrication du livrable, papier compris — les deux `Provider` ne diffèrent donc
+    /// que par ce champ, et c'est exactement le lot que `lot` mémoïse : un intérieur, N
+    /// papiers. Comparer les `Provider` entiers refusait ce cas nominal.
+    #[test]
+    fn deux_papiers_du_meme_gabarit_font_le_meme_gabarit() {
+        let creme = provider_d_essai();
+        let blanc = Provider {
+            fabrication: crate::catalogue::Fabrication {
+                papier: "blanc".into(),
+                ..creme.fabrication.clone()
+            },
+            ..creme.clone()
+        };
+        assert!(meme_gabarit(&creme, &blanc));
+    }
+
+    /// L'autre bord, sans quoi rendre `true` toujours suffirait : une même clé posée sur
+    /// deux géométries n'est pas le même gabarit, et l'intérieur du premier ne peut pas
+    /// être resservi au second.
+    #[test]
+    fn une_geometrie_differente_n_est_pas_le_meme_gabarit() {
+        let a = provider_d_essai();
+        let b = Provider {
+            format: (148.0, 210.0),
+            ..a.clone()
+        };
+        assert!(!meme_gabarit(&a, &b));
     }
 
     /// Le même manuscrit ne fait pas le même nombre de pages en poche et en grand
