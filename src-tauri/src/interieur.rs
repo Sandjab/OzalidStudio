@@ -1391,6 +1391,40 @@ mod tests {
         );
     }
 
+    /// **Le PDF ebook porte la table** : c'est le même livre, sans son imposition
+    /// (spec § 3). L'archive EPUB, elle, garde sa table de navigation native — elle ne
+    /// se pagine pas, et `epub.rs` ne connaît pas `Interieur`.
+    #[test]
+    fn le_pdf_ebook_suit_le_reglage_de_table() {
+        let pr = provider("lulu").expect("gabarit lulu");
+        let pieces = pieces_des_quatre_sortes();
+        let sans = source_ebook(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            &pieces,
+            "#page[couverture]\n",
+        );
+        assert!(
+            !sans.contains("Table des matières"),
+            "table non demandée\n{sans}"
+        );
+        let avec = source_ebook(
+            &livre(),
+            &Interieur {
+                table: Table::EnFin,
+                ..Interieur::default()
+            },
+            pr,
+            &pieces,
+            "#page[couverture]\n",
+        );
+        assert!(
+            avec.contains("Table des matières") && avec.contains(&format!("query(<{TDM}>)")),
+            "l'ebook n'a pas composé la table\n{avec}"
+        );
+    }
+
     /// La couverture est la **première** page : avant le faux-titre, donc avant tout ce que
     /// `liminaires` écrit.
     #[test]

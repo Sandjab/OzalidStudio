@@ -134,6 +134,12 @@ L'identité du livre et son texte.
   défaut), Crimson Pro, Alegreya, Cardo, Vollkorn, Spectral, Libre Baskerville. Un exemple
   montre l'écriture réelle, dans les octets que le moteur composera.
   **Changer de police change la pagination, donc le dos.**
+- **La table des matières** est un réglage à trois états — absente, en tête, en fin —,
+  **éteinte par défaut**. Elle reprend parties, chapitres et pièces sur deux rangs, avec
+  l'intitulé que leur page d'ouverture imprime et le folio où elles s'ouvrent. En tête,
+  elle vient avant la préface ; en fin, après les annexes. **L'allumer ajoute des pages,
+  donc change le dos** — la composition repart d'elle-même, et le pied dit où elle en est.
+  Le PDF ebook la porte aussi ; l'EPUB, lui, garde sa table de navigation native.
 - **L'épreuve de relecture** se tire d'ici, en un bouton.
 
 ### 2 · Couverture
