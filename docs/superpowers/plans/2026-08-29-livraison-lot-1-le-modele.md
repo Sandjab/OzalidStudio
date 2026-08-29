@@ -532,10 +532,11 @@ impl Generation {
 Et, dans `Livrable`, **en dernière position** :
 
 ```rust
-    /// Ce que la dernière génération a laissé. **Déclaré en dernier**, et ce n'est pas un
-    /// hasard : TOML exige que les valeurs d'une table précèdent ses sous-tables, et cet
-    /// état-ci s'écrit en table. Le remonter avant `dos_mm` ferait échouer l'écriture du
-    /// `.ozalid` — sur un projet réel, pas dans les tests d'un type isolé.
+    /// Ce que la dernière génération a laissé, ou pourquoi elle a échoué.
+    ///
+    /// Il s'écrit en sous-table — `[livraison.livrables.generation]` —, et il est déclaré
+    /// en dernier pour que les relevés se lisent ensemble, sans plus. La contrainte TOML
+    /// des valeurs avant les tables ne mord pas ici : `toml 0.8` réordonne lui-même.
     #[serde(default, skip_serializing_if = "Generation::est_jamais")]
     pub generation: Generation,
 ```
@@ -549,9 +550,10 @@ dans des `mod tests`.
 Run : `cd src-tauri && cargo test`
 Attendu : tous passés, y compris les quatre neufs.
 
-Si `l_etat_de_generation_traverse_le_fichier` échoue sur « values must be emitted before
-tables », c'est que le champ n'est pas en dernier : c'est exactement ce que le commentaire
-ci-dessus annonce.
+**Vérifié à l'exécution le 29/08** : remonter le champ avant `dos_mm` ne casse rien —
+`toml 0.8` émet les valeurs avant les sous-tables de lui-même, y compris quand `dos_mm` et
+`fond_perdu_mm` sont renseignés. La place du champ est donc un choix de lisibilité, pas une
+contrainte du format. Ne pas écrire l'inverse dans un commentaire.
 
 - [ ] **Étape 5 : commit**
 
