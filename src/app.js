@@ -599,6 +599,7 @@ function afficherProjet(p) {
   $('inDedicace').value = p.livre.dedicace ?? '';
   $('inChapitres').value = p.livre.chapitres ?? '';
   $('inPoliceInterieur').value = p.interieur.police;
+  $('inTable').value = p.interieur.table;
   for (const [champ, id] of Object.entries(TAILLES)) $(id).value = p.interieur[champ];
   // Sans attendre : l'échantillon est une image de l'écriture, pas une donnée du projet,
   // et le reste de l'affichage n'a pas à tenir derrière une police de huit cent kilo-octets.
@@ -1120,7 +1121,7 @@ async function choisirManuscrit() {
 /* ---------- intérieur ---------- */
 
 /**
- * Les onze tailles de l'intérieur : le champ du projet, et celui du formulaire.
+ * Les douze tailles de l'intérieur : le champ du projet, et celui du formulaire.
  *
  * Une table plutôt que vingt-deux lignes recopiées entre l'envoi et l'affichage : c'est
  * exactement là qu'un réglage se met à ne plus faire l'aller-retour, et le symptôme —
@@ -1140,11 +1141,12 @@ const TAILLES = {
   numero: 'inTailleNumero',
   titre_section: 'inTailleTitreSection',
   ouverture_piece: 'inTailleOuverture',
+  entree_table: 'inTailleTable',
   folio: 'inTailleFolio',
 };
 
 async function majInterieur() {
-  const interieur = { police: $('inPoliceInterieur').value };
+  const interieur = { police: $('inPoliceInterieur').value, table: $('inTable').value };
   // Un champ vidé donne 0, que `Interieur::verifie` refuse en nommant le rôle. C'est
   // voulu : le laisser tomber en silence sur l'ancienne valeur ferait un champ qui
   // paraît accepter tout et n'obéit qu'à moitié.
@@ -1381,6 +1383,7 @@ $('btPackager').addEventListener('click', packager);
 $('btEbooks').addEventListener('click', ebooks);
 $('btEpreuve').addEventListener('click', epreuve);
 $('inPoliceInterieur').addEventListener('change', majInterieur);
+$('inTable').addEventListener('change', majInterieur);
 // `change` et non `input` : chaque frappe dans un champ de taille relancerait la
 // composition, et une taille se tape chiffre à chiffre — 1, puis 12.
 for (const id of Object.values(TAILLES)) $(id).addEventListener('change', majInterieur);

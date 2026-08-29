@@ -128,6 +128,16 @@
     <div class="bloc">
       <h2>Intérieur</h2>
       <label><span>Police</span><select id="inPoliceInterieur"></select></label>
+      <label><span>Table des matières</span>
+        <select id="inTable">
+          <option value="absente">Absente</option>
+          <option value="en-tete">En tête</option>
+          <option value="en-fin">En fin</option>
+        </select></label>
+      <p class="note">Une table reprend parties, chapitres et pièces, avec leur folio.
+        <strong>L'allumer ajoute des pages, donc change le dos</strong> : la composition
+        repart, et la planche reste sans dos le temps qu'elle tourne. En tête, elle vient
+        avant la préface ; en fin, après les annexes.</p>
       <!-- Le détail du repli est ici, à côté de sa cause : c'est sous ce sélecteur qu'on
            vient réparer. Le pied n'en porte qu'un signe, qui suit dans toutes les étapes.
            Typst ne dit rien de lui-même — il substitue une écriture et poursuit —, et son
@@ -146,7 +156,7 @@
         s’étonne : « où donc allions-nous ? »</p>
       <p class="note alerte" id="echantillonAbsent" hidden></p>
 
-      <!-- Les onze tailles, dans l'ordre où le livre les rencontre : le texte d'abord,
+      <!-- Les douze tailles, dans l'ordre où le livre les rencontre : le texte d'abord,
            puis les liminaires page à page, puis ce qui ouvre une section, le folio pour
            finir. Elles viennent après l'échantillon, et non entre lui et le sélecteur :
            l'échantillon est l'image de l'écriture choisie, les séparer briserait le seul
@@ -156,7 +166,7 @@
            Les bornes du champ sont celles de `Interieur::verifie` — c'est le Rust qui
            refuse, le champ ne fait que le dire plus tôt. -->
       <p class="note">Les tailles sont en points. Chacune relance la composition, donc
-        recalcule le dos : ce sont onze leviers sur son épaisseur.</p>
+        recalcule le dos : ce sont douze leviers sur son épaisseur.</p>
       <label><span>Texte</span>
         <input type="number" id="inTailleCorps" min="4" max="48" step="0.5"></label>
       <label><span>Faux-titre</span>
@@ -177,6 +187,8 @@
         <input type="number" id="inTailleTitreSection" min="4" max="48" step="0.5"></label>
       <label><span>Titre de préface ou de postface</span>
         <input type="number" id="inTailleOuverture" min="4" max="48" step="0.5"></label>
+      <label><span>Entrée de table des matières</span>
+        <input type="number" id="inTailleTable" min="4" max="48" step="0.5"></label>
       <label><span>Folio</span>
         <input type="number" id="inTailleFolio" min="4" max="48" step="0.5"></label>
     </div>
