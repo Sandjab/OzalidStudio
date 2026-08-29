@@ -1607,6 +1607,17 @@ fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<Str
 pub struct Generation {
     pub projet: ProjetVue,
     pub packages: Vec<Resultat>,
+    /// Ce que l'effacement de l'ancien répertoire n'a pas pu faire, quand Remplacer a changé
+    /// de clé.
+    ///
+    /// Un champ et non un `Err` : à ce point la composition a réussi et le projet porte le
+    /// livrable neuf ; refuser rendrait l'écran à l'état d'avant pendant que le projet est sur
+    /// celui d'après. Le nettoyage est une conséquence du remplacement, pas la transaction.
+    ///
+    /// Absent de la sortie quand il n'y a rien à dire : les trois autres verbes n'effacent
+    /// jamais, et un `null` dans leur réponse ferait croire à une question qu'ils ne posent pas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nettoyage_echoue: Option<String>,
 }
 
 /// Ce qu'une génération laisse sur le livrable : la mesure de son gabarit d'abord, ses deux
@@ -1771,6 +1782,8 @@ fn composer_lot(o: &mut Ouvert, cles: &[String], typst: &Typst) -> Result<Genera
     Ok(Generation {
         projet: vue_modifiee(o)?,
         packages: sorties,
+        // Composer n'efface rien : le nettoyage n'appartient qu'à Remplacer.
+        nettoyage_echoue: None,
     })
 }
 
@@ -1955,15 +1968,28 @@ fn remplacer(
             return Ok(Generation {
                 projet: vue_modifiee(o)?,
                 packages: g.packages,
+                // Rien n'a été effacé : la composition a raté, l'ancien répertoire est intact.
+                nettoyage_echoue: None,
             });
         }
         return Ok(g);
     }
+    // **L'échec du nettoyage se dit, il ne renverse rien.** Ici la composition a réussi, le
+    // package neuf est écrit et le projet porte le livrable neuf : un `?` rendrait `Err` sur une
+    // opération qui a abouti, l'écran resterait sur l'état d'avant pendant que le projet est sur
+    // celui d'après, et recommencer buterait sur le doublon. L'ancien répertoire survit alors,
+    // nommé au compte rendu — ce qui reste effaçable à la main.
+    let mut nettoyage_echoue = None;
     if neuve != cle {
         let images: Vec<String> = o.projet.images.keys().cloned().collect();
-        package::effacer_livrable(&racine.join(cle), cle, &images)?;
+        if let Err(e) = package::effacer_livrable(&racine.join(cle), cle, &images) {
+            nettoyage_echoue = Some(e);
+        }
     }
-    Ok(g)
+    Ok(Generation {
+        nettoyage_echoue,
+        ..g
+    })
 }
 
 /// Génère le package de chaque livrable du livre, chacun dans son répertoire.
@@ -3906,6 +3932,72 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
             ancien.cle(),
             "courant visait l'ancien : il ne doit pas rester sur une clé que le livre ne \
              porte plus"
+        );
+    }
+
+    /// **Un nettoyage qui refuse ne renverse pas un remplacement réussi.** À ce point la
+    /// composition a abouti, le nouveau package est sur le disque et le projet en mémoire porte
+    /// le nouveau livrable ; rendre `Err` laisserait l'écran sur l'état d'avant pendant que le
+    /// projet est sur celui d'après, et le seul geste offert — recommencer — buterait sur le
+    /// doublon. L'effacement de l'ancien répertoire est une conséquence, pas la transaction : son
+    /// échec entre au compte rendu.
+    ///
+    /// Le test compose pour de vrai — c'est le seul moyen d'atteindre la ligne visée, qui ne
+    /// s'exécute qu'après une composition réussie. Le refus, lui, est déterministe : un
+    /// répertoire sans droit d'écriture fait refuser `remove_file` sur un fichier que
+    /// l'application reconnaît comme sien.
+    #[test]
+    #[cfg(unix)]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn un_nettoyage_qui_refuse_ne_renverse_pas_un_remplacement_reussi() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        // Assez de texte pour dépasser la première tranche de gouttière du gabarit d'office
+        // (32 pages chez Lulu) : en deçà, la composition refuse et le test n'atteindrait pas la
+        // ligne qu'il vise.
+        let paragraphe = "Un paragraphe de démonstration, assez long pour occuper \
+                          plusieurs lignes de la page composée. ";
+        o.projet.texte = format!("## 01 - Un\n\n{}", paragraphe.repeat(800));
+        o.projet.meta.couverture.maquette = Some(
+            crate::maquettes::par_cle(None, "filets")
+                .expect("maquette fournie « filets »")
+                .couverture,
+        );
+        let ancien = o.projet.meta.livraison.livrables[0].clone();
+        let dossier = sorties_racine(&o).unwrap().join(ancien.cle());
+        std::fs::create_dir_all(&dossier).unwrap();
+        let pdf = dossier.join(package::nom(&ancien.cle(), "interieur", "pdf"));
+        std::fs::write(&pdf, b"%PDF-ancien").unwrap();
+        std::fs::set_permissions(&dossier, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+        let neuf = Livrable::pour(fabrication_seconde(&o));
+        let typst =
+            Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+        let r = remplacer(&mut o, &ancien.cle(), neuf.clone(), &typst);
+
+        // Rendu inscriptible avant toute assertion : sinon un échec laisserait le `tempdir` sur
+        // des permissions qui empêchent aussi sa propre suppression en fin de test.
+        std::fs::set_permissions(&dossier, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        let g = r.expect("un nettoyage qui refuse ne doit pas renverser un remplacement réussi");
+        assert!(
+            g.packages[0].erreur.is_none(),
+            "la composition devait réussir : {:?}",
+            g.packages[0].erreur
+        );
+        assert!(
+            g.nettoyage_echoue
+                .as_deref()
+                .is_some_and(|m| m.contains("ne s'efface pas")),
+            "l'échec du nettoyage doit se dire au compte rendu : {:?}",
+            g.nettoyage_echoue
+        );
+        assert_eq!(
+            o.projet.meta.livraison.livrables[0].cle(),
+            neuf.cle(),
+            "le livre porte le livrable neuf : c'est lui qui a un package"
         );
     }
 
