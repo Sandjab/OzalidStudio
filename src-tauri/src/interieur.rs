@@ -661,6 +661,39 @@ fn ouverture_piece(titre: &str, pt: f64) -> String {
     )
 }
 
+/// L'étiquette que porte chaque repère de table, telle qu'une requête Typst la nomme.
+///
+/// Publique parce que la table la lira — `context query(<ozalid-tdm>)` — et qu'un nom
+/// recopié à deux endroits est un nom qui divergera.
+pub const TDM: &str = "ozalid-tdm";
+
+/// Le repère qu'une pièce laisse à l'ouverture de sa page, pour la table des matières.
+///
+/// **Il ne s'affiche pas et n'occupe aucune place** : un `metadata` n'est pas mis en
+/// page, il est seulement situé. C'est ce qui permet de le poser dans tous les livres,
+/// table allumée ou non, et de prouver par le témoin qu'il ne coûte rien — une preuve
+/// impossible si la pose dépendait du réglage, puisque l'allumer changerait alors deux
+/// choses à la fois.
+///
+/// Trois champs, et non un libellé prémâché : le rang indente, le numéro et le titre
+/// sont ce que la page d'ouverture imprime. Composer la ligne ici enfermerait la mise
+/// en forme dans le Rust, alors qu'elle appartient à la table.
+///
+/// Les valeurs sont **citées, non composées** : `echappe_chaine`, jamais `echappe`.
+fn repere(p: &Piece) -> String {
+    let (rang, numero) = match &p.sorte {
+        // Une partie tient le premier rang ; tout le reste est indenté sous elle.
+        Sorte::Partie(romain) => (1, romain.clone()),
+        Sorte::Chapitre(n) => (2, n.to_string()),
+        Sorte::Liminaire | Sorte::Annexe => (2, String::new()),
+    };
+    format!(
+        "#metadata((rang: {rang}, numero: \"{}\", titre: \"{}\"))<{TDM}>\n",
+        echappe_chaine(&numero),
+        echappe_chaine(&p.titre)
+    )
+}
+
 /// Le titre sous le numéro d'une partie ou d'un chapitre — même casse, même espacement
 /// que l'un ou l'autre, puisque c'est le même gabarit qui les compose. Absent si la
 /// pièce n'a pas de titre : c'est le cas admis par le format (`## 7`, `## Partie I`).
@@ -2044,6 +2077,87 @@ mod tests {
         // contrat que `envoi_objet` honore côté commandes.
         let seul = corps_de(&source_objet(&t, pr.format.0 * place.taille));
         assert_eq!(seul, sur_la_page, "le canevas ne montrera pas le rendu");
+    }
+
+    /* ---------- les repères de table ---------- */
+
+    /// Ce qu'un repère porte, sorte par sorte. Les quatre lignes de ce test sont les
+    /// quatre cas que `Sorte` admet : la table du lot 3 n'aura rien d'autre à composer.
+    ///
+    /// Le rang n'est pas décoratif — c'est lui qui indente. Une `Partie` rendue au
+    /// second rang mettrait la partie au niveau de ses propres chapitres, et la table
+    /// mentirait sur la structure du livre.
+    #[test]
+    fn chaque_sorte_porte_son_rang_son_numero_et_son_titre() {
+        let cas = [
+            (
+                Sorte::Partie("II".into()),
+                "Seconde",
+                r#"#metadata((rang: 1, numero: "II", titre: "Seconde"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Chapitre(7),
+                "Le vent",
+                r#"#metadata((rang: 2, numero: "7", titre: "Le vent"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Liminaire,
+                "Préface",
+                r#"#metadata((rang: 2, numero: "", titre: "Préface"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Annexe,
+                "Postface",
+                r#"#metadata((rang: 2, numero: "", titre: "Postface"))<ozalid-tdm>"#,
+            ),
+        ];
+        for (sorte, titre, attendu) in cas {
+            let p = Piece {
+                sorte: sorte.clone(),
+                titre: titre.into(),
+                blocs: vec![],
+            };
+            assert_eq!(
+                repere(&p).trim_end(),
+                attendu,
+                "le repère de {sorte:?} ne dit pas ce que la table lira"
+            );
+        }
+    }
+
+    /// Un chapitre sans titre est un cas admis du format (`## 7`). La table ne fabrique
+    /// aucun libellé que le livre n'imprime pas : elle n'aura que le numéro à composer,
+    /// et le titre vide est ce qui le lui dit.
+    #[test]
+    fn une_piece_sans_titre_laisse_le_titre_vide() {
+        let p = Piece {
+            sorte: Sorte::Chapitre(7),
+            titre: String::new(),
+            blocs: vec![],
+        };
+        assert_eq!(
+            repere(&p).trim_end(),
+            r#"#metadata((rang: 2, numero: "7", titre: ""))<ozalid-tdm>"#
+        );
+    }
+
+    /// Un guillemet dans un titre refermerait la chaîne du dictionnaire, et la source
+    /// ne composerait plus — le même piège que la page de titre, déjà tenu par
+    /// `echappe_chaine`. Ici la faute serait pire : elle casserait la composition d'un
+    /// livre dont le seul tort est d'avoir un titre à guillemets.
+    #[test]
+    fn un_titre_a_guillemets_ne_referme_pas_le_dictionnaire_du_repere() {
+        let p = Piece {
+            sorte: Sorte::Liminaire,
+            titre: "L'« ouverture » dite\nen deux temps".into(),
+            blocs: vec![],
+        };
+        let s = repere(&p);
+        assert!(
+            s.contains(r#"titre: "L'« ouverture » dite\nen deux temps""#),
+            "titre mal cité : {s}"
+        );
+        assert_eq!(s.lines().count(), 1, "le repère tient sur une ligne : {s}");
     }
 
     /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
