@@ -291,6 +291,34 @@ pub struct Couverture {
     pub maquette: Option<crate::couverture::Couverture>,
 }
 
+/// Ce qu'une génération a laissé sur un livrable.
+///
+/// Les deux empreintes sont celles d'`empreinte::interieur` et d'`empreinte::couverture`
+/// **au moment où les fichiers ont été écrits**. Les comparer à celles de l'état courant dit
+/// ce qui a bougé depuis — c'est tout le mécanisme, et il n'en faut pas d'autre.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "etat", rename_all = "lowercase")]
+pub enum Generation {
+    /// Aucun fichier écrit : un livrable qu'on vient de déclarer, ou celui d'un `.ozalid`
+    /// écrit avant que cet état n'existe.
+    #[default]
+    Jamais,
+    Fait {
+        interieur: String,
+        couverture: String,
+    },
+    Echec {
+        message: String,
+    },
+}
+
+impl Generation {
+    /// Rien à écrire dans le fichier : `serde` s'en sert pour taire le cas courant.
+    pub fn est_jamais(&self) -> bool {
+        matches!(self, Generation::Jamais)
+    }
+}
+
 /// Un livrable du livre : la fabrication qu'on déclare — POD, format, reliure, papier —
 /// la finition qui paraîtra au récapitulatif sans changer le fichier, et, pour les POD
 /// qui ne publient ni dos ni fond perdu, ce qui a été relevé sur leur gabarit.
@@ -307,6 +335,14 @@ pub struct Livrable {
     pub dos_mm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fond_perdu_mm: Option<f64>,
+    /// Ce que la dernière génération a laissé, ou pourquoi elle a échoué.
+    ///
+    /// Il s'écrit en sous-table — `[livraison.livrables.generation]` —, et il est déclaré
+    /// en dernier pour que les relevés se lisent ensemble, sans plus. La contrainte TOML
+    /// des valeurs avant les tables ne mord pas ici : `toml 0.8` réordonne lui-même, ce
+    /// qu'un essai a vérifié en le remontant avant `dos_mm` sans qu'aucun test bronche.
+    #[serde(default, skip_serializing_if = "Generation::est_jamais")]
+    pub generation: Generation,
 }
 
 impl Livrable {
@@ -322,6 +358,7 @@ impl Livrable {
             finition: None,
             dos_mm: None,
             fond_perdu_mm: None,
+            generation: Generation::Jamais,
         }
     }
 }
@@ -1676,6 +1713,82 @@ dos = 7.21
         l.auteur = "Ivan Pjig".into();
         assert!(l.copyright(None).starts_with("© Ivan Pjig, 2"));
         assert!(!l.copyright(None).contains('%'));
+    }
+
+    /// Un `.ozalid` écrit avant ce lot s'ouvre sans un mot, ses livrables en *jamais
+    /// généré*, ses relevés intacts. C'est le parti déjà pris pour `livraison` et pour
+    /// `envois` : `VERSION` ne bouge pas, le champ est facultatif.
+    #[test]
+    fn un_livrable_d_avant_s_ouvre_jamais_genere() {
+        let avant = r#"
+[ozalid]
+version = 5
+[livre]
+titre = "Candide"
+auteur = "Voltaire"
+genre = "roman"
+[livraison]
+courant = "bod-135x215-broche-creme-90"
+[[livraison.livrables]]
+pod = "bod"
+format = "135x215"
+reliure = "broche"
+papier = "creme-90"
+dos_mm = 18.4
+"#;
+        let m: Metadonnees = toml::from_str(avant).expect("TOML illisible");
+        let l = &m.livraison.livrables[0];
+        assert_eq!(l.generation, Generation::Jamais);
+        assert_eq!(l.dos_mm, Some(18.4), "le relevé doit traverser intact");
+    }
+
+    /// L'aller-retour dans le fichier : ce qu'une génération a laissé se relit tel quel.
+    /// Le test porte sur TOML et non sur JSON parce que c'est TOML que le `.ozalid` écrit —
+    /// et parce que TOML exige que les valeurs précèdent les tables, ce qui décide de la
+    /// place du champ dans la structure.
+    #[test]
+    fn l_etat_de_generation_traverse_le_fichier() {
+        // `Metadonnees` ne dérive pas `Default` ; `livre()` est le helper que `mod tests`
+        // porte déjà.
+        let mut m = Projet::nouveau(livre(), String::new()).meta;
+        m.livraison.livrables[0].generation = Generation::Fait {
+            interieur: "aaaa".into(),
+            couverture: "bbbb".into(),
+        };
+        let ecrit = toml::to_string(&m).expect("TOML inécrivable");
+        let relu: Metadonnees = toml::from_str(&ecrit).expect("TOML illisible");
+        assert_eq!(
+            relu.livraison.livrables[0].generation,
+            Generation::Fait {
+                interieur: "aaaa".into(),
+                couverture: "bbbb".into()
+            }
+        );
+    }
+
+    /// Un échec se retient aussi : la ligne doit pouvoir dire pourquoi elle est rouge après
+    /// une réouverture, sans quoi il faudrait recomposer pour l'apprendre.
+    #[test]
+    fn un_echec_de_generation_traverse_le_fichier() {
+        let mut m = Projet::nouveau(livre(), String::new()).meta;
+        m.livraison.livrables[0].generation = Generation::Echec {
+            message: "typst absent".into(),
+        };
+        let relu: Metadonnees = toml::from_str(&toml::to_string(&m).expect("TOML inécrivable"))
+            .expect("TOML illisible");
+        assert!(matches!(
+            &relu.livraison.livrables[0].generation,
+            Generation::Echec { message } if message == "typst absent"
+        ));
+    }
+
+    /// Un livrable jamais généré n'écrit rien dans le fichier : le `.ozalid` d'un projet
+    /// neuf ne doit pas grossir d'une table vide par livrable.
+    #[test]
+    fn jamais_genere_ne_s_ecrit_pas() {
+        let m = Projet::nouveau(livre(), String::new()).meta;
+        let ecrit = toml::to_string(&m).expect("TOML inécrivable");
+        assert!(!ecrit.contains("generation"), "{ecrit}");
     }
 
     fn livre() -> Livre {
