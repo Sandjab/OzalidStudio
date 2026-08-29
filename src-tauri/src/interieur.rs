@@ -2978,6 +2978,25 @@ mod tests {
     ///
     /// Les deux positions sont exercées : en fin, la table n'a rien à décaler et l'écart
     /// doit être **nul** sur les pièces, qui la précèdent toutes.
+    ///
+    /// **Ce que l'assertion d'uniformité ne prouve pas aujourd'hui, sur ce manuscrit.**
+    /// `decalage` est pair par construction : le saut de parité en entrée de
+    /// `table_matieres` garantit une ouverture impaire, celui que `liminaires()` pose en
+    /// sortie garantit une reprise impaire, donc leur différence est paire. Dans le
+    /// corps, la seule logique sensible à la parité absolue — `#context if
+    /// calc.odd(here().page())`, qui protège l'ouverture d'une **deuxième** partie — ne
+    /// s'exécute jamais ici : l'unique `Sorte::Partie` de `pieces_des_quatre_sortes()`
+    /// ouvre le corps, la branche est sautée. Casser l'uniformité sans casser
+    /// `decalage >= 2.0` supposerait donc un décalage positif mais impair — ce qui
+    /// romprait déjà la garantie que la première assertion sanctionne. L'assertion
+    /// d'uniformité est ici **redondante** avec elle.
+    ///
+    /// Elle redeviendrait décisive sur un manuscrit portant une seconde partie plus loin
+    /// dans le corps — ce que ni `pieces_des_quatre_sortes()` ni `manuscrit_long()` ne
+    /// font — puisque cette branche de parité redeviendrait atteignable et pourrait
+    /// décaler cette seule pièce d'une page de plus ou de moins. Elle garde donc sa
+    /// place : c'est elle qui protégerait contre une implémentation à deux passes côté
+    /// Rust, où les folios seraient relevés avant l'insertion de la table.
     #[test]
     #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
     fn la_table_se_compte_elle_meme_dans_les_folios_qu_elle_affiche() {
