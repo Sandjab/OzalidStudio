@@ -193,7 +193,7 @@ impl From<&catalogue::Pod> for PodVue {
 }
 
 /// Ce que l'interface affiche d'un projet ouvert.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ProjetVue {
     pub chemin: Option<String>,
     pub livre: Livre,
@@ -769,6 +769,27 @@ pub fn livrable_viser(cle: String, atelier: State<Atelier>) -> Result<ProjetVue,
     }
     l.courant = cle;
     vue_modifiee(o)
+}
+
+/// Pose un livrable et compose son package dans la foulée : un livrable naît généré.
+#[tauri::command]
+pub fn livrable_generer(
+    fabrication: catalogue::Fabrication,
+    atelier: State<Atelier>,
+) -> Result<Generation, String> {
+    let typst = typst()?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    generer(o, fabrication, &typst)
+}
+
+/// Recompose un livrable sans toucher à ses axes.
+#[tauri::command]
+pub fn livrable_regenerer(cle: String, atelier: State<Atelier>) -> Result<Generation, String> {
+    let typst = typst()?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    regenerer(o, &cle, &typst)
 }
 
 /// Compose l'intérieur du projet ouvert pour le livrable visé, et rend le compte
@@ -1515,7 +1536,7 @@ fn donnee_image(octets: &[u8]) -> String {
 
 /// Ce que rend la génération pour un livrable : le package, ou l'erreur qui l'a
 /// empêché. Un livrable en échec n'interrompt pas les autres — mais il est dit.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Resultat {
     /// L'identité du livrable, à quatre axes : c'est elle qui nomme son répertoire.
     pub cle: String,
@@ -1549,7 +1570,7 @@ fn nom_finition(livrable: &Livrable, pod: Option<&catalogue::Pod>) -> Option<Str
 ///
 /// La vue voyage avec, comme celle de `composer` : générer **compose**, et une commande
 /// qui écrit dans le projet en rend la vue — c'est la règle de toutes les autres.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Generation {
     pub projet: ProjetVue,
     pub packages: Vec<Resultat>,
@@ -1612,32 +1633,37 @@ fn retenir(projet: &mut Projet, cle: &str, issue: Result<&package::Package, Stri
     }
 }
 
-/// Génère le package de chaque livrable du livre, chacun dans son répertoire.
+/// Compose les livrables que ces clés désignent, chacun dans son répertoire, et retient ce
+/// que la composition a laissé.
 ///
-/// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun
-/// compose son propre intérieur, donc sa propre pagination, donc son propre dos. C'est
-/// la promesse de l'étape Livraison, et la liste vient du projet — plus de cases à
-/// cocher qui désigneraient les livrables une seconde fois.
-#[tauri::command]
-pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
-    let mut garde = atelier.ouvert.lock().unwrap();
-    let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let livrables = o.projet.meta.livraison.livrables.clone();
+/// **Le seul chemin de composition** (spec § 4) : générer un livrable, c'est cette fonction
+/// avec une clé ; « Tout regénérer », c'est elle avec toutes. Un seul jeu de garanties — la
+/// résolution d'abord, la mémoïsation de l'intérieur par gabarit ensuite, l'ordre
+/// mesure-puis-empreinte à la fin.
+fn composer_lot(o: &mut Ouvert, cles: &[String], typst: &Typst) -> Result<Generation, String> {
+    let livrables: Vec<Livrable> = o
+        .projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .filter(|l| cles.contains(&l.cle()))
+        .cloned()
+        .collect();
     if livrables.is_empty() {
         return Err("aucun livrable : en déclarer un.".into());
     }
-    let typst = typst()?;
 
-    // Résolution d'abord : un axe ou un papier inconnu se fige en `Resultat` d'erreur
-    // ici, sans passer par le lot. Le reste devient une `Cible`, dans l'ordre des
-    // livrables — c'est cet ordre que la fin de la fonction restitue.
+    // Résolution d'abord : un axe ou un papier inconnu se fige en `Resultat` d'erreur ici,
+    // sans passer par le lot. Le reste devient une `Cible`, dans l'ordre des livrables —
+    // c'est cet ordre que la fin de la fonction restitue.
     let mut etapes: Vec<Result<package::Cible, Resultat>> = Vec::with_capacity(livrables.len());
     for d in &livrables {
         etapes.push(match catalogue::resout(&d.fabrication) {
             Ok(r) => Ok(cible(r.provider(), r.papier.clone(), d)),
-            // Le POD est le seul axe qui puisse encore se nommer quand la résolution
-            // échoue sur un autre : afficher la clé à quatre segments en gros titre
-            // serait un recul devant « BoD ».
+            // Le POD est le seul axe qui puisse encore se nommer quand la résolution échoue
+            // sur un autre : afficher la clé à quatre segments en gros titre serait un recul
+            // devant « BoD ».
             Err(e) => {
                 let pod = catalogue::pod(&d.fabrication.pod);
                 Err(Resultat {
@@ -1652,21 +1678,21 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
         });
     }
 
-    // `?` fait échouer la commande entière, sans `Resultat` par livrable : à la
-    // différence d'un POD ou d'un papier inconnu, une racine de sorties
-    // inutilisable (projet non enregistré) ne concerne aucun livrable en
-    // particulier, et rien ne peut être tenté avant qu'elle existe.
+    // `?` fait échouer la commande entière, sans `Resultat` par livrable : à la différence
+    // d'un POD ou d'un papier inconnu, une racine de sorties inutilisable (projet non
+    // enregistré) ne concerne aucun livrable en particulier, et rien ne peut être tenté avant
+    // qu'elle existe.
     let racine = sorties_racine(o)?;
     let cibles: Vec<package::Cible> = etapes
         .iter()
         .filter_map(|e| e.as_ref().ok().cloned())
         .collect();
-    let mut paquets = package::lot(&o.projet, &cibles, &racine, &typst).into_iter();
+    let mut paquets = package::lot(&o.projet, &cibles, &racine, typst).into_iter();
 
-    // `zip` sur les livrables : `etapes` a été poussée dans leur ordre, et la finition
-    // ne voyage pas dans la `Cible` — elle ne fabrique rien, aucun octet du PDF ni aucun
-    // nom de fichier n'en dépend. Elle se commande, et le récapitulatif est le seul
-    // endroit où elle peut être lue.
+    // `zip` sur les livrables : `etapes` a été poussée dans leur ordre, et la finition ne
+    // voyage pas dans la `Cible` — elle ne fabrique rien, aucun octet du PDF ni aucun nom de
+    // fichier n'en dépend. Elle se commande, et le récapitulatif est le seul endroit où elle
+    // peut être lue.
     let sorties: Vec<Resultat> = etapes
         .into_iter()
         .zip(&livrables)
@@ -1679,8 +1705,8 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
                         cle: cible.cle,
                         libelle: cible.pr.libelle,
                         finition,
-                        // La vignette manquante ne perd pas le package : les PDF sont
-                        // écrits, et c'est eux que l'imprimeur reçoit.
+                        // La vignette manquante ne perd pas le package : les PDF sont écrits,
+                        // et c'est eux que l'imprimeur reçoit.
                         vignette: donnee_png(Path::new(&p.vignette)).ok(),
                         package: Some(p),
                         erreur: None,
@@ -1698,13 +1724,9 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
         })
         .collect();
 
-    // Ce que la génération vient de mesurer entre dans le projet, gabarit par gabarit,
-    // exactement comme la mesure de `composer` : c'est le même livre, composé par le même
-    // Typst, sous la même clé de rangement. Et ce qu'elle a produit entre sur le livrable :
-    // ses deux empreintes, ou le message qui dit pourquoi il n'y en a pas.
-    //
-    // Le consentement ne s'y oppose pas : il gouverne le déclenchement d'une composition que
-    // personne n'a demandée, pas le droit de retenir celle qu'un clic vient de réclamer.
+    // Ce que la génération vient de mesurer entre dans le projet, gabarit par gabarit, et ce
+    // qu'elle a produit entre sur le livrable : ses deux empreintes, ou le message qui dit
+    // pourquoi il n'y en a pas. L'ordre des deux est dans `retenir`.
     for (d, r) in livrables.iter().zip(&sorties) {
         let issue = match (&r.package, &r.erreur) {
             (Some(p), _) => Ok(p),
@@ -1717,6 +1739,71 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
         projet: vue_modifiee(o)?,
         packages: sorties,
     })
+}
+
+/// Pose le livrable, puis compose. Cet ordre est ce qui donne une place à l'échec (spec § 3) :
+/// une composition ratée laisse un livrable en erreur, pas cinq listes à ressaisir.
+///
+/// La racine des sorties se vérifie **avant** la pose : elle ne concerne aucun livrable en
+/// particulier, et poser pour buter dessus laisserait dans le livre un livrable que personne
+/// n'a demandé.
+fn generer(
+    o: &mut Ouvert,
+    fabrication: catalogue::Fabrication,
+    typst: &Typst,
+) -> Result<Generation, String> {
+    let r = catalogue::resout(&fabrication)?;
+    sorties_racine(o)?;
+    let cle = fabrication.cle();
+    if refuse_doublon(&o.projet.meta.livraison.livrables, &cle) {
+        return Err(format!(
+            "{} en {} est déjà un livrable de ce livre — la finition seule n'en fait \
+             pas un autre : le fichier produit serait le même.",
+            r.pod.nom, r.papier.nom
+        ));
+    }
+    o.projet
+        .meta
+        .livraison
+        .livrables
+        .push(Livrable::pour(fabrication));
+    composer_lot(o, std::slice::from_ref(&cle), typst)
+}
+
+/// Recompose un livrable sans toucher à ses axes.
+fn regenerer(o: &mut Ouvert, cle: &str, typst: &Typst) -> Result<Generation, String> {
+    if !o
+        .projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .any(|l| l.cle() == cle)
+    {
+        return Err(format!("{cle} n'est pas un livrable de ce livre."));
+    }
+    composer_lot(o, &[cle.to_string()], typst)
+}
+
+/// Génère le package de chaque livrable du livre, chacun dans son répertoire.
+///
+/// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun compose son
+/// propre intérieur, donc sa propre pagination, donc son propre dos. C'est « Tout regénérer »
+/// de l'étape Livraison — la même fonction que les verbes unitaires, avec toutes les clés.
+#[tauri::command]
+pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
+    let typst = typst()?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    let cles: Vec<String> = o
+        .projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .map(|l| l.cle())
+        .collect();
+    composer_lot(o, &cles, &typst)
 }
 
 /// Génère les ebooks locaux dans `<projet>/ebook/`.
@@ -2377,7 +2464,7 @@ fn poser(
 /// Ce que l'écran lit de la livraison. Vue et non donnée : `compose` y est recalculée
 /// par livrable depuis la mesure de son gabarit et la formule de son papier — le
 /// déplacement de la mesure est invisible au front (décision du 26/08).
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct LivraisonVue {
     livrables: Vec<LivrableVue>,
     /// La clé du livrable visé — quatre axes.
@@ -2385,7 +2472,7 @@ pub struct LivraisonVue {
     deja_compose: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct LivrableVue {
     /// L'identité à quatre axes : l'identifiant des lignes, des DOM et des commandes.
     /// Fabriquée par le Rust et servie telle quelle — jamais recomposée côté JS : deux
@@ -2403,7 +2490,7 @@ pub struct LivrableVue {
     compose: Option<MesureVue>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct MesureVue {
     pages: u32,
     gouttiere: f64,
@@ -3328,5 +3415,117 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
             Ok(&package_d_essai("x", 100)),
         );
         assert!(o.projet.meta.livraison.livrables[0].generation.est_jamais());
+    }
+
+    /// Un atelier ouvert sur un projet enregistré : `sorties_racine` réclame un chemin, et sans
+    /// lui aucune composition ne peut être tentée.
+    fn ouvert_enregistre(dir: &tempfile::TempDir) -> Ouvert {
+        Ouvert {
+            chemin: Some(dir.path().join("livre.ozalid")),
+            ..ouvert_neuf()
+        }
+    }
+
+    /// Une fabrication du catalogue réel, différente de celle du livrable d'office : le deuxième
+    /// papier du premier POD. C'est un livrable que `catalogue::resout` accepte, et qui n'est pas
+    /// le doublon de celui que `Projet::nouveau` a posé.
+    fn fabrication_seconde(o: &Ouvert) -> catalogue::Fabrication {
+        let d = o.projet.meta.livraison.livrables[0].fabrication.clone();
+        let pod = catalogue::pod(&d.pod).expect("le POD du livrable d'office");
+        let autre = pod
+            .papiers
+            .iter()
+            .find(|p| p.cle != d.papier)
+            .expect("le premier POD du catalogue porte au moins deux papiers");
+        catalogue::Fabrication {
+            papier: autre.cle.clone(),
+            ..d
+        }
+    }
+
+    /// **La racine se vérifie avant que le livrable ne soit posé.** Un projet jamais enregistré
+    /// n'a pas de répertoire de sorties ; poser le livrable puis buter dessus laisserait dans le
+    /// livre un livrable *jamais généré* que personne n'a demandé, sous un message qui parle
+    /// d'autre chose. C'est l'ordre que `livrable_regler` prend déjà pour son candidat.
+    #[test]
+    fn generer_sans_projet_enregistre_ne_pose_rien() {
+        let mut o = ouvert_neuf(); // sans chemin
+        let avant = o.projet.meta.livraison.livrables.len();
+        let f = fabrication_seconde(&o);
+
+        let e = generer(&mut o, f, &Typst::new("typst-absent")).unwrap_err();
+
+        assert!(e.contains("enregistrer"), "{e}");
+        assert_eq!(o.projet.meta.livraison.livrables.len(), avant);
+    }
+
+    /// **Un échec de composition crée quand même le livrable** (spec § 3) : il paraît en erreur,
+    /// avec son message, et son bouton Régénérer. Sans quoi la seule issue serait de tout
+    /// ressaisir — cinq listes déroulantes pour un sidecar absent.
+    #[test]
+    fn un_echec_de_composition_laisse_le_livrable_en_erreur() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let f = fabrication_seconde(&o);
+        let cle = f.cle();
+
+        let g = generer(&mut o, f, &Typst::new("typst-absent")).expect("le livrable est posé");
+
+        assert_eq!(g.packages.len(), 1, "une cible, un résultat");
+        assert!(g.packages[0].erreur.is_some());
+        let pose = o
+            .projet
+            .meta
+            .livraison
+            .livrables
+            .iter()
+            .find(|l| l.cle() == cle)
+            .expect("le livrable reste dans le livre");
+        assert!(
+            matches!(pose.generation, crate::projet::Generation::Echec { .. }),
+            "l'échec doit être retenu sur le livrable : {:?}",
+            pose.generation
+        );
+    }
+
+    /// Le doublon se refuse comme à l'ajout, et **avant** de composer : composer pour découvrir
+    /// ensuite qu'on refuse coûterait des secondes pour rien, et écrirait des fichiers dans le
+    /// répertoire d'un livrable qui existe déjà.
+    #[test]
+    fn generer_refuse_un_doublon_sans_composer() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let f = o.projet.meta.livraison.livrables[0].fabrication.clone();
+
+        let e = generer(&mut o, f, &Typst::new("typst-absent")).unwrap_err();
+
+        assert!(e.contains("déjà un livrable"), "{e}");
+        assert_eq!(o.projet.meta.livraison.livrables.len(), 1);
+        assert!(!dir.path().join("livre").exists(), "rien n'a été écrit");
+    }
+
+    /// Régénérer ne touche à aucun axe : le livrable est le même après qu'avant, seul son état
+    /// change. Et une clé que le livre ne porte pas se refuse en le disant.
+    #[test]
+    fn regenerer_ne_touche_pas_aux_axes_et_refuse_une_cle_inconnue() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let avant = o.projet.meta.livraison.livrables[0].clone();
+
+        let g = regenerer(&mut o, &avant.cle(), &Typst::new("typst-absent"))
+            .expect("la commande rend son compte rendu, l'échec est dans le résultat");
+        assert_eq!(g.packages.len(), 1);
+        assert_eq!(
+            o.projet.meta.livraison.livrables[0].fabrication,
+            avant.fabrication
+        );
+
+        let e = regenerer(
+            &mut o,
+            "pod-inconnu-broche-creme",
+            &Typst::new("typst-absent"),
+        )
+        .unwrap_err();
+        assert!(e.contains("n'est pas un livrable"), "{e}");
     }
 }

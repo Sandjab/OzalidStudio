@@ -131,6 +131,8 @@ pub fn run() {
             commands::livrable_retirer,
             commands::livrable_regler,
             commands::livrable_viser,
+            commands::livrable_generer,
+            commands::livrable_regenerer,
             commands::packager,
             commands::ebook_generer,
             commands::envoi_regler,
