@@ -546,6 +546,12 @@ impl Livraison {
                 if avant == vise {
                     rebaptise = Some(l.cle());
                 }
+                // Les fichiers de la génération d'avant sont restés sous l'ancienne clé, et
+                // le répertoire de sorties est nommé par elle : ce livrable n'a plus de
+                // package. Sans cette ligne, `empreinte::interieur` — qui ne dépend pas du
+                // papier — le laisserait paraître à jour sur son intérieur, et l'écran ne
+                // signalerait qu'une couverture périmée là où tout a disparu.
+                l.generation = Generation::Jamais;
                 // La mesure du gabarit survit : le papier ne pagine pas.
             }
             // La finition, elle, n'est pas un axe de fabrication : `resout` ne la voit
@@ -2273,6 +2279,63 @@ blanche = true
             l.courant, "lulu-108x175-broche-standard",
             "le pointeur désigne un absent"
         );
+    }
+
+    /// **Le test qui protège la ligne de l'écran.** Le repli de papier renomme le livrable,
+    /// donc son répertoire de sorties, qui est nommé par la clé à quatre axes : les fichiers
+    /// de la génération d'avant sont sous une clé que plus personne ne porte.
+    ///
+    /// Garder l'empreinte ferait dire à l'écran « la couverture a changé » — `empreinte::
+    /// couverture` inclut le papier, `empreinte::interieur` ne l'inclut pas — là où la vérité
+    /// est qu'il n'y a plus de package du tout. Régénérer réécrirait tout de toute façon,
+    /// mais l'utilisateur aurait lu entre-temps qu'il ne manquait qu'une couverture.
+    #[test]
+    fn un_papier_replie_perd_sa_generation() {
+        let mut livrable = Livrable::pour(fab("lulu", "108x175", "broche", "papier-disparu"));
+        livrable.generation = Generation::Fait {
+            interieur: "aaaaaaaaaaaaaaaa".into(),
+            couverture: "bbbbbbbbbbbbbbbb".into(),
+        };
+        let avant = livrable.cle();
+        let mut l = Livraison {
+            livrables: vec![livrable],
+            courant: avant.clone(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+
+        l.normalise();
+
+        assert_eq!(
+            l.livrables.len(),
+            1,
+            "le livrable reste, sous un autre papier"
+        );
+        assert_ne!(l.livrables[0].cle(), avant, "le papier a bien été replié");
+        assert_eq!(l.livrables[0].generation, Generation::Jamais);
+    }
+
+    /// Le pendant, et il n'est pas décoratif : sans lui, remettre `Jamais` à tout le monde
+    /// passerait le test ci-dessus et périmerait en silence tous les packages de tous les
+    /// projets à chaque ouverture.
+    #[test]
+    fn un_livrable_intact_garde_sa_generation() {
+        let mut livrable = Livrable::pour(fab("lulu", "108x175", "broche", "standard"));
+        let faite = Generation::Fait {
+            interieur: "aaaaaaaaaaaaaaaa".into(),
+            couverture: "bbbbbbbbbbbbbbbb".into(),
+        };
+        livrable.generation = faite.clone();
+        let mut l = Livraison {
+            livrables: vec![livrable],
+            courant: "lulu-108x175-broche-standard".into(),
+            deja_compose: false,
+            mesures: std::collections::BTreeMap::new(),
+        };
+
+        l.normalise();
+
+        assert_eq!(l.livrables[0].generation, faite);
     }
 
     /// La finition n'est pas un axe de fabrication : `resout` ne la voit pas, et rien ne
