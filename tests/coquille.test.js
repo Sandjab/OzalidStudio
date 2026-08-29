@@ -73,6 +73,8 @@ const dest = (p) => {
     gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
     papier, finition: null, dos_mm: null, fond_perdu_mm: null,
     compose: null,
+    // L'état de génération, que la vue sert depuis le lot 3.
+    etat: { etat: 'jamais' },
   };
 };
 
@@ -259,6 +261,40 @@ function atelier({
           livrables: livraison.livrables.filter((d) => d.cle !== args.cle),
         };
         return vue();
+      // Les quatre verbes du lot 2, plus la table des vignettes. Le faux modélise la règle
+      // — générer met à jour —, il ne recopie pas les empreintes : elles sont éprouvées
+      // côté Rust, et deux versions de la même règle finissent par diverger.
+      case 'livrable_generer':
+      case 'livrable_remplacer': {
+        const f = args.livrable;
+        const cle = `${f.pod}-${f.format}-${f.reliure}-${f.papier}`;
+        const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
+        const neuf = { ...dest(p ?? providers[0]), ...f, cle, etat: { etat: 'ajour' } };
+        livraison = {
+          ...livraison,
+          livrables: cmd === 'livrable_generer'
+            ? [...livraison.livrables, neuf]
+            : livraison.livrables.map((d) => (d.cle === args.cle ? neuf : d)),
+        };
+        return { projet: vue(), packages: [] };
+      }
+      case 'livrable_regenerer':
+        livraison = {
+          ...livraison,
+          livrables: livraison.livrables.map((d) => (
+            d.cle === args.cle ? { ...d, etat: { etat: 'ajour' } } : d)),
+        };
+        return { projet: vue(), packages: [] };
+      case 'livrable_supprimer':
+        livraison = {
+          ...livraison,
+          livrables: livraison.livrables.filter((d) => d.cle !== args.cle),
+        };
+        return {
+          projet: vue(),
+          nettoyage: { absents: [], etrangers: [], dossier_retire: true },
+        };
+      case 'livrable_vignettes': return {};
       case 'composer':
         livraison = {
           ...livraison,

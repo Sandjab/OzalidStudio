@@ -94,6 +94,9 @@ const chez = (p, papier = PODS.find((x) => x.cle === p.pod).papiers[0].cle) => (
   gabarit: p.cle, pod: p.pod, format: p.format, reliure: p.reliure,
   papier, finition: null, dos_mm: null, fond_perdu_mm: null,
   compose: null,
+  // L'état que `empreinte::etat` calcule et que la vue sert depuis le lot 3. Un livrable
+  // qu'on déclare sans le générer n'a rien perdu : on ne lui a rien demandé.
+  etat: { etat: 'jamais' },
 });
 
 const PROJET = {
@@ -308,6 +311,49 @@ async function ouvre(
       projet = { ...projet, livre: args.livre };
       return oublier();
     }
+    // Les quatre verbes du lot 2. L'état que le Rust calcule par empreintes est modélisé
+    // par le plus simple qui en garde le sens : générer met à jour, et tout ce qui pagine
+    // périme. Le faux ne hache rien — les empreintes sont éprouvées côté Rust, et les
+    // redire ici en ferait deux versions à tenir, dont une fausse le jour où l'autre bouge.
+    if (cmd === 'livrable_generer' || cmd === 'livrable_remplacer') {
+      const f = args.livrable;
+      const cle = `${f.pod}-${f.format}-${f.reliure}-${f.papier}`;
+      const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
+      const neuf = { ...chez(p ?? providers[0], f.papier), ...f, cle, etat: { etat: 'ajour' } };
+      maj({
+        livrables: cmd === 'livrable_generer'
+          ? [...projet.livraison.livrables, neuf]
+          : projet.livraison.livrables.map((d) => (d.cle === args.cle ? neuf : d)),
+      });
+      const packages = sur.packages ?? [];
+      return {
+        projet: retenirPackages(packages),
+        packages,
+        // Absent quand il n'y a rien à dire : les trois autres verbes n'effacent jamais, et
+        // un `null` dans leur réponse ferait croire à une question qu'ils ne posent pas.
+        ...(cmd === 'livrable_remplacer' && sur.nettoyage_echoue
+          ? { nettoyage_echoue: sur.nettoyage_echoue } : {}),
+      };
+    }
+    if (cmd === 'livrable_regenerer') {
+      maj({
+        livrables: projet.livraison.livrables.map((d) => (
+          d.cle === args.cle ? { ...d, etat: { etat: 'ajour' } } : d)),
+      });
+      const packages = sur.packages ?? [];
+      return { projet: retenirPackages(packages), packages };
+    }
+    if (cmd === 'livrable_supprimer') {
+      maj({ livrables: projet.livraison.livrables.filter((d) => d.cle !== args.cle) });
+      // Le cas heureux par défaut : rien d'absent, rien d'étranger, répertoire retiré.
+      return {
+        projet,
+        nettoyage: sur.nettoyage ?? { absents: [], etrangers: [], dossier_retire: true },
+      };
+    }
+    // Relues du disque, hors de la vue : un test qui n'en pose pas en voit une table vide,
+    // ce qui est exactement ce qu'un projet jamais généré rend.
+    if (cmd === 'livrable_vignettes') return sur.vignettes ?? {};
     if (cmd === 'manuscrit_reimporter' || cmd === 'manuscrit_choisir') return oublier();
     // Le démarrage et la garde envoient ces trois commandes sans qu'aucun test ne les
     // demande : sans réponse ici, elles lèveraient avant que rien ne soit vérifié.
@@ -321,7 +367,10 @@ async function ouvre(
   };
   const ctx = await charge({ invoke, open: async () => '/livres/LHC.ozalid' });
   await ctx.els.get('btOuvrir').declenche('click');
-  return { ...ctx, appels };
+  // `invoke` et `projet` pour les tests du harnais lui-même : le premier appelle le faux
+  // sans passer par l'écran, le second lit ce que le faux a retenu. Une fonction et non la
+  // valeur — le projet est remplacé à chaque commande, pas muté.
+  return { ...ctx, appels, invoke, projet: () => projet };
 }
 
 const attendreApercu = () => new Promise((r) => setTimeout(r, 300));
@@ -329,6 +378,33 @@ const attendreApercu = () => new Promise((r) => setTimeout(r, 300));
 const attendreComposition = () => new Promise((r) => setTimeout(r, 700));
 const combien = (appels, cmd) => appels.filter(([c]) => c === cmd).length;
 const dernier = (appels, cmd) => appels.filter(([c]) => c === cmd).pop();
+
+/* ---------- le harnais des quatre verbes ---------- */
+
+/**
+ * Le faux backend doit répondre aux quatre verbes du lot 2 et porter l'état de chaque
+ * livrable, sans quoi aucun test de l'écran neuf ne peut s'écrire.
+ *
+ * Ce test ne vérifie pas l'écran : il vérifie le harnais qui permettra de le vérifier.
+ * C'est le seul de ce fichier dans ce cas, et c'est assumé — un harnais muet ferait
+ * échouer les tests d'écran loin de leur cause.
+ */
+test('le faux backend sert les quatre verbes et l\'état de chaque livrable', async () => {
+  const { invoke, projet } = await ouvre([LULU]);
+  assert.strictEqual(projet().livraison.livrables[0].etat.etat, 'jamais');
+
+  const r = await invoke('livrable_generer', { livrable: chez(LULU, 'standard') });
+  assert.ok(r.projet, 'générer rend la vue du projet');
+  assert.ok(Array.isArray(r.packages), 'et les packages composés');
+  assert.strictEqual(
+    r.projet.livraison.livrables.at(-1).etat.etat, 'ajour',
+    'un livrable qui vient d\'être généré est à jour'
+  );
+
+  const s = await invoke('livrable_supprimer', { cle: 'lulu-108x175-broche-standard' });
+  assert.deepStrictEqual(s.nettoyage.etrangers, [], 'la suppression rend son nettoyage');
+  assert.ok(await invoke('livrable_vignettes'), 'les vignettes répondent, fût-ce à vide');
+});
 
 /* ---------- la liste des livrables ---------- */
 
