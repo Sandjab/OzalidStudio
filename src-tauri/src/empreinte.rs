@@ -102,15 +102,22 @@ fn json<T: serde::Serialize>(v: &T) -> String {
 
 /// Où en est un livrable, comparé à l'état courant du projet.
 ///
-/// `Serialize` parce que le lot 2 le fera descendre dans la vue que le front consomme ; il
-/// n'a aucun autre usage côté Rust.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+/// `Serialize` parce que la vue le fait descendre jusqu'au front, qui en tire ce que chaque
+/// ligne dit d'elle-même ; il n'a aucun autre usage côté Rust.
+///
+/// Pas de `Copy` depuis le lot 3 : `Echec` porte le message de la génération ratée. Le type
+/// ne circule qu'une fois par livrable et par vue — le clone se paie moins cher qu'une ligne
+/// qui dirait « échec » sans dire lequel, et qui obligerait à relancer la composition pour
+/// apprendre pourquoi elle a échoué.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(tag = "etat", rename_all = "lowercase")]
 pub enum Etat {
     /// Jamais généré : rien à regarder, rien à refaire tant qu'on ne l'a pas demandé.
     Jamais,
-    /// La dernière génération a échoué ; son message est dans `Generation::Echec`.
-    Echec,
+    /// La dernière génération a échoué, et dit pourquoi.
+    Echec {
+        message: String,
+    },
     AJour,
     Perime {
         interieur: bool,
@@ -127,7 +134,11 @@ pub enum Etat {
 pub fn etat(projet: &Projet, l: &Livrable) -> Etat {
     let (i, c) = match &l.generation {
         crate::projet::Generation::Jamais => return Etat::Jamais,
-        crate::projet::Generation::Echec { .. } => return Etat::Echec,
+        crate::projet::Generation::Echec { message } => {
+            return Etat::Echec {
+                message: message.clone(),
+            }
+        }
         crate::projet::Generation::Fait {
             interieur: i,
             couverture: c,
@@ -339,7 +350,30 @@ mod tests {
         l.generation = crate::projet::Generation::Echec {
             message: "typst absent".into(),
         };
-        assert_eq!(etat(&p, &l), Etat::Echec);
+        assert_eq!(
+            etat(&p, &l),
+            Etat::Echec {
+                message: "typst absent".into()
+            }
+        );
+    }
+
+    /// Le message de l'échec voyage avec l'état, sinon la ligne du lot 3 dit « échec » sans
+    /// dire lequel — et la seule façon d'apprendre pourquoi la génération a échoué serait de
+    /// la relancer, c'est-à-dire de refaire la chose qui a échoué.
+    #[test]
+    fn un_echec_porte_sa_raison() {
+        let p = projet_d_essai();
+        let mut l = p.meta.livraison.livrables[0].clone();
+        l.generation = crate::projet::Generation::Echec {
+            message: "dos non relevé sur le gabarit".into(),
+        };
+        assert_eq!(
+            etat(&p, &l),
+            Etat::Echec {
+                message: "dos non relevé sur le gabarit".into()
+            }
+        );
     }
 
     /// `Livre` ne dérive pas `Default` : ses quatorze champs se posent un à un, comme

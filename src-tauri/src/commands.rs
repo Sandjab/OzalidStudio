@@ -21,7 +21,7 @@ use crate::maquettes;
 use crate::package;
 use crate::planche;
 use crate::preferences;
-use crate::projet::{Livrable, Livraison, Livre, Mesure, Projet};
+use crate::projet::{Livrable, Livre, Mesure, Projet};
 use crate::typst::Typst;
 
 /// Les fichiers de catalogue du poste que le démarrage a refusés. Vide sur un poste qui
@@ -2699,6 +2699,11 @@ pub struct LivrableVue {
     dos_mm: Option<f64>,
     fond_perdu_mm: Option<f64>,
     compose: Option<MesureVue>,
+    /// Où en est le package de ce livrable, comparé à l'état courant du projet. C'est ce que
+    /// la ligne montre sans avoir rien composé — et la seule chose qui distingue « à jour »
+    /// de « il faudrait regénérer », sur un projet rouvert dont aucun fichier n'a été
+    /// recomposé de la session.
+    etat: crate::empreinte::Etat,
 }
 
 #[derive(Debug, Serialize)]
@@ -2713,9 +2718,13 @@ pub struct MesureVue {
 }
 
 /// La livraison telle que le front la lit : un livrable par livrable, son identité à
-/// quatre axes, et la mesure de **son gabarit** — que deux papiers partagent, chacun en
-/// tirant son propre dos.
-fn livraison_vue(l: &Livraison) -> LivraisonVue {
+/// quatre axes, la mesure de **son gabarit** — que deux papiers partagent, chacun en
+/// tirant son propre dos — et son état de génération.
+///
+/// Le `Projet` entier et non la seule `Livraison` : `empreinte::etat` compare le livrable au
+/// manuscrit, à la maquette et aux images, qui n'appartiennent pas à la livraison.
+fn livraison_vue(projet: &Projet) -> LivraisonVue {
+    let l = &projet.meta.livraison;
     let vue = |liv: &Livrable| -> LivrableVue {
         let f = &liv.fabrication;
         let gabarit = f.cle_gabarit();
@@ -2744,6 +2753,7 @@ fn livraison_vue(l: &Livraison) -> LivraisonVue {
             dos_mm: liv.dos_mm,
             fond_perdu_mm: liv.fond_perdu_mm,
             compose,
+            etat: crate::empreinte::etat(projet, liv),
         }
     };
     LivraisonVue {
@@ -2788,7 +2798,7 @@ fn vue(o: &Ouvert) -> Result<ProjetVue, String> {
         images: o.projet.images.keys().cloned().collect(),
         interieur: o.projet.meta.interieur.clone(),
         interieur_pdf,
-        livraison: livraison_vue(&o.projet.meta.livraison),
+        livraison: livraison_vue(&o.projet),
         elagues: o.projet.elagues.clone(),
         envois: o.projet.meta.envois.clone(),
     })
@@ -2876,6 +2886,9 @@ fn nom_sidecar() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// La production ne monte plus de `Livraison` à la main depuis que `livraison_vue` prend
+    /// le `Projet` entier ; les tests, eux, en construisent encore pour les éprouver seules.
+    use crate::projet::Livraison;
 
     /// Les libellés des boutons font foi au retour : le plugin rend le texte du
     /// bouton, pas un `Yes`/`No`. Une comparaison qui dériverait de l'affichage
@@ -3132,6 +3145,44 @@ nom = "Pelliculage mat"
     /// La vue que le front lit : deux papiers du même gabarit **partagent** la mesure —
     /// c'est ce qui rend la comparaison de deux papiers gratuite — et n'en tirent pas le
     /// même dos, chacun ayant sa formule.
+    /// La vue porte l'état de chaque livrable, sans quoi l'écran du lot 3 ne peut rien dire
+    /// d'un package qu'il n'a pas lui-même composé dans la session courante.
+    #[test]
+    fn la_vue_porte_l_etat_de_chaque_livrable() {
+        let projet = Projet::nouveau(Livre::vide(), String::new());
+        let v = livraison_vue(&projet);
+        assert!(matches!(
+            v.livrables[0].etat,
+            crate::empreinte::Etat::Jamais
+        ));
+    }
+
+    /// Le champ voyage sous la forme que le front lit : un objet étiqueté, et les deux
+    /// drapeaux de la péremption. La geler ici évite qu'un `rename` la change sans que rien
+    /// ne rougisse — le front, lui, ne compile pas.
+    #[test]
+    fn l_etat_se_serialise_comme_le_front_le_lit() {
+        let perime = crate::empreinte::Etat::Perime {
+            interieur: false,
+            couverture: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&perime).unwrap(),
+            r#"{"etat":"perime","interieur":false,"couverture":true}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&crate::empreinte::Etat::Jamais).unwrap(),
+            r#"{"etat":"jamais"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&crate::empreinte::Etat::Echec {
+                message: "typst absent".into()
+            })
+            .unwrap(),
+            r#"{"etat":"echec","message":"typst absent"}"#
+        );
+    }
+
     #[test]
     fn deux_papiers_d_un_gabarit_partagent_la_mesure_sans_partager_le_dos() {
         let creme = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
@@ -3154,7 +3205,9 @@ nom = "Pelliculage mat"
             },
         );
 
-        let v = livraison_vue(&l);
+        let mut projet = Projet::nouveau(Livre::vide(), String::new());
+        projet.meta.livraison = l;
+        let v = livraison_vue(&projet);
 
         assert_eq!(
             v.courant, "kdp-6x9-broche-blanc",
