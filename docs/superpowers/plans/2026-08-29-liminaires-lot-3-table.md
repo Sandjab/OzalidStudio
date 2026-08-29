@@ -861,20 +861,24 @@ La preuve du lot, par composition réelle. Deux tests `#[ignore]`, comme ceux du
         );
     }
 
-    /// Une table longue **converge quand même** : elle occupe plusieurs pages, et les
-    /// folios qu'elle affiche tiennent compte de toutes.
+    /// Une table longue ne dérange **ni la pagination ni l'ancrage des repères**.
     ///
-    /// Le cas court d'à côté ne le prouve pas : une table d'une page ajoute deux pages
-    /// (elle et sa blanche) quel que soit le nombre de tours que Typst fait. Ici la
-    /// table déborde, ce qui la fait grossir de son propre débordement — c'est le point
-    /// fixe que la spec § 2.3 confie au moteur plutôt qu'à une boucle Rust.
+    /// Le cas court d'à côté ne l'exerce pas : cinq entrées tiennent sur une page, et
+    /// une table qui insérerait un saut parasite tous les N blocs y passerait inaperçue.
+    /// Quarante chapitres d'une page font déborder la table, et les folios doivent
+    /// rester **consécutifs** à partir de sa sortie.
     ///
-    /// Quarante chapitres d'une page : la table en occupe deux, et les folios doivent
-    /// rester **consécutifs** à partir de sa sortie. Un point fixe manqué se voit à un
-    /// folio de trop bas d'exactement une page sur toute la suite.
+    /// **Ce que ce test ne prouve pas, et qu'aucun test Rust ne peut prouver :** que les
+    /// folios *imprimés dans la table* tiennent compte des pages qu'elle occupe.
+    /// `typst query` refuse `text` comme `block` — « is not locatable » —, si bien que
+    /// le seul élément interrogeable est le repère, dont le folio est juste que la table
+    /// converge ou non. Le point fixe de la spec § 2.3 a été vérifié par composition le
+    /// 29/08, sur PNG, et reste une vérification à l'œil ; la liaison entre le repère et
+    /// ce qui s'imprime est gardée, elle, par
+    /// `la_table_affiche_le_folio_de_chaque_repere`.
     #[test]
     #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
-    fn une_table_qui_deborde_sur_deux_pages_converge() {
+    fn une_table_longue_ne_derange_pas_l_ancrage_des_reperes() {
         let typst = typst_de_test();
         let dossier = tempfile::tempdir().expect("répertoire de travail");
         let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
@@ -904,7 +908,7 @@ La preuve du lot, par composition réelle. Deux tests `#[ignore]`, comme ceux du
         let attendus: Vec<f64> = (0..pieces.len()).map(|i| premier + i as f64).collect();
         assert_eq!(
             folios, attendus,
-            "les folios ne sont plus consécutifs : la table ne s'est pas comptée en entier"
+            "une table longue a dérangé l'ancrage : les folios ne sont plus consécutifs"
         );
     }
 ```
@@ -912,14 +916,13 @@ La preuve du lot, par composition réelle. Deux tests `#[ignore]`, comme ceux du
 - [ ] **Étape 2 : lancer les deux tests**
 
 ```bash
-cd src-tauri && cargo test --lib -- --ignored la_table_se_compte une_table_qui_deborde 2>&1 | tail -30
+cd src-tauri && cargo test --lib -- --ignored la_table_se_compte une_table_longue_ne_derange 2>&1 | tail -30
 ```
 
-Attendu : les deux au vert. **En cas de rouge sur le premier `assert!(premier >= 7.0)`**, la
-table de quarante entrées tient sur une seule page dans ce gabarit : ce n'est pas un défaut,
-mais le test ne prouve alors plus rien — allonger les titres de `manuscrit_long()` n'est pas
-une option (d'autres tests s'en servent), **ajouter une fonction locale** de soixante
-chapitres l'est, sur le modèle vérifié le 29/08.
+Attendu : les deux au vert. **En cas de rouge sur `assert!(premier >= 7.0)`**, relever la
+valeur réelle : une table qui n'aurait poussé le premier chapitre que d'une page dirait
+qu'elle ne s'ouvre pas en belle page, ce qui est un défaut ; une table qui l'aurait poussé
+de trois ou plus est simplement plus longue que prévu, et la borne se relève.
 
 - [ ] **Étape 3 : voir l'écart constant rouge par mutation**
 
@@ -1381,6 +1384,13 @@ git commit -m "Le témoin garde la pagination sous table, l'ebook la suit, le RE
 
 ## Ce qu'aucun test ne verra, et qui se regarde
 
+- **Les folios que la table imprime, lus sur le PDF, et comparés aux pages où les pièces
+  s'ouvrent vraiment.** C'est le point fixe de la spec § 2.3, et **aucun test Rust ne peut
+  l'atteindre** : `typst query` refuse `text` comme `block` (« is not locatable »), si bien
+  que le seul élément interrogeable est le repère — dont le folio est juste que la table
+  converge ou non. Vérifié par prototype composé le 29/08 (table de deux pages, folios
+  consécutifs à partir de 7) ; à revoir ici sur un livre réel, et à revoir **à chaque montée
+  de version de Typst**, qui est le seul évènement capable de le casser.
 - `cargo run --example temoin /tmp/tdm`, puis **la table de Candide ouverte à l'œil** dans le
   PDF de `table-en-tete/` : les points de conduite, l'alignement des folios à droite, le
   blanc au-dessus des lignes.
