@@ -1,27 +1,45 @@
 //! Les jetons `%CLE%` des champs libres du livre.
 //!
 //! Un champ libre — le titre de la page de titre, la dédicace, le copyright — peut
-//! citer un champ clé. La substitution se fait **à la composition**, jamais à la
-//! saisie : le `.ozalid` conserve le texte à jetons, qui doit suivre le livre si le
-//! titre change.
+//! citer un champ clé ou l'imprimeur du livrable. La substitution se fait **à la
+//! composition**, jamais à la saisie : le `.ozalid` conserve le texte à jetons, qui
+//! doit suivre le livre si le titre change.
 
 use crate::projet::Livre;
 
-/// Un jeton et le champ clé qu'il désigne.
-type Jeton = (&'static str, fn(&Livre) -> &str);
-
-/// Les jetons reconnus, et le champ clé que chacun désigne.
+/// Ce contre quoi un champ libre se résout : le livre, et l'imprimeur quand la
+/// composition en vise un.
 ///
-/// Les clés sont littérales par définition : aucune n'est elle-même substituée, et
-/// c'est ce qui rend toute référence cyclique impossible — il n'y a pas de chaîne à
-/// parcourir, donc rien à borner.
-const JETONS: [Jeton; 6] = [
-    ("%TITRE%", |l| &l.titre),
-    ("%AUTEUR%", |l| &l.auteur),
-    ("%GENRE%", |l| &l.genre),
-    ("%EDITEUR%", |l| &l.editeur),
-    ("%COLLECTION%", |l| &l.collection),
-    ("%MONOGRAMME%", |l| &l.monogramme),
+/// **Une seule porte.** Garder `substituer(&str, &Livre)` et ajouter une seconde fonction
+/// pour l'imprimeur aurait ouvert deux chemins de substitution, dont le second serait tôt
+/// ou tard oublié sur un champ libre — et l'oubli ne se verrait qu'imprimé.
+pub struct Contexte<'a> {
+    pub livre: &'a Livre,
+    /// `None` là où le nom de l'imprimeur n'est pas disponible : l'ebook, qui n'en a pas,
+    /// et la couverture, dont la chaîne ne le porte pas jusqu'ici. `%IMPRIMEUR%` rend
+    /// alors la chaîne vide, jamais le jeton littéral.
+    pub imprimeur: Option<&'a str>,
+}
+
+/// Un jeton et ce qu'il désigne dans le contexte.
+type Jeton = (&'static str, for<'a> fn(&'a Contexte<'a>) -> &'a str);
+
+/// Les jetons reconnus, et ce que chacun désigne.
+///
+/// Les six premiers sont des clés du livre, littérales par définition : aucune n'est
+/// elle-même substituée, et c'est ce qui rend toute référence cyclique impossible. Les
+/// trois derniers ne changent rien à cette propriété — l'ISBN et le dépôt légal sont des
+/// clés comme les autres, et l'imprimeur ne vient pas du livre du tout.
+const JETONS: [Jeton; 9] = [
+    ("%TITRE%", |c| &c.livre.titre),
+    ("%AUTEUR%", |c| &c.livre.auteur),
+    ("%GENRE%", |c| &c.livre.genre),
+    ("%EDITEUR%", |c| &c.livre.editeur),
+    ("%COLLECTION%", |c| &c.livre.collection),
+    ("%MONOGRAMME%", |c| &c.livre.monogramme),
+    ("%ISBN%", |c| &c.livre.isbn),
+    ("%DEPOT_LEGAL%", |c| &c.livre.depot_legal),
+    ("%IMPRIMEUR%", |c| c.imprimeur.unwrap_or("")),
 ];
 
 /// Les jetons reconnus, dans l'ordre où l'aide les présente.
@@ -44,7 +62,7 @@ pub fn jetons() -> Vec<&'static str> {
 /// comme du texte à substituer. Un titre valant « 100 % coton » suffit à le montrer.
 ///
 /// Un jeton inconnu est recopié tel quel.
-pub fn substituer(texte: &str, livre: &Livre) -> String {
+pub fn substituer(texte: &str, ctx: &Contexte) -> String {
     let mut sortie = String::with_capacity(texte.len());
     let mut reste = texte;
     while let Some(i) = reste.find('%') {
@@ -55,7 +73,7 @@ pub fn substituer(texte: &str, livre: &Livre) -> String {
             .find(|(jeton, _)| a_partir_du_pour_cent.starts_with(jeton))
         {
             Some((jeton, valeur)) => {
-                sortie.push_str(valeur(livre));
+                sortie.push_str(valeur(ctx));
                 reste = &a_partir_du_pour_cent[jeton.len()..];
             }
             None => {
@@ -84,15 +102,15 @@ mod tests {
     #[test]
     fn chaque_jeton_prend_la_valeur_de_sa_cle() {
         let l = livre();
-        assert_eq!(substituer("%TITRE%", &l), "Les Heures creuses");
-        assert_eq!(substituer("%AUTEUR%", &l), "Ivan Pjig");
-        assert_eq!(substituer("%GENRE%", &l), "roman");
+        assert_eq!(substituer("%TITRE%", &ctx(&l, None)), "Les Heures creuses");
+        assert_eq!(substituer("%AUTEUR%", &ctx(&l, None)), "Ivan Pjig");
+        assert_eq!(substituer("%GENRE%", &ctx(&l, None)), "roman");
     }
 
     #[test]
     fn un_texte_sans_jeton_ne_bouge_pas() {
         assert_eq!(
-            substituer("Tous droits réservés.", &livre()),
+            substituer("Tous droits réservés.", &ctx(&livre(), None)),
             "Tous droits réservés."
         );
     }
@@ -100,7 +118,7 @@ mod tests {
     #[test]
     fn plusieurs_jetons_dans_une_phrase() {
         assert_eq!(
-            substituer("%TITRE%, un %GENRE% de %AUTEUR%.", &livre()),
+            substituer("%TITRE%, un %GENRE% de %AUTEUR%.", &ctx(&livre(), None)),
             "Les Heures creuses, un roman de Ivan Pjig.",
         );
     }
@@ -109,7 +127,10 @@ mod tests {
     /// Le supprimer ferait disparaître du texte sans laisser de trace.
     #[test]
     fn un_jeton_inconnu_reste_tel_quel() {
-        assert_eq!(substituer("%TITER% et 100 %", &livre()), "%TITER% et 100 %");
+        assert_eq!(
+            substituer("%TITER% et 100 %", &ctx(&livre(), None)),
+            "%TITER% et 100 %"
+        );
     }
 
     /// **Le test qui compte.** Aucun cycle n'est possible — un jeton ne désigne qu'une
@@ -124,7 +145,7 @@ mod tests {
             auteur: "Ivan Pjig".into(),
             ..Livre::vide()
         };
-        assert_eq!(substituer("%TITRE%", &l), "%AUTEUR%");
+        assert_eq!(substituer("%TITRE%", &ctx(&l, None)), "%AUTEUR%");
     }
 
     /// Un pour-cent isolé, une paire vide, un jeton tronqué : rien ne doit paniquer
@@ -132,9 +153,9 @@ mod tests {
     #[test]
     fn les_pour_cent_isoles_survivent() {
         let l = livre();
-        assert_eq!(substituer("100 % coton", &l), "100 % coton");
-        assert_eq!(substituer("%%", &l), "%%");
-        assert_eq!(substituer("%TITRE", &l), "%TITRE");
+        assert_eq!(substituer("100 % coton", &ctx(&l, None)), "100 % coton");
+        assert_eq!(substituer("%%", &ctx(&l, None)), "%%");
+        assert_eq!(substituer("%TITRE", &ctx(&l, None)), "%TITRE");
     }
 
     /// Les trois clés qui montent au lot 2 sont des jetons comme les autres.
@@ -147,7 +168,7 @@ mod tests {
             ..livre()
         };
         assert_eq!(
-            substituer("%EDITEUR%, %COLLECTION%, %MONOGRAMME%", &l),
+            substituer("%EDITEUR%, %COLLECTION%, %MONOGRAMME%", &ctx(&l, None)),
             "Ozalid, Les Heures, O"
         );
     }
@@ -168,11 +189,65 @@ mod tests {
         };
         for jeton in jetons() {
             assert_ne!(
-                substituer(jeton, &l),
+                substituer(jeton, &ctx(&l, None)),
                 jeton,
                 "{jeton} est annoncé mais ne substitue rien"
             );
         }
         assert_eq!(jetons().len(), JETONS.len());
+    }
+
+    fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
+        Contexte {
+            livre: l,
+            imprimeur,
+        }
+    }
+
+    #[test]
+    fn l_isbn_et_le_depot_legal_se_citent() {
+        let l = Livre {
+            isbn: "978-2-07-041311-9".into(),
+            depot_legal: "septembre 2026".into(),
+            ..Livre::vide()
+        };
+        assert_eq!(
+            substituer("ISBN %ISBN% — dépôt légal : %DEPOT_LEGAL%", &ctx(&l, None)),
+            "ISBN 978-2-07-041311-9 — dépôt légal : septembre 2026"
+        );
+    }
+
+    /// L'imprimeur ne vient pas du livre : il vient de ce qu'on fabrique. Le même livre
+    /// composé chez deux imprimeurs porte deux mentions.
+    #[test]
+    fn l_imprimeur_vient_du_contexte_pas_du_livre() {
+        let l = livre();
+        assert_eq!(
+            substituer("Imprimé par %IMPRIMEUR%", &ctx(&l, Some("BoD"))),
+            "Imprimé par BoD"
+        );
+    }
+
+    /// Sans imprimeur — l'ebook, la couverture —, le jeton rend la **chaîne vide**, jamais
+    /// lui-même. Un `%IMPRIMEUR%` en toutes lettres dans le pavé de copyright serait une
+    /// faute que le lecteur verrait, sur un fichier que plus personne ne relit.
+    #[test]
+    fn sans_imprimeur_le_jeton_s_efface_au_lieu_de_rester() {
+        let l = livre();
+        assert_eq!(
+            substituer("Imprimé par %IMPRIMEUR%.", &ctx(&l, None)),
+            "Imprimé par ."
+        );
+    }
+
+    /// Un ISBN vide n'écrit rien, pas le jeton : c'est le cas d'un tirage privé, et il est
+    /// légitime.
+    #[test]
+    fn un_isbn_vide_n_ecrit_rien() {
+        let l = Livre {
+            isbn: String::new(),
+            ..Livre::vide()
+        };
+        assert_eq!(substituer("%ISBN%", &ctx(&l, None)), "");
     }
 }

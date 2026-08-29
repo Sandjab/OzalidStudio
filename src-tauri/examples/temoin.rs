@@ -49,6 +49,7 @@ fn main() -> Result<(), String> {
 
     let livre = Livre {
         isbn: String::new(),
+        depot_legal: String::new(),
         titre: "Candide".into(),
         // Le jeton, comme un projet neuf : la page de titre reprend le titre.
         titre_page: "%TITRE%".into(),
