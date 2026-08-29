@@ -225,7 +225,7 @@ test('un imprimeur à gabarit annonce que le fond perdu se relève', async () =>
   const note = els.get('livrables').textContent;
   assert.match(note, /148,0 × 210,0 mm/);
   assert.match(note, /relever sur le gabarit/);
-  assert.doesNotMatch(note, /fond perdu \d/, 'aucun chiffre de fond perdu inventé');
+  assert.doesNotMatch(note, /FP \d/, 'aucun chiffre de fond perdu inventé');
 });
 
 /**

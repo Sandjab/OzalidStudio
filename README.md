@@ -170,9 +170,10 @@ Un **livrable** tient en quatre choix : l'imprimeur, son format, sa reliure, son
 plus une finition quand l'imprimeur en offre une. Chaque choix est limité à ce que cet
 imprimeur propose réellement.
 
-Une reliure que l'application ne sait pas encore composer apparaît **grisée, avec sa raison
-en clair** : « cet imprimeur ne le fait pas » et « l'application ne le compose pas » ne
-sont pas la même chose.
+Une reliure que l'application ne sait pas encore composer apparaît **grisée** : elle reste
+visible, parce que l'imprimeur la propose, mais elle ne se choisit pas. Ce qui manque à
+l'application pour la composer est dit plus bas, en « Limites connues » — l'écran ne le
+répète pas sous chaque livrable.
 
 Chez les imprimeurs qui ne publient ni formule de dos ni fond perdu, un champ vous demande
 ce que vous avez **relevé sur leur gabarit**. Ces champs naissent vides, jamais préremplis :
@@ -418,6 +419,12 @@ distinguer, et à 16 px la silhouette seule doit suffire.
 
 ### Limites connues
 
+- **L'application ne compose que le dos carré collé.** Les autres reliures des catalogues
+  — couverture rigide chez BoD, Lulu et TheBookEdition, dos carré rembordé chez CoolLibri —
+  paraissent grisées à la Livraison : la planche leur demande un rempli, des mors et des
+  cartons dont la géométrie n'est pas relevée. L'intérieur, lui, se compose pour elles.
+  C'est une limite de l'application, pas du catalogue : le jour où ces géométries seront
+  relevées, le grisé tombera sans qu'aucun fichier d'imprimeur ne change.
 - Sous macOS, le « Quitter » du menu contextuel du Dock et l'extinction de session ne
   passent pas par la garde qui protège le travail non enregistré. Les couvrir demande une
   API que Tauri n'expose pas.

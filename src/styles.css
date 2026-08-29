@@ -1353,12 +1353,6 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    Fer à droite pour la même raison qu'elle grandit : collée au bouton, la mesure se
    lit en colonne d'un livrable à l'autre au lieu de flotter où le nom la laisse. */
 .livrable .note { margin: 0; flex: 1 1 14rem; min-width: 0; text-align: right; }
-/* La raison d'une reliure non outillée prend une ligne à elle, fer à gauche : c'est
-   une phrase, pas une mesure. Sans le `flex-basis` entier elle irait se serrer contre
-   la note de format, à droite, où elle se lirait comme une seconde caractéristique du
-   gabarit — alors qu'elle dit ce que l'application ne compose pas. Après `.note` dans
-   le fichier, à spécificité égale : c'est cet ordre-là qui reprend l'alignement. */
-.livrable .raison { flex-basis: 100%; text-align: left; }
 /* Ce que la composition a mesuré prend un rang à soi, fer à gauche, pour la même raison
    que la raison d'une reliure non outillée : sans le `flex-basis` entier, ses trois
    chiffres iraient se serrer contre la note de format, à droite, où ils se liraient

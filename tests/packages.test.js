@@ -354,7 +354,7 @@ test('la liste ne porte que les livrables déclarés', async () => {
   const { els } = await ouvre([LULU, KDP, COOLLIBRI], {}, { livrables: [chez(LULU)] });
   assert.deepStrictEqual(els.get('livrables').textes('span').filter((t) => t.includes('—')), [
     'Lulu — poche 108 × 175',
-    '108,0 × 175,0 mm — fond perdu 3,175 mm',
+    '108,0 × 175,0 mm — FP 3,175 mm',
   ]);
   assert.ok(!els.get('liv-papier-kdp-6x9-broche-creme'), 'un gabarit non livrable est offert');
 });
@@ -543,11 +543,14 @@ test('retirer un livrable demande confirmation avant de le perdre', async () => 
 });
 
 /**
- * Le grisé motivé, tel que la spec § 6 le demande : ce que le POD n'outille pas reste
- * visible et se refuse en disant pourquoi. « Ce POD ne le fait pas » et « l'application
- * ne le compose pas » sont deux choses, et l'écran doit les distinguer.
+ * Le grisé sans glose : ce que l'application n'outille pas reste visible dans la liste
+ * et ne se choisit pas, mais l'écran ne s'explique plus. La note qui accompagnait le
+ * grisé parlait d'une option qu'on ne voit qu'en ouvrant le menu, sous un livrable dont
+ * la reliure était déjà choisie — elle se lisait comme une remarque sur ce livrable-là.
+ * La réserve est au README, section « Limites connues » ; le refus, lui, reste rendu par
+ * `catalogue::resout` avec sa raison, au moment du choix.
  */
-test('la ligne offre les reliures du POD, la non outillée grisée avec sa raison', async () => {
+test('la ligne offre les reliures du POD, la non outillée grisée et sans glose', async () => {
   const { els } = await ouvre([KDP], {}, { pods: PODS, livrables: [chez(KDP)] });
 
   const reliures = els.get('liv-reliure-kdp-6x9-broche-creme');
@@ -565,11 +568,13 @@ test('la ligne offre les reliures du POD, la non outillée grisée avec sa raiso
   assert.strictEqual(broche.disabled, false);
   assert.strictEqual(rigide.disabled, true, 'une reliure non outillée doit être grisée');
 
-  // La raison en clair, sous la ligne — pas dans une infobulle : c'est la différence
-  // entre « ce POD ne le fait pas » et « l'application ne le compose pas », et elle
-  // doit se lire à l'écran.
-  const raison = els.get('liv-reliure-raison-kdp-6x9-broche-creme');
-  assert.match(raison.textContent, /casewrap/);
+  // Et rien sous la ligne pour la commenter : la glose vivait là où le CSS pose les
+  // caractéristiques du livrable, à distance du contrôle qu'elle expliquait.
+  assert.ok(
+    !els.get('liv-reliure-raison-kdp-6x9-broche-creme'),
+    'le grisé ne se glose plus sous le livrable'
+  );
+  assert.doesNotMatch(els.get('livrables').textContent, /casewrap/);
 });
 
 // Deux reliures composables chez le même POD : le cas que la reliure réglable rend
@@ -980,7 +985,7 @@ test('un package affiche le dos, la planche et les fichiers produits', async () 
     'Papier standard',
     '25,0 mm',
     '16,51 mm',
-    '238,86 × 181,35 mm, fond perdu 3,175 mm',
+    '238,86 × 181,35 mm, FP 3,175 mm',
   ]);
   assert.match(els.get('packages').textContent, /couverture-lulu\.pdf/);
 });
@@ -1016,7 +1021,7 @@ test('le compte rendu d\'un package porte la finition retenue', async () => {
     'Pelliculage mat',
     '25,0 mm',
     '16,51 mm',
-    '238,86 × 181,35 mm, fond perdu 3,175 mm',
+    '238,86 × 181,35 mm, FP 3,175 mm',
   ]);
 });
 

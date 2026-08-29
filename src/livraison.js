@@ -121,7 +121,6 @@ function afficherLivrables() {
     const pod = pods.find((x) => x.cle === d.pod);
     const ligne = h('div', undefined, 'livrable');
     let releve;
-    let raison;
     let mesure;
     ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
 
@@ -130,6 +129,13 @@ function afficherLivrables() {
       // sa raison (`catalogue::resout`), et l'écran ne fait que rendre ce refus lisible
       // avant le clic. Le fichier tranche — une reliure porte une géométrie **ou** une
       // raison de ne pas en avoir, jamais les deux.
+      //
+      // Le grisé ne se glose pas. La raison du fichier disait pourquoi une option est
+      // inerte, mais elle s'écrivait sous le livrable, là où le CSS pose les
+      // caractéristiques de celui-ci, et pour une option qu'on ne voit qu'en ouvrant le
+      // menu : sous un livrable broché, on lisait une phrase sur la couverture rigide.
+      // La réserve est au README, « Limites connues » — c'est une limite de
+      // l'application, pas un fait du livrable.
       const reliure = h('select');
       reliure.id = `liv-reliure-${d.cle}`;
       for (const r of pod.reliures) {
@@ -145,18 +151,6 @@ function afficherLivrables() {
       reliure.disabled = pod.reliures.length < 2;
       reliure.addEventListener('change', () => reglerLivrable(d));
       ligne.append(reliure);
-
-      // La raison, en clair et sur sa propre ligne. Pas une infobulle : c'est la seule
-      // partie du message qui distingue « ce POD ne le fait pas » de « l'application ne
-      // le compose pas », et elle doit se lire sans survol.
-      const grisees = pod.reliures.filter((r) => r.non_outille !== null);
-      if (grisees.length) {
-        raison = h('p', undefined, 'note raison');
-        raison.id = `liv-reliure-raison-${d.cle}`;
-        raison.textContent = grisees
-          .map((r) => `${r.nom} — ${r.non_outille}`)
-          .join(' · ');
-      }
 
       // La finition ne paraît que là où il y en a : un contrôle vide se lit comme un
       // choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Le contrôle
@@ -194,7 +188,7 @@ function afficherLivrables() {
         const champ = (quoi, libelle, valeur) =>
           releve.append(champReleve(`liv-${quoi}-${d.cle}`, libelle, valeur, d));
         if (!dosPublie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
-        if (p?.fond_perdu === null) champ('fp', 'Fond perdu (mm)', d.fond_perdu_mm);
+        if (p?.fond_perdu === null) champ('fp', 'FP (mm)', d.fond_perdu_mm);
       }
       mesure = noteMesure(d, dosPublie, perimees);
       if (p) ligne.append(h('span', noteFormat(p), 'note'));
@@ -228,7 +222,6 @@ function afficherLivrables() {
     ligne.append(retirer);
     if (releve) ligne.append(releve);
     if (mesure) ligne.append(mesure);
-    if (raison) ligne.append(raison);
     box.append(ligne);
   }
 
@@ -314,9 +307,13 @@ function noteMesure(d, dosPublie, perimees) {
 }
 
 function noteFormat(p) {
+  // « FP » et non « fond perdu » : le terme entier tenait la moitié de la note et la
+  // repliait, en emportant le « mm » de l'unité au rang suivant. Abrégé partout sur cet
+  // onglet — champ de relevé compris —, jamais ailleurs : la Couverture, où le fond
+  // perdu est ce qu'on règle, l'écrit en toutes lettres.
   const fp = p.fond_perdu === null
-    ? 'fond perdu à relever sur le gabarit'
-    : `fond perdu ${nb(p.fond_perdu, 3)} mm`;
+    ? 'FP à relever sur le gabarit'
+    : `FP ${nb(p.fond_perdu, 3)} mm`;
   return `${nb(p.largeur, 1)} × ${nb(p.hauteur, 1)} mm — ${fp}`;
 }
 
@@ -414,7 +411,7 @@ function afficherPackages(resultats) {
         ['Gouttière', `${nb(p.gouttiere, 1)} mm`],
         ['Dos', `${nb(p.dos)} mm`],
         ['Planche', `${nb(p.planche[0])} × ${nb(p.planche[1])} mm, `
-          + `fond perdu ${nb(p.fond_perdu, 3)} mm`],
+          + `FP ${nb(p.fond_perdu, 3)} mm`],
       ]) dl.append(h('dt', k), h('dd', v));
       // Les chiffres et les chemins d'un côté, la vignette de l'autre : ce qui
       // s'empilait tient désormais côte à côte, et la hauteur d'un compte rendu est
