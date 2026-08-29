@@ -337,7 +337,7 @@ async function rafraichirMaquettes() {
   const maquettes = await invoke('maquettes_liste');
 
   const liste = $('listeMaquettes');
-  desarmerMaquettes();
+  desarmerGeste();
   liste.replaceChildren();
   cadres = new Map();
   // Le rapport d'aspect des cadres, pris au format du livrable visé : ils tiennent leur
@@ -381,9 +381,6 @@ const vignettes = new Map();
 let cadres = new Map();
 /** La passe en cours : une liste refaite abandonne celle qui courait encore. */
 let passeVignettes = 0;
-/** La carte en attente de son second clic : sa clé, et de quoi la rendre à son état. */
-let armee = null;
-
 /**
  * Ouvre le dialogue, et compose ce qui manque.
  *
@@ -506,7 +503,7 @@ function carteMaquette(m) {
   const dit = document.createElement('p');
   dit.className = 'note';
   ligne.append(dit);
-  bouton.addEventListener('click', () => armerOuRepartir(m, ligne, dit));
+  bouton.addEventListener('click', () => armerOuRepartir(m, ligne, dit, bouton));
 
   ligne.append(boutonGeste('Cloner', () => invoke('maquette_cloner', { cle: m.cle })));
   if (!m.fournie) {
@@ -569,12 +566,17 @@ function gesteEffacer(m) {
   // poids côte à côte dont l'un est sans retour se cliquent l'un pour l'autre.
   b.className = 'nu';
   b.addEventListener('click', () => {
-    if (b.textContent === 'Effacer') {
-      b.textContent = 'Confirmer';
-      b.className = 'danger';
-      return undefined;
+    if (armeSur(b)) {
+      desarmerGeste();
+      return rendCompte(() => invoke('maquette_effacer', { cle: m.cle }));
     }
-    return rendCompte(() => invoke('maquette_effacer', { cle: m.cle }));
+    armerGeste(b, () => {
+      b.textContent = 'Effacer';
+      b.className = 'nu';
+    });
+    b.textContent = 'Confirmer';
+    b.className = 'danger';
+    return undefined;
   });
   return b;
 }
@@ -603,43 +605,28 @@ async function enregistrerMaquette() {
  * Aucune carte ne marque « la maquette courante », et ce n'est pas un oubli : le projet
  * ne garde pas de quelle maquette il est parti, et n'aurait rien de vrai à en dire une
  * fois les réglages repris un par un. L'armement est l'état d'un geste en cours, pas
- * celui du livre — il meurt avec la boîte, voir `desarmerMaquettes`.
+ * celui du livre — il se défait au clic ailleurs, à Échap et avec la boîte, comme tous
+ * les gestes en deux temps : voir `armerGeste` dans `app.js`.
  *
  * Appliquer ferme le dialogue : la couverture obtenue ne se juge que sur l'aperçu, que
  * la boîte modale recouvre.
  */
-function armerOuRepartir(m, carte, dit) {
-  const confirme = armee?.cle === m.cle;
-  desarmerMaquettes();
-  if (confirme) {
+function armerOuRepartir(m, carte, dit, vignette) {
+  if (armeSur(vignette)) {
+    desarmerGeste();
     $('dlgMaquettes').close();
     return tente(async () => afficherProjet(await invoke('maquette_choisir', { cle: m.cle })));
   }
   // Ce qu'il faudra défaire est retenu ici, et non relu sur la carte : « fournie » ne se
   // devine pas d'un DOM où l'invite a pris sa place.
   const origine = dit.textContent;
-  armee = {
-    cle: m.cle,
-    defaire: () => {
-      carte.className = 'maquette';
-      dit.textContent = origine;
-    },
-  };
+  armerGeste(vignette, () => {
+    carte.className = 'maquette';
+    dit.textContent = origine;
+  });
   carte.className = 'maquette armee';
   dit.textContent = 'Confirmer ?';
   return undefined;
-}
-
-/**
- * Désarme la carte en attente, s'il y en a une.
- *
- * Appelé à la fermeture du dialogue autant qu'au changement de carte : une carte armée
- * qui survivrait ferait de la réouverture un piège — le premier clic, celui qu'on croit
- * sans conséquence, écraserait les réglages.
- */
-function desarmerMaquettes() {
-  armee?.defaire();
-  armee = null;
 }
 
 /**

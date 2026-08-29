@@ -507,6 +507,8 @@ test('le dernier livrable ne peut pas être retiré', async () => {
   });
   assert.strictEqual(els.get('liv-retirer-lulu-108x175-broche-standard').disabled, false);
 
+  // Deux clics : le premier arme la confirmation, le second retire.
+  await els.get('liv-retirer-kdp-6x9-broche-creme').declenche('click');
   await els.get('liv-retirer-kdp-6x9-broche-creme').declenche('click');
   assert.strictEqual(dernier(appels, 'livrable_retirer')[1].cle, 'kdp-6x9-broche-creme');
   assert.strictEqual(
@@ -514,6 +516,30 @@ test('le dernier livrable ne peut pas être retiré', async () => {
     true,
     'le dernier livrable reste retirable'
   );
+});
+
+/**
+ * Retirer emporte le livrable et les relevés saisis sur sa ligne, sans reprise possible.
+ * Le bouton voisine trois listes qu'on manipule couramment : le premier clic demande
+ * confirmation, le second retire. Même dispositif que l'effacement d'une maquette, pour
+ * la même raison.
+ */
+test('retirer un livrable demande confirmation avant de le perdre', async () => {
+  const { els, appels } = await ouvre([LULU, KDP], {}, {
+    livrables: [chez(LULU), chez(KDP)],
+  });
+
+  const bt = els.get('liv-retirer-kdp-6x9-broche-creme');
+  await bt.declenche('click');
+  assert.strictEqual(
+    dernier(appels, 'livrable_retirer'),
+    undefined,
+    'le premier clic ne doit rien retirer'
+  );
+  assert.strictEqual(bt.textContent, 'Confirmer', 'le premier clic doit appeler le second');
+
+  await bt.declenche('click');
+  assert.strictEqual(dernier(appels, 'livrable_retirer')[1].cle, 'kdp-6x9-broche-creme');
 });
 
 /**
@@ -1565,4 +1591,42 @@ test('réimporter le manuscrit ne quitte pas l\'étape où l\'on travaille', asy
     'un réimport a renvoyé au Livre');
   assert.ok(els.get('livrables').textes('span').includes('Lulu — poche 108 × 175'),
     'un réimport a vidé la liste des livrables');
+});
+
+/**
+ * Un retrait armé est une question, pas un état : le premier clic ailleurs y répond
+ * « non ». Sans quoi le « Confirmer » reste allumé au milieu d'une ligne qu'on continue
+ * de régler, et l'on ne sait plus ce que le prochain clic va faire.
+ */
+test('un clic ailleurs rend le retrait à son premier temps', async () => {
+  const { els, appels } = await ouvre([LULU, KDP], {}, {
+    livrables: [chez(LULU), chez(KDP)],
+  });
+  const bt = els.get('liv-retirer-kdp-6x9-broche-creme');
+  await bt.declenche('click');
+
+  await els.get('livrables').declenche('click');
+  assert.strictEqual(bt.textContent, 'Retirer', 'le bouton doit être revenu au repos');
+
+  await bt.declenche('click');
+  assert.strictEqual(
+    dernier(appels, 'livrable_retirer'),
+    undefined,
+    'le geste doit repartir de son premier temps, pas retirer'
+  );
+});
+
+/** Échap défait le retrait armé, comme il défait un geste dans la boîte des maquettes. */
+test('Échap rend le retrait à son premier temps', async () => {
+  const { els, appels, echap } = await ouvre([LULU, KDP], {}, {
+    livrables: [chez(LULU), chez(KDP)],
+  });
+  const bt = els.get('liv-retirer-kdp-6x9-broche-creme');
+  await bt.declenche('click');
+
+  await echap();
+  assert.strictEqual(bt.textContent, 'Retirer');
+
+  await bt.declenche('click');
+  assert.strictEqual(dernier(appels, 'livrable_retirer'), undefined);
 });

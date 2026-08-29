@@ -113,3 +113,75 @@ test('une variable CSS posée sur un élément se relit', async () => {
   assert.strictEqual(el.style.getPropertyValue('--coupe-y'), '',
     'une variable jamais posée doit se lire vide, comme dans le navigateur');
 });
+
+/**
+ * La remontée vers la fenêtre, réduite à ce dont l'application dépend : un geste en
+ * deux temps se défait au premier clic ailleurs, et cette règle-là ne se pose qu'une
+ * fois, sur la fenêtre. Sans remontée, chaque test la croirait tenue sans qu'aucun clic
+ * ne l'ait jamais exercée — le faux DOM aurait rendu la garde muette.
+ */
+test('un clic sur un élément se fait entendre de la fenêtre, avec sa cible', async () => {
+  const { els, contexte } = await charge({ invoke: invokeMuet });
+  const cibles = [];
+  contexte.window.addEventListener('click', (e) => cibles.push(e.target));
+
+  await els.get('btMaquettes').declenche('click');
+
+  assert.deepStrictEqual(cibles, [els.get('btMaquettes')]);
+});
+
+/**
+ * Échap sur un `<dialog>` ouvert : le navigateur le fait entendre, puis demande la
+ * fermeture — et l'application peut la refuser. C'est par ce refus qu'un geste armé
+ * garde sa boîte ouverte le temps de se défaire.
+ */
+test('Échap demande la fermeture du dialogue, qui peut être refusée', async () => {
+  const { els, contexte, echap } = await charge({ invoke: invokeMuet });
+  const dlg = els.get('dlgMaquettes');
+  dlg.showModal();
+  const touches = [];
+  contexte.window.addEventListener('keydown', (e) => touches.push(e.key));
+  dlg.addEventListener('cancel', (e) => e.preventDefault());
+
+  await echap();
+
+  assert.deepStrictEqual(touches, ['Escape'], 'la fenêtre doit entendre la touche');
+  assert.strictEqual(dlg.open, true, 'une fermeture refusée laisse la boîte ouverte');
+});
+
+/** Sans refus, Échap ferme la boîte — et `close` part, comme dans le navigateur. */
+test('Échap ferme le dialogue que rien ne retient', async () => {
+  const { els, echap } = await charge({ invoke: invokeMuet });
+  const dlg = els.get('dlgMaquettes');
+  dlg.showModal();
+  let ferme = 0;
+  dlg.addEventListener('close', () => { ferme += 1; });
+
+  await echap();
+
+  assert.strictEqual(dlg.open, false);
+  assert.strictEqual(ferme, 1, 'la fermeture doit émettre `close`');
+});
+
+/**
+ * Le geste remonte d'abord par les ancêtres, et porte la cible qu'il a vraiment eue.
+ * C'est le cas de la vignette d'une maquette : le clic tombe sur l'image, l'écouteur
+ * est sur le bouton qui la porte, et une règle posée sur la fenêtre doit pouvoir
+ * distinguer les deux. Sans cette remontée, aucun test ne verrait jamais l'image.
+ */
+test('un clic sur un enfant remonte par le parent, cible inchangée', async () => {
+  const { els, contexte } = await charge({ invoke: invokeMuet });
+  const parent = els.get('couv');
+  const enfant = contexte.document.createElement('img');
+  parent.append(enfant);
+  const vus = [];
+  parent.addEventListener('click', (e) => vus.push(['parent', e.target]));
+  contexte.window.addEventListener('click', (e) => vus.push(['fenêtre', e.target]));
+
+  await enfant.declenche('click');
+
+  assert.deepStrictEqual(vus, [['parent', enfant], ['fenêtre', enfant]]);
+  assert.strictEqual(parent.contains(enfant), true);
+  assert.strictEqual(parent.contains(parent), true, 'un élément se contient lui-même');
+  assert.strictEqual(parent.contains(els.get('btMaquettes')), false);
+});

@@ -1619,8 +1619,13 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* Le second clic d'un effacement : ce qui se perd là ne se retrouve pas. Le rouge est
    au fond et non au texte — les boutons de cette fenêtre sont déjà noirs, et du rouge
-   sombre sur noir ne se lit pas. Vu à l'écran, pas dans un test. */
-.maquette button.danger {
+   sombre sur noir ne se lit pas. Vu à l'écran, pas dans un test.
+   Le retrait d'un livrable arme de la même façon et porte donc la même marque : deux
+   sélecteurs plutôt qu'un `button.danger` général, pour que la règle garde le poids
+   sous lequel elle a été vue juste — cette feuille a déjà perdu deux batailles de
+   spécificité, et celle-ci se joue contre le fond de survol. */
+.maquette button.danger,
+.livrable button.danger {
   background: var(--rouge);
   border-color: var(--rouge);
   color: var(--surface);

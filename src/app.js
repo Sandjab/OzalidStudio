@@ -468,6 +468,59 @@ function lienFichier(chemin, libelle) {
   return a;
 }
 
+/* ---------- les gestes en deux temps ---------- */
+
+/**
+ * Ce qu'un premier clic a armé et qui attend son second : l'effacement d'une maquette,
+ * le retrait d'un livrable, la maquette dont on va repartir.
+ *
+ * Un seul à la fois dans toute la fenêtre. Deux questions posées en même temps ne se
+ * répondraient pas l'une l'autre : le second clic n'en sert qu'une, et l'autre resterait
+ * à promettre un geste qu'elle ne fera pas.
+ *
+ * Un armement est l'état d'un geste en cours, jamais celui du livre — tout ce qui n'est
+ * pas sa réponse le défait : le clic ailleurs, Échap, la fermeture de la boîte, la
+ * liste qui se refait.
+ */
+let arme = null;
+
+/**
+ * Arme un geste. `defaire` remet l'écran dans l'état où le premier clic l'a trouvé, et
+ * `element` est ce qui porte la question — le seul que le clic ailleurs ne défait pas,
+ * puisque c'est lui qui reçoit la réponse.
+ */
+function armerGeste(element, defaire) {
+  desarmerGeste();
+  arme = { element, defaire };
+}
+
+/** Défait le geste en attente, s'il y en a un. */
+function desarmerGeste() {
+  arme?.defaire();
+  arme = null;
+}
+
+/** Ce geste-ci est-il celui qui attend sa réponse ? */
+const armeSur = (element) => arme?.element === element;
+
+// Ce qui vaut pour tout l'écran se pose une fois, sur la fenêtre, plutôt qu'à chaque
+// bouton fabriqué. Le clic remonte jusqu'ici après avoir été servi par sa cible : au
+// premier clic, le geste s'arme puis se reconnaît ; à tout autre, la question tombe.
+//
+// `contains` et non l'égalité : la vignette d'une maquette porte son image, et c'est
+// l'image que le clic touche. Comparer la cible au bouton défaisait la carte à
+// l'instant même où elle s'armait, et son second clic n'arrivait jamais.
+window.addEventListener('click', (e) => {
+  if (arme && !arme.element.contains(e.target)) desarmerGeste();
+});
+
+// Échap répond « non » lui aussi. Hors de la boîte des maquettes seulement : dedans,
+// c'est `cancel` qui s'en charge, sans quoi la touche défairait le geste ici et
+// laisserait la fermeture partir dans la foulée.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('dlgMaquettes').open) desarmerGeste();
+});
+
 /* ---------- catalogue ---------- */
 
 async function chargerProviders() {
@@ -490,9 +543,18 @@ async function chargerProviders() {
   afficherDiffusion(await invoke('diffusion_lire'));
   await rafraichirMaquettes();
   $('btMaquettes').addEventListener('click', ouvrirMaquettes);
-  // Désarmer à la fermeture, et pas seulement à l'ouverture : Échap ferme aussi, et le
-  // dialogue rouvert sur une carte armée ferait du premier clic un écrasement.
-  $('dlgMaquettes').addEventListener('close', desarmerMaquettes);
+  // Désarmer à la fermeture, et pas seulement à l'ouverture : la liste ne se refait pas
+  // à l'ouverture, et un geste qui l'aurait traversée ferait du premier clic de la
+  // réouverture un écrasement — ou un effacement.
+  $('dlgMaquettes').addEventListener('close', desarmerGeste);
+  // Échap sur la boîte : tant qu'une question est posée, la touche y répond et la
+  // fermeture est refusée. C'est l'exception assumée au « Échap n'est pas intercepté »
+  // de `couverture.js` — un geste armé passe avant la fermeture, le second Échap ferme.
+  $('dlgMaquettes').addEventListener('cancel', (e) => {
+    if (!arme) return;
+    e.preventDefault();
+    desarmerGeste();
+  });
   $('btMaquettesFermer').addEventListener('click', () => $('dlgMaquettes').close());
   $('btMaquetteEnregistrer').addEventListener('click', enregistrerMaquette);
   construireReglages();

@@ -1716,3 +1716,92 @@ test('sans personnalisée, la grille ne s\'annonce pas en deux groupes', async (
 
   assert.deepEqual(contenuListe(els), ['Bandeau', 'Filets', 'Surimpression']);
 });
+
+/* ---------- ce qui défait un geste armé ---------- */
+
+/**
+ * Un geste armé est une question posée, pas un état du livre : le premier clic ailleurs
+ * y répond « non ». Sans quoi le « Confirmer » reste allumé sous les yeux et l'on ne
+ * sait plus, en revenant à la boîte, ce qu'un clic va faire.
+ */
+test('un clic ailleurs défait le geste armé', async () => {
+  const effacees = [];
+  const { els } = await ouvre(maquette(), {
+    maquette_effacer: ({ cle }) => { effacees.push(cle); return null; },
+    maquettes_liste: AVEC_PERSONNALISEE,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await bouton(els, 'Ma collection', 'Effacer').declenche('click');
+
+  await els.get('etatMaquettes').declenche('click');
+
+  bouton(els, 'Ma collection', 'Effacer');
+  assert.deepEqual(effacees, [], 'rien ne doit être parti au Rust');
+});
+
+/**
+ * Échap défait le geste avant de fermer la boîte. La touche garde son sens — annuler ce
+ * qui est en cours — et c'est le geste armé qui passe en premier : fermer d'un coup
+ * emporterait la question sans qu'on ait vu qu'elle était posée.
+ */
+test('Échap défait le geste armé avant de fermer la boîte', async () => {
+  const { els, echap } = await ouvre(maquette(), { maquettes_liste: AVEC_PERSONNALISEE });
+  await els.get('btMaquettes').declenche('click');
+  await bouton(els, 'Ma collection', 'Effacer').declenche('click');
+
+  await echap();
+  bouton(els, 'Ma collection', 'Effacer');
+  assert.strictEqual(els.get('dlgMaquettes').open, true, 'le premier Échap ne ferme pas');
+
+  await echap();
+  assert.strictEqual(els.get('dlgMaquettes').open, false, 'le second ferme');
+});
+
+/**
+ * Un geste armé ne survit pas à la fermeture — la liste ne se refait pas à l'ouverture,
+ * et un « Confirmer » qui l'aurait traversée ferait du premier clic de la réouverture
+ * un effacement. C'est la garde que les cartes ont déjà, que les boutons n'avaient pas.
+ */
+test('rouvrir la boîte ne laisse aucun geste armé', async () => {
+  const effacees = [];
+  const { els } = await ouvre(maquette(), {
+    maquette_effacer: ({ cle }) => { effacees.push(cle); return null; },
+    maquettes_liste: AVEC_PERSONNALISEE,
+  });
+  await els.get('btMaquettes').declenche('click');
+  await bouton(els, 'Ma collection', 'Effacer').declenche('click');
+  await els.get('btMaquettesFermer').declenche('click');
+  await els.get('btMaquettes').declenche('click');
+
+  await bouton(els, 'Ma collection', 'Effacer').declenche('click');
+
+  assert.deepEqual(effacees, [], 'le premier clic après réouverture ne doit rien effacer');
+});
+
+/** La carte armée suit la même règle que les boutons : un clic ailleurs la défait. */
+test('un clic ailleurs désarme la vignette', async () => {
+  const { els, choisies } = await overlay();
+  await vignette(els, 'Bandeau').declenche('click');
+
+  await els.get('etatMaquettes').declenche('click');
+
+  assert.strictEqual(mention(els, 'Bandeau'), '', 'la carte doit être revenue au repos');
+  assert.deepEqual(choisies, []);
+});
+
+/**
+ * Le clic tombe sur l'image, jamais sur le bouton qui la porte : une règle qui
+ * comparerait la cible au bouton défairait la carte à l'instant même où elle s'arme, et
+ * le second clic n'arriverait jamais. Le faux DOM ne le montrait pas tant qu'il ne
+ * faisait pas remonter le geste par les ancêtres.
+ */
+test('cliquer l\'image d\'une vignette arme la carte au lieu de la défaire', async () => {
+  const { els, choisies } = await overlay();
+  const img = [...vignette(els, 'Bandeau').children].find((e) => e.tagName === 'IMG');
+  assert.ok(img, 'la vignette doit porter son image');
+
+  await img.declenche('click');
+
+  assert.strictEqual(mention(els, 'Bandeau'), 'Confirmer ?', 'la carte doit rester armée');
+  assert.deepEqual(choisies, [], 'un seul clic ne doit rien appliquer');
+});

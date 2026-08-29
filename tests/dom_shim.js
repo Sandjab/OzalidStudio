@@ -30,6 +30,9 @@ test.afterEach(() => {
   minuteurs.clear();
 });
 
+/** Ce qui remonte jusqu'à la fenêtre, et rien d'autre : voir `declenche`. */
+const REMONTENT = new Set(['click', 'keydown']);
+
 class El {
   constructor(tag) {
     this.tagName = String(tag).toUpperCase();
@@ -114,8 +117,17 @@ class El {
   }
 
   append(...n) {
-    for (const x of n) this.enfants.push(x);
+    for (const x of n) {
+      x._parent = this;
+      this.enfants.push(x);
+    }
     this.majSelection();
+  }
+
+  /** Comme le DOM : un élément se contient lui-même, et contient tous ses descendants. */
+  contains(el) {
+    for (let e = el; e; e = e._parent) if (e === this) return true;
+    return false;
   }
 
   replaceChildren(...n) {
@@ -135,6 +147,7 @@ class El {
   replaceChild(neuf, ancien) {
     const i = this.enfants.indexOf(ancien);
     if (i < 0) throw new Error('replaceChild : l\'ancien enfant n\'est pas là');
+    neuf._parent = this;
     this.enfants[i] = neuf;
     return ancien;
   }
@@ -221,7 +234,31 @@ class El {
   }
 
   async declenche(type, evenement) {
-    for (const fn of this.ecouteurs[type] || []) await fn(evenement);
+    if (!REMONTENT.has(type)) {
+      for (const fn of this.ecouteurs[type] || []) await fn(evenement);
+      return;
+    }
+    // Le geste remonte par les ancêtres, puis jusqu'à la fenêtre, où l'application pose
+    // ce qui vaut pour tout l'écran : défaire au premier clic ailleurs ce qu'un premier
+    // clic avait armé. La cible ne bouge pas en chemin — c'est elle qui distingue la
+    // vignette de l'image qu'elle porte, et le bouton armé de tout le reste de l'écran.
+    // Seuls les types qui remontent dans le navigateur sont ici : `close` et `cancel`
+    // n'y sont pas, et les mettre ferait passer pour vraie une règle qui ne l'est pas.
+    const evt = { ...evenement, target: evenement?.target ?? this };
+    for (const fn of this.ecouteurs[type] || []) await fn(evt);
+    if (this._parent) return this._parent.declenche(type, evt);
+    await this._doc?._versFenetre?.(type, evt);
+  }
+
+  /**
+   * La demande de fermeture d'un `<dialog>`, telle qu'Échap la déclenche : `cancel`
+   * part d'abord, et l'application peut la refuser. C'est par ce refus qu'un geste
+   * armé garde sa boîte ouverte le temps de se défaire.
+   */
+  async demandeFermeture() {
+    let refusee = false;
+    await this.declenche('cancel', { preventDefault: () => { refusee = true; } });
+    if (!refusee) this.close();
   }
 
   /**
@@ -336,6 +373,11 @@ async function charge({
     getElementById: (id) => els.get(id) ?? null,
     createElement: (tag) => Object.assign(new El(tag), { _registre: els, _doc: document }),
     fonts: { add: (f) => faces.push(f) },
+    // Par où un geste remonte : `ecouteursFenetre` est déclaré plus bas, et cette
+    // fonction ne court qu'une fois l'application chargée.
+    _versFenetre: async (type, evt) => {
+      for (const fn of ecouteursFenetre[type] ?? []) await fn(evt);
+    },
   };
   const els = new Map(
     (ids ?? idsDuHtml(html)).map((id) => {
@@ -434,6 +476,15 @@ async function charge({
     menu: (id) => declencheEvenement('menu', { payload: id }),
     /** La fenêtre demande à se fermer. */
     fermeture: () => declencheEvenement('fermeture-demandee', {}),
+    /**
+     * Échap, comme le navigateur l'envoie : la fenêtre l'entend d'abord, puis un
+     * dialogue ouvert demande à se fermer — et peut se le voir refuser.
+     */
+    echap: async () => {
+      for (const fn of ecouteursFenetre.keydown ?? []) await fn({ key: 'Escape' });
+      const dlg = [...els.values()].find((e) => e.tagName === 'DIALOG' && e.open);
+      if (dlg) await dlg.demandeFermeture();
+    },
     /** La fenêtre est redimensionnée, et le dit comme le navigateur le dit. */
     redimensionner: async (largeur, hauteur) => {
       contexte.window.innerWidth = largeur;

@@ -208,8 +208,23 @@ function afficherLivrables() {
     // Le dernier ne se retire pas : le Rust refuse, mais un bouton qui ne peut
     // qu'échouer vaut mieux éteint que refusé.
     retirer.disabled = declares.length < 2;
-    retirer.addEventListener('click', () => tente(async () =>
-      afficherProjet(await invoke('livrable_retirer', { cle: d.cle }))));
+    // Retirer emporte la ligne et les relevés qu'on y a saisis, sans reprise, au milieu
+    // de trois listes qu'on manipule couramment : le premier clic arme, le second
+    // retire. Même dispositif que l'effacement d'une maquette, pour la même raison.
+    retirer.addEventListener('click', () => {
+      if (armeSur(retirer)) {
+        desarmerGeste();
+        return tente(async () =>
+          afficherProjet(await invoke('livrable_retirer', { cle: d.cle })));
+      }
+      armerGeste(retirer, () => {
+        retirer.textContent = 'Retirer';
+        retirer.className = 'nu';
+      });
+      retirer.textContent = 'Confirmer';
+      retirer.className = 'danger';
+      return undefined;
+    });
     ligne.append(retirer);
     if (releve) ligne.append(releve);
     if (mesure) ligne.append(mesure);
