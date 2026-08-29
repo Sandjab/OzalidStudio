@@ -128,16 +128,6 @@
     <div class="bloc">
       <h2>Intérieur</h2>
       <label><span>Police</span><select id="inPoliceInterieur"></select></label>
-      <label><span>Table des matières</span>
-        <select id="inTable">
-          <option value="absente">Absente</option>
-          <option value="en-tete">En tête</option>
-          <option value="en-fin">En fin</option>
-        </select></label>
-      <p class="note">Une table reprend parties, chapitres et pièces, avec leur folio.
-        <strong>L'allumer ajoute des pages, donc change le dos</strong> : la composition
-        repart, et la planche reste sans dos le temps qu'elle tourne. En tête, elle vient
-        avant la préface ; en fin, après les annexes.</p>
       <!-- Le détail du repli est ici, à côté de sa cause : c'est sous ce sélecteur qu'on
            vient réparer. Le pied n'en porte qu'un signe, qui suit dans toutes les étapes.
            Typst ne dit rien de lui-même — il substitue une écriture et poursuit —, et son
@@ -155,6 +145,16 @@
       <p class="echantillon" id="echantillonPolice" hidden>L’aube naît, et le cœur
         s’étonne : « où donc allions-nous ? »</p>
       <p class="note alerte" id="echantillonAbsent" hidden></p>
+
+      <label><span>Table des matières</span>
+        <select id="inTable">
+          <option value="absente">Absente</option>
+          <option value="en-tete">En tête</option>
+          <option value="en-fin">En fin</option>
+        </select></label>
+      <p class="note">Une table reprend parties, chapitres et pièces, avec leur folio.
+        En tête, elle vient avant la préface ; en fin, après les annexes.
+        <strong>L'allumer ajoute des pages, donc change le dos.</strong></p>
 
       <!-- Les douze tailles, dans l'ordre où le livre les rencontre : le texte d'abord,
            puis les liminaires page à page, puis ce qui ouvre une section, le folio pour
