@@ -94,6 +94,50 @@ fn json<T: serde::Serialize>(v: &T) -> String {
     serde_json::to_string(v).unwrap_or_else(|e| format!("!{e}"))
 }
 
+/// Où en est un livrable, comparé à l'état courant du projet.
+///
+/// `Serialize` parce que le lot 2 le fera descendre dans la vue que le front consomme ; il
+/// n'a aucun autre usage côté Rust.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "etat", rename_all = "lowercase")]
+pub enum Etat {
+    /// Jamais généré : rien à regarder, rien à refaire tant qu'on ne l'a pas demandé.
+    Jamais,
+    /// La dernière génération a échoué ; son message est dans `Generation::Echec`.
+    Echec,
+    AJour,
+    Perime {
+        interieur: bool,
+        couverture: bool,
+    },
+}
+
+/// Où en est ce livrable.
+///
+/// Deux empreintes recalculées à chaque appel, sans cache. Hacher le manuscrit du témoin
+/// coûte quelques dixièmes de milliseconde là où composer coûte des secondes ; un cache
+/// achèterait ce dixième-là au prix d'une invalidation à tenir juste — le même arbitrage que
+/// `commands::envoi_vignettes` a déjà tranché dans ce sens.
+pub fn etat(projet: &Projet, l: &Livrable) -> Etat {
+    let (i, c) = match &l.generation {
+        crate::projet::Generation::Jamais => return Etat::Jamais,
+        crate::projet::Generation::Echec { .. } => return Etat::Echec,
+        crate::projet::Generation::Fait {
+            interieur: i,
+            couverture: c,
+        } => (i, c),
+    };
+    let (di, dc) = (*i != interieur(projet, l), *c != couverture(projet, l));
+    if di || dc {
+        Etat::Perime {
+            interieur: di,
+            couverture: dc,
+        }
+    } else {
+        Etat::AJour
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +259,61 @@ mod tests {
             depart,
             "le manuscrit ne périme la couverture que par la pagination, retenue à part"
         );
+    }
+
+    /// Les quatre réponses, sur le même projet. C'est cette fonction que l'écran du lot 3
+    /// interrogera pour marquer une ligne, et le message qu'il affichera dépend de
+    /// *laquelle* des deux moitiés a bougé — d'où le couple de booléens plutôt qu'un simple
+    /// « périmé ».
+    #[test]
+    fn l_etat_dit_laquelle_des_deux_moities_a_bouge() {
+        let mut p = projet_d_essai();
+        let l = p.meta.livraison.livrables[0].clone();
+
+        assert_eq!(etat(&p, &l), Etat::Jamais, "rien n'a été généré");
+
+        let mut a_jour = l.clone();
+        a_jour.generation = crate::projet::Generation::Fait {
+            interieur: interieur(&p, &l),
+            couverture: couverture(&p, &l),
+        };
+        assert_eq!(etat(&p, &a_jour), Etat::AJour);
+
+        // La couverture seule bouge : l'intérieur écrit reste bon, et le lot 2 s'en servira
+        // pour ne pas recomposer 258 pages afin de changer une image.
+        let mut q = p.clone();
+        q.images.insert("premiere.jpg".into(), vec![1, 2, 3]);
+        assert_eq!(
+            etat(&q, &a_jour),
+            Etat::Perime {
+                interieur: false,
+                couverture: true
+            }
+        );
+
+        // Le manuscrit bouge : l'intérieur est faux, et la couverture le deviendra dès que
+        // la pagination aura été reprise — mais tant qu'elle ne l'a pas été, la mesure
+        // retenue n'a pas changé, et seule la moitié intérieure est en cause.
+        p.texte.push_str("\n\nUn paragraphe de plus.");
+        assert_eq!(
+            etat(&p, &a_jour),
+            Etat::Perime {
+                interieur: true,
+                couverture: false
+            }
+        );
+    }
+
+    /// Un échec retenu ne se compare pas : il n'y a pas d'empreinte à confronter, et la
+    /// ligne doit dire « ça n'a pas marché », pas « c'est périmé ».
+    #[test]
+    fn un_echec_retenu_ne_se_compare_pas() {
+        let p = projet_d_essai();
+        let mut l = p.meta.livraison.livrables[0].clone();
+        l.generation = crate::projet::Generation::Echec {
+            message: "typst absent".into(),
+        };
+        assert_eq!(etat(&p, &l), Etat::Echec);
     }
 
     /// `Livre` ne dérive pas `Default` : ses quatorze champs se posent un à un, comme
