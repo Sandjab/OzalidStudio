@@ -2423,4 +2423,111 @@ mod tests {
             }
         }
     }
+
+    /// **La preuve du lot, et son seul livrable.** Les repères ne déplacent aucune page
+    /// et ne se voient sur aucune.
+    ///
+    /// Compter les `#metadata` dans la source ne prouverait rien : c'est Typst qui décide
+    /// de la mise en page, et un élément « invisible » qui ouvrirait un paragraphe
+    /// ajouterait un espacement — donc, sur un livre entier, des pages. La pagination
+    /// change alors le dos, donc la planche, et les exemplaires partent avec une
+    /// couverture fausse sans que rien ne le signale.
+    ///
+    /// La référence est la **même source privée de ses repères**, ligne à ligne : la
+    /// seule différence entre les deux documents est ce que ce lot ajoute. Comparer
+    /// chaque page rendue, et pas seulement le compte, ferme la porte au cas où deux
+    /// écarts se compenseraient.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn les_reperes_n_occupent_aucune_place_et_ne_se_voient_nulle_part() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let avec = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            &r,
+            &manuscrit_long(),
+            None,
+        );
+        let sans: String = avec
+            .lines()
+            .filter(|l| !l.contains(TDM))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_ne!(
+            avec, sans,
+            "la source ne porte aucun repère : rien n'est prouvé"
+        );
+
+        let n_avec = pages_de(&typst, dossier.path(), "avec", &avec);
+        let n_sans = pages_de(&typst, dossier.path(), "sans", &sans);
+        assert!(n_sans > 30, "manuscrit trop court pour prouver : {n_sans}");
+        assert_eq!(
+            n_avec, n_sans,
+            "les repères ont déplacé la pagination : {n_avec} au lieu de {n_sans}"
+        );
+        for page in 1..=n_sans {
+            assert_eq!(
+                page_rendue(&typst, dossier.path(), "avec", page),
+                page_rendue(&typst, dossier.path(), "sans", page),
+                "un repère se voit sur la page {page}"
+            );
+        }
+    }
+
+    /// **Le repère est situé sur la page qu'il ouvre**, et c'est tout ce qui fera la
+    /// justesse des folios de la table au lot 3. Posé un cran trop tôt — avant le saut
+    /// de page —, il enverrait le lecteur à la fin de la pièce précédente ; rien dans le
+    /// compte de pages ni dans le rendu ne le dirait.
+    ///
+    /// Le manuscrit est fait de chapitres d'une page : les folios attendus sont donc
+    /// **consécutifs**, à partir de la page 5 — celle où le corps s'ouvre quand le livre
+    /// n'a pas de dédicace (`assemble`, commentaire du corps). Un repère mal ancré rend
+    /// deux fois le même folio, et la suite cesse d'être consécutive.
+    ///
+    /// Les folios sont relevés par `Typst::mesures`, qui lit `<mesures>` sans composer de
+    /// PDF : la source de test publie ce que la table interrogera, sans qu'aucune API
+    /// neuve n'entre dans le code de production — la table, elle, lira ses repères depuis
+    /// Typst même.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn chaque_repere_est_situe_sur_la_page_qu_il_ouvre() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces: Vec<Piece> = manuscrit_long().into_iter().take(6).collect();
+        let mut s = source(&livre(), &Interieur::default(), pr, &r, &pieces, None);
+        // Le folio de chaque repère, indexé par son rang d'apparition : `mesures` rend
+        // un dictionnaire de nombres, c'est exactement ce qu'il faut.
+        s.push_str(
+            "\n#context [#metadata(query(<ozalid-tdm>).enumerate().fold((:), (d, it) => \
+             d + ((str(it.at(0))): it.at(1).location().page())))<mesures>]\n",
+        );
+        let chemin = dossier.path().join("ancrage.typ");
+        std::fs::write(&chemin, &s).expect("source non écrite");
+        let folios = typst.mesures(&chemin).expect("mesures refusées");
+
+        let releves: Vec<f64> = (0..pieces.len())
+            .map(|i| {
+                *folios
+                    .get(&i.to_string())
+                    .unwrap_or_else(|| panic!("aucun repère au rang {i} : {folios:?}"))
+            })
+            .collect();
+        assert_eq!(
+            releves,
+            vec![5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            "les repères ne suivent pas l'ouverture des chapitres"
+        );
+    }
 }
