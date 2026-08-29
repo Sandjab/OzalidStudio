@@ -128,7 +128,8 @@ L'identité du livre et son texte.
   Il reconnaît les mêmes neuf jetons que le pied de la 4ème — voir 2 · Couverture.
   L'ISBN et le dépôt légal se saisissent dans cet onglet ; l'imprimeur vient du livrable,
   si bien que le même livre composé chez deux imprimeurs porte deux mentions sans qu'on
-  ait rien retapé. Dans l'ebook, qui n'est imprimé nulle part, `%IMPRIMEUR%` ne rend rien.
+  ait rien retapé — sur la couverture comme dans l'intérieur, qui sortent de la même
+  commande. Dans l'ebook, qui n'est imprimé nulle part, `%IMPRIMEUR%` ne rend rien.
 - **La police de l'intérieur** se choisit parmi sept serifs de labeur : EB Garamond (par
   défaut), Crimson Pro, Alegreya, Cardo, Vollkorn, Spectral, Libre Baskerville. Un exemple
   montre l'écriture réelle, dans les octets que le moteur composera.
@@ -146,8 +147,8 @@ Quatre faces à régler : **1ère**, **4ème**, **Dos**, **Planche**.
 - **La 4ème** porte un texte de présentation et, au-dessus, l'auteur, le titre et un filet,
   chacun activable séparément. Le texte reconnaît des jetons comme `%TITRE%` ou `%AUTEUR%`,
   résolus à la composition — les mêmes jetons que reconnaît le pavé de copyright, en
-  1 · Livre. `%IMPRIMEUR%` n'y rend rien non plus : la couverture ne reçoit pas le nom de
-  l'imprimeur.
+  1 · Livre, `%IMPRIMEUR%` compris : le pied de la 4ème nomme l'imprimeur du livrable visé,
+  comme la page de copyright le fait.
 - **Le dos se règle élément par élément.** Auteur, titre, éditeur et collection y ont
   chacun leur style, leur place, leur rang et leur sens de lecture. Place et sens se
   règlent **à la souris**, directement sur l'aperçu. Seule la **largeur** du dos échappe à

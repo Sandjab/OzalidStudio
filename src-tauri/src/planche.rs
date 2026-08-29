@@ -14,6 +14,7 @@ use crate::catalogue::{Papier, Provider};
 use crate::couverture::{
     self, Boite, Couverture, ElementDos, FondQuatre, Panorama, PlaceDos, Ressource,
 };
+use crate::gabarit::Contexte;
 use crate::projet::Livre;
 use serde::Serialize;
 
@@ -549,7 +550,7 @@ pub fn images_posees<'a>(
 }
 
 pub fn source(
-    livre: &Livre,
+    ctx: &Contexte,
     cv: &Couverture,
     g: &Gabarit,
     image_une: Option<&Ressource>,
@@ -568,7 +569,7 @@ pub fn source(
     // Chaque zone reçoit le panorama vu de son propre bord gauche : la 4ème depuis 0,
     // la 1ère depuis l'autre côté du dos.
     let quatre = couverture::corps_quatre(
-        livre,
+        ctx,
         cv,
         g.format,
         image_quatre,
@@ -577,7 +578,7 @@ pub fn source(
         bq,
     )?;
     let une = couverture::corps_une(
-        livre,
+        ctx.livre,
         cv,
         g.format,
         image_une,
@@ -603,7 +604,7 @@ pub fn source(
         g.pli() - c,
         g.dos + 2.0 * c,
         hauteur,
-        &bloc_dos(livre, cv, g, image_une, c),
+        &bloc_dos(ctx.livre, cv, g, image_une, c),
     ));
     s.push_str(&zone(0.0, bq.largeur, hauteur, &quatre));
     s.push_str(&zone(g.pli() + g.dos, bu.largeur, hauteur, &une));
@@ -669,6 +670,13 @@ pub fn source_dos(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
+        Contexte {
+            livre: l,
+            imprimeur,
+        }
+    }
     use crate::catalogue::provider;
     use crate::maquettes;
 
@@ -736,7 +744,7 @@ mod tests {
 
         let cv = maquettes::fournie("bandeau");
         let dx = |g: &Gabarit| {
-            let s = source(&livre(), &cv, g, Some(&photo()), None).unwrap();
+            let s = source(&ctx(&livre(), None), &cv, g, Some(&photo()), None).unwrap();
             // Les trois zones de la planche sont les seules posées à `dy: 0mm` ; la
             // 1ère de couverture est la plus à droite des trois.
             abscisses_des_zones(&s).into_iter().fold(f64::MIN, f64::max)
@@ -883,7 +891,7 @@ mod tests {
     #[test]
     fn le_dos_porte_l_identite_du_livre_tournee() {
         let cv = maquettes::fournie("filets");
-        let s = source(&livre(), &cv, &gabarit("lulu", 244), None, None).unwrap();
+        let s = source(&ctx(&livre(), None), &cv, &gabarit("lulu", 244), None, None).unwrap();
         assert!(s.contains("rotate(-90deg"), "dos non tourné");
         assert!(s.contains("Les Heures creuses"));
         assert!(s.contains("Ivan Pjig"));
@@ -978,7 +986,7 @@ mod tests {
     #[test]
     fn la_planche_ne_porte_aucun_trait_de_coupe() {
         let s = source(
-            &livre(),
+            &ctx(&livre(), None),
             &maquettes::fournie("surimpression"),
             &gabarit("kdp-6x9", 300),
             Some(&photo()),
@@ -995,7 +1003,7 @@ mod tests {
     fn l_image_a_fond_perdu_couvre_le_fond_perdu() {
         let g = gabarit("lulu", 244);
         let s = source(
-            &livre(),
+            &ctx(&livre(), None),
             &maquettes::fournie("surimpression"),
             &g,
             Some(&photo()),
@@ -1019,7 +1027,7 @@ mod tests {
         let g = gabarit("lulu", 244);
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.fond = FondQuatre::Panorama;
-        let s = source(&livre(), &cv, &g, Some(&photo()), None).unwrap();
+        let s = source(&ctx(&livre(), None), &cv, &g, Some(&photo()), None).unwrap();
 
         let x = abscisses_absolues_des_images(&s);
         assert_eq!(x.len(), 3, "4ème, dos et 1ère doivent porter la photo");
@@ -1086,7 +1094,7 @@ mod tests {
             ("4ème en image propre", &en_image, Some(&quatrieme)),
             ("prolongement panoramique", &panoramique, None),
         ] {
-            let s = source(&livre(), cv, &g, Some(&photo()), quatre).unwrap();
+            let s = source(&ctx(&livre(), None), cv, &g, Some(&photo()), quatre).unwrap();
             let relevees: std::collections::BTreeSet<String> =
                 images_posees(cv, &g, Some(&photo()), quatre)
                     .into_iter()
@@ -1368,7 +1376,7 @@ mod tests {
             let i = s.find("#grid(columns:").expect("le dos porte une grille");
             s[i..].split("]))").next().unwrap().to_string()
         };
-        let planche = source(&livre(), &cv, &g, None, None).unwrap();
+        let planche = source(&ctx(&livre(), None), &cv, &g, None, None).unwrap();
         let seul = source_dos(&livre(), &cv, g.format, g.dos, None);
         assert_eq!(grille(&seul), grille(&planche));
         assert!(seul.contains("Les Heures creuses"), "{seul}");
@@ -1397,7 +1405,10 @@ mod tests {
         cv.dos.collection.actif = true;
         cv.dos.collection.sens = 90;
         for (quoi, s) in [
-            ("planche", source(&livre(), &cv, &g, None, None).unwrap()),
+            (
+                "planche",
+                source(&ctx(&livre(), None), &cv, &g, None, None).unwrap(),
+            ),
             ("dos seul", source_dos(&livre(), &cv, g.format, g.dos, None)),
             ("mesures", source_mesures(&livre(), &cv, g.format)),
         ] {

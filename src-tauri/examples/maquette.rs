@@ -86,7 +86,10 @@ fn main() -> Result<(), String> {
             (
                 "quatre",
                 couverture::source_quatre(
-                    &projet.meta.livre,
+                    &ozalid_lib::gabarit::Contexte {
+                        livre: &projet.meta.livre,
+                        imprimeur: Some(&pr.pod_nom),
+                    },
                     cv,
                     pr.format,
                     quatre.as_ref(),

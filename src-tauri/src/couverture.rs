@@ -17,6 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::gabarit::Contexte;
 use crate::image::{self, Cadrage, Geometrie};
 use crate::manuscrit::{echappe, echappe_chaine};
 use crate::projet::Livre;
@@ -1366,7 +1367,7 @@ fn bloc_tete_quatre(livre: &Livre, t: &TeteQuatre, fw: f64) -> String {
 /// pour tenir — ici, il est explicite au lieu d'être recopié à la main, et la 4ème
 /// refuse de se composer sans lui plutôt que de se composer de travers.
 pub fn corps_quatre(
-    livre: &Livre,
+    ctx: &Contexte,
     cv: &Couverture,
     format: (f64, f64),
     image_quatre: Option<&Ressource>,
@@ -1380,7 +1381,7 @@ pub fn corps_quatre(
     // une zone éteinte cache le symbole, elle ne rend pas l'ISBN juste. Le laisser dormir
     // ferait découvrir l'erreur le jour où l'on rallume la case, sur un projet qu'on croyait
     // réglé depuis longtemps.
-    let isbn = match livre.isbn.trim() {
+    let isbn = match ctx.livre.isbn.trim() {
         "" => None,
         saisi => Some(crate::ean::Isbn::lire(saisi)?),
     };
@@ -1398,14 +1399,8 @@ pub fn corps_quatre(
     let pad = q.pad_x / 100.0 * fw;
     // Le seul texte que la maquette porte encore, et le seul endroit où la substitution
     // la sert : une 4ème générique se résout pour chaque livre où on la charge.
-    let resume = crate::gabarit::substituer(
-        &q.texte,
-        &crate::gabarit::Contexte {
-            livre,
-            imprimeur: None,
-        },
-    );
-    let tete = bloc_tete_quatre(livre, &q.tete, fw);
+    let resume = crate::gabarit::substituer(&q.texte, ctx);
+    let tete = bloc_tete_quatre(ctx.livre, &q.tete, fw);
     // Un seul bloc pour la tête et le texte : ils se suivent sur la page, et deux
     // placements séparés auraient demandé deux hauteurs à tenir d'accord à la main.
     // C'est aussi ce qui fait que `top` reste le seul point d'ancrage — celui que la
@@ -1438,9 +1433,9 @@ pub fn corps_quatre(
         // La collection est une clé, littérale ; la mention et le prix sont des champs
         // libres, donc substitués.
         let lignes: Vec<String> = [
-            livre.mention(None),
-            livre.collection.clone(),
-            livre.prix(None),
+            ctx.livre.mention(ctx.imprimeur),
+            ctx.livre.collection.clone(),
+            ctx.livre.prix(ctx.imprimeur),
         ]
         .iter()
         .map(|v| v.trim())
@@ -1460,7 +1455,7 @@ pub fn corps_quatre(
     }
 
     if q.isbn_actif {
-        c.push_str(&zone_isbn(isbn.as_ref(), &livre.isbn, q, fw));
+        c.push_str(&zone_isbn(isbn.as_ref(), &ctx.livre.isbn, q, fw));
     }
     s.push_str(&cale(b, format, &c));
     Ok(s)
@@ -1595,7 +1590,7 @@ fn symbole(code: &crate::ean::Isbn, saisi: &str, w: f64, h: f64) -> String {
 
 /// Source Typst de la 4ème de couverture, seule sur sa page.
 pub fn source_quatre(
-    livre: &Livre,
+    ctx: &Contexte,
     cv: &Couverture,
     format: (f64, f64),
     image_quatre: Option<&Ressource>,
@@ -1604,7 +1599,7 @@ pub fn source_quatre(
 ) -> Result<String, String> {
     let b = Boite::rognee(format);
     let pano = panorama_face(format, dos_mm, false);
-    let corps = corps_quatre(livre, cv, format, image_quatre, image_une, pano, b)?;
+    let corps = corps_quatre(ctx, cv, format, image_quatre, image_une, pano, b)?;
     Ok(preambule(b.largeur, b.hauteur) + &corps)
 }
 
@@ -1753,6 +1748,13 @@ mod tests {
         }
     }
 
+    fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
+        Contexte {
+            livre: l,
+            imprimeur,
+        }
+    }
+
     const FORMAT: (f64, f64) = (110.0, 180.0);
 
     fn photo() -> Ressource {
@@ -1863,7 +1865,7 @@ mod tests {
         cv.quatrieme.voile = Voile::Uni;
         cv.quatrieme.voile_opacite = 0.5;
 
-        let sans = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let sans = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         assert!(!sans.contains("image("), "image émise sans photo");
         assert!(
             !sans.contains("transparentize"),
@@ -1871,7 +1873,15 @@ mod tests {
         );
 
         // La photo revenue, le voile revient avec elle : c'est bien la photo qu'il suit.
-        let avec = source_quatre(&livre(), &cv, FORMAT, Some(&photo()), None, None).unwrap();
+        let avec = source_quatre(
+            &ctx(&livre(), None),
+            &cv,
+            FORMAT,
+            Some(&photo()),
+            None,
+            None,
+        )
+        .unwrap();
         assert!(
             avec.contains("transparentize"),
             "voile perdu avec la photo :\n{avec}"
@@ -1968,7 +1978,15 @@ mod tests {
     fn le_prolongement_refuse_de_composer_sans_le_dos() {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.fond = FondQuatre::Panorama;
-        let err = source_quatre(&livre(), &cv, FORMAT, None, Some(&photo()), None).unwrap_err();
+        let err = source_quatre(
+            &ctx(&livre(), None),
+            &cv,
+            FORMAT,
+            None,
+            Some(&photo()),
+            None,
+        )
+        .unwrap_err();
         assert!(err.contains("dos"), "{err}");
         assert!(err.contains("pagination"), "{err}");
     }
@@ -1983,7 +2001,15 @@ mod tests {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.fond = FondQuatre::Panorama;
         let largeur_zone = |dos: f64| {
-            let s = source_quatre(&livre(), &cv, FORMAT, None, Some(&photo()), Some(dos)).unwrap();
+            let s = source_quatre(
+                &ctx(&livre(), None),
+                &cv,
+                FORMAT,
+                None,
+                Some(&photo()),
+                Some(dos),
+            )
+            .unwrap();
             let i = s.find("image(\"").unwrap();
             s[..i]
                 .rsplit("box(width: ")
@@ -2011,7 +2037,7 @@ mod tests {
     fn sans_isbn_la_zone_reste_un_rectangle_blanc_vide() {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
-        let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains("fill: rgb(\"#ffffff\")"));
         assert!(!s.contains("ISBN"), "une mention sans ISBN");
         assert!(!s.contains("#000000"), "des barres sans ISBN");
@@ -2032,7 +2058,7 @@ mod tests {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
         let s = source_quatre(
-            &livre_isbn("978-2-07-041311-9"),
+            &ctx(&livre_isbn("978-2-07-041311-9"), None),
             &cv,
             FORMAT,
             None,
@@ -2051,7 +2077,7 @@ mod tests {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
         let s = source_quatre(
-            &livre_isbn("978-2-07-041311-9"),
+            &ctx(&livre_isbn("978-2-07-041311-9"), None),
             &cv,
             FORMAT,
             None,
@@ -2072,7 +2098,7 @@ mod tests {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
         let err = source_quatre(
-            &livre_isbn("978-2-07-041311-8"),
+            &ctx(&livre_isbn("978-2-07-041311-8"), None),
             &cv,
             FORMAT,
             None,
@@ -2099,7 +2125,7 @@ mod tests {
         let mut cv = maquettes::fournie("bandeau");
         cv.quatrieme.isbn_actif = true;
         let s = source_quatre(
-            &livre_isbn("978-2-07-041311-9"),
+            &ctx(&livre_isbn("978-2-07-041311-9"), None),
             &cv,
             FORMAT,
             None,
@@ -2154,7 +2180,7 @@ mod tests {
         cv.quatrieme.isbn_actif = false;
         assert!(
             source_quatre(
-                &livre_isbn("978-2-07-041311-8"),
+                &ctx(&livre_isbn("978-2-07-041311-8"), None),
                 &cv,
                 FORMAT,
                 None,
@@ -2176,7 +2202,15 @@ mod tests {
             maquettes::fournie("surimpression"),
         ] {
             assert!(!source_une(&livre(), &cv, FORMAT, Some(&photo()), None).is_empty());
-            source_quatre(&livre(), &cv, FORMAT, None, Some(&photo()), Some(15.0)).unwrap();
+            source_quatre(
+                &ctx(&livre(), None),
+                &cv,
+                FORMAT,
+                None,
+                Some(&photo()),
+                Some(15.0),
+            )
+            .unwrap();
         }
     }
 
@@ -2244,7 +2278,7 @@ mod tests {
             "la collection n'est pas en pastille"
         );
 
-        let quatre = source_quatre(&l, &cv, FORMAT, None, None, None).unwrap();
+        let quatre = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
         assert!(
             quatre.contains("18 € — Les Heures"),
             "le prix n'est pas substitué"
@@ -2267,7 +2301,7 @@ mod tests {
     fn le_texte_de_presentation_lit_l_emphase_du_manuscrit() {
         let mut cv = maquettes::fournie("filets");
         cv.quatrieme.texte = "Un *mot* et un **autre**.".into();
-        let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains("#emph[mot]"), "{s}");
         assert!(s.contains("#strong[autre]"), "{s}");
 
@@ -2276,7 +2310,7 @@ mod tests {
         l.titre = "Un *titre*".into();
         let mut cv = maquettes::fournie("filets");
         cv.quatrieme.tete.titre_visible = true;
-        let s = source_quatre(&l, &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains(r"\*titre\*"), "{s}");
         assert!(!s.contains("#emph["), "{s}");
     }
@@ -2296,7 +2330,7 @@ mod tests {
             cv.quatrieme.texte = "Premier passage.\n\nSecond passage.".into();
             cv.quatrieme.interligne = 1.45;
             cv.quatrieme.paragraphe_ecart = ecart;
-            source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap()
+            source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap()
         };
 
         // 5 % de 110 mm : l'écart s'ajoute à l'espacement ordinaire, il ne le remplace
@@ -2322,7 +2356,7 @@ mod tests {
     #[test]
     fn une_tete_de_quatrieme_eteinte_ne_compose_rien() {
         let cv = maquettes::fournie("filets");
-        let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         assert!(
             !s.contains("Ivan Pjig"),
             "auteur composé sans être allumé : {s}"
@@ -2346,7 +2380,7 @@ mod tests {
             cv.quatrieme.tete.auteur_visible = auteur;
             cv.quatrieme.tete.titre_visible = titre;
             cv.quatrieme.tete.filet_visible = filet;
-            source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap()
+            source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap()
         };
 
         let a = compose(true, false, false);
@@ -2376,7 +2410,7 @@ mod tests {
         cv.quatrieme.tete.titre_visible = true;
         cv.quatrieme.tete.auteur.couleur = "#c00000".into();
 
-        let s = source_quatre(&l, &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains("Ivan Pjig"), "{s}");
         assert!(s.contains("Les Heures creuses"), "{s}");
         // La couleur demandée est bien celle qui compose l'auteur.
@@ -2393,7 +2427,7 @@ mod tests {
         cv.quatrieme.tete.filet_visible = true;
         cv.quatrieme.texte = "Le texte de présentation.".into();
 
-        let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         let ou = |quoi: &str| {
             s.find(quoi)
                 .unwrap_or_else(|| panic!("{quoi} absent : {s}"))
@@ -2412,7 +2446,7 @@ mod tests {
         cv.quatrieme.texte = String::new();
         cv.quatrieme.tete.titre_visible = true;
 
-        let s = source_quatre(&livre(), &cv, FORMAT, None, None, None).unwrap();
+        let s = source_quatre(&ctx(&livre(), None), &cv, FORMAT, None, None, None).unwrap();
         assert!(s.contains("Les Heures creuses"), "{s}");
     }
 
@@ -2426,11 +2460,45 @@ mod tests {
         let mut cv = maquettes::fournie("filets");
         cv.quatrieme.texte = "%TITRE%, un %GENRE% de %AUTEUR%.".into();
 
-        let quatre = source_quatre(&l, &cv, FORMAT, None, None, None).unwrap();
+        let quatre = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
         assert!(
             quatre.contains("Les Heures creuses, un roman de Ivan Pjig."),
             "{quatre}"
         );
         assert!(!quatre.contains('%'), "un jeton a traversé le résumé");
+    }
+
+    /// La 4ème cite l'imprimeur, comme le pavé de copyright le fait.
+    ///
+    /// C'est la même table de jetons pour les deux faces, et la couverture part chez le
+    /// même imprimeur que l'intérieur. L'y effacer laissait un auteur écrire « Imprimé
+    /// par » tout court sur un objet imprimé, sans que rien l'avertisse.
+    #[test]
+    fn la_quatrieme_cite_l_imprimeur_du_livrable() {
+        let mut l = livre();
+        l.mention = "Imprimé par %IMPRIMEUR%".into();
+        let mut cv = maquettes::fournie("filets");
+        cv.quatrieme.pied_actif = true;
+
+        let s = source_quatre(&ctx(&l, Some("BoD")), &cv, FORMAT, None, None, None).unwrap();
+        assert!(
+            s.contains("Imprimé par BoD"),
+            "l'imprimeur manque au pied de la 4ème : {s}"
+        );
+        assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
+    }
+
+    /// Sans livrable visé — l'aperçu d'un projet qui n'en a pas encore —, le jeton
+    /// s'efface plutôt que de rester lui-même. Un `%IMPRIMEUR%` composé en toutes
+    /// lettres sur une 4ème serait la faute que ce jeton existe pour éviter.
+    #[test]
+    fn sans_imprimeur_la_quatrieme_efface_le_jeton() {
+        let mut l = livre();
+        l.mention = "Imprimé par %IMPRIMEUR%".into();
+        let mut cv = maquettes::fournie("filets");
+        cv.quatrieme.pied_actif = true;
+
+        let s = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
+        assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
     }
 }

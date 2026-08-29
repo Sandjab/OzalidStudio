@@ -1227,6 +1227,12 @@ pub fn couverture_apercu(
     // l'imprimeur n'en publie pas : les deux sont dans le projet, plus dans un champ.
     let (pr, _, d) = vise(o)?;
     let fond_perdu_mm = d.fond_perdu_mm;
+    // La couverture part chez le même imprimeur que l'intérieur : elle le nomme donc
+    // comme lui, et l'aperçu montre ce que le PDF portera.
+    let ctx = crate::gabarit::Contexte {
+        livre: &o.projet.meta.livre,
+        imprimeur: Some(&pr.pod_nom),
+    };
 
     // Répertoire de travail de l'aperçu : temporaire, jamais à côté du projet. Un
     // aperçu n'est pas une sortie, et il est réécrit à chaque réglage.
@@ -1240,14 +1246,9 @@ pub fn couverture_apercu(
     let mut mesures = None;
     let src = match face.as_str() {
         "une" => couverture::source_une(&o.projet.meta.livre, cv, pr.format, une.as_ref(), dos_mm),
-        "quatre" => couverture::source_quatre(
-            &o.projet.meta.livre,
-            cv,
-            pr.format,
-            quatre.as_ref(),
-            une.as_ref(),
-            dos_mm,
-        )?,
+        "quatre" => {
+            couverture::source_quatre(&ctx, cv, pr.format, quatre.as_ref(), une.as_ref(), dos_mm)?
+        }
         // Le dos seul se compose sans fond perdu : il ne réclame donc que la
         // pagination, là où la planche réclame aussi le gabarit de l'imprimeur.
         "dos" => {
@@ -1285,7 +1286,7 @@ pub fn couverture_apercu(
                 dos: g.dos,
                 fond_perdu: g.fond_perdu,
             });
-            planche::source(&o.projet.meta.livre, cv, &g, une.as_ref(), quatre.as_ref())?
+            planche::source(&ctx, cv, &g, une.as_ref(), quatre.as_ref())?
         }
         autre => return Err(format!("face inconnue : {autre}")),
     };
@@ -1361,6 +1362,10 @@ pub fn couverture_calques(
     };
     let (pr, _, _) = vise(o)?;
     let format = pr.format;
+    let ctx = crate::gabarit::Contexte {
+        livre: &o.projet.meta.livre,
+        imprimeur: Some(&pr.pod_nom),
+    };
     let b = couverture::Boite::rognee(format);
 
     let dossier = std::env::temp_dir().join("ozalid-apercu");
@@ -1421,7 +1426,7 @@ pub fn couverture_calques(
             let pano = couverture::panorama_face(format, dos_mm, false);
             couverture::preambule(b.largeur, b.hauteur)
                 + &couverture::bloc_voile(b, nu.quatrieme.voile, nu.quatrieme.voile_opacite)
-                + &couverture::corps_quatre(&o.projet.meta.livre, &nu, format, None, None, pano, b)?
+                + &couverture::corps_quatre(&ctx, &nu, format, None, None, pano, b)?
         }
     };
     // `#set page(fill: none)` en tête : une règle posée avant le préambule vaut avec

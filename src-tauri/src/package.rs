@@ -444,7 +444,16 @@ pub fn assembler(
     let src_pl = dossier.join(nom(cle, "couverture", "typ"));
     ecrire(
         &src_pl,
-        &planche::source(livre, cv, &g, une.as_ref(), quatre.as_ref())?,
+        &planche::source(
+            &crate::gabarit::Contexte {
+                livre,
+                imprimeur: Some(&pr.pod_nom),
+            },
+            cv,
+            &g,
+            une.as_ref(),
+            quatre.as_ref(),
+        )?,
     )?;
     let pdf_pl = dossier.join(nom(cle, "couverture", "pdf"));
     // La planche a ses propres polices : ses substitutions s'ajoutent à celles de

@@ -198,8 +198,14 @@ l'application recompose seule.
   existe déjà côté catalogue et refusera ; il faut vérifier que son message reste lisible dans
   ce cas-là, où la cause n'est pas le texte mais un réglage.
 - **`%IMPRIMEUR%` dans un champ libre autre que le copyright** — la 4ème, le titre de la page
-  de titre — se résoudra aussi. C'est cohérent et volontaire, mais à regarder : rien
-  n'interdira d'écrire le nom de l'imprimeur sur la couverture.
+  de titre — se résout aussi. C'est cohérent et volontaire : rien n'interdit d'écrire le nom
+  de l'imprimeur sur la couverture, qui part chez lui comme l'intérieur.
+
+  *Relevé après coup, le 29/08/2026* : le lot 1 avait d'abord livré l'inverse — la chaîne de
+  la couverture ne portait pas le nom jusqu'à `corps_quatre`, si bien que `%IMPRIMEUR%` s'y
+  effaçait en silence. Un auteur écrivant « Imprimé par %IMPRIMEUR% » dans la mention de 4ème
+  obtenait « Imprimé par » sur un objet imprimé. Corrigé le jour même : le `Contexte` descend
+  jusqu'à `corps_quatre` et `planche::source`, à la place du livre, argument pour argument.
 
 ## 5. Vérification
 

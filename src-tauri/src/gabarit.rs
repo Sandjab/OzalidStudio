@@ -15,9 +15,11 @@ use crate::projet::Livre;
 /// ou tard oublié sur un champ libre — et l'oubli ne se verrait qu'imprimé.
 pub struct Contexte<'a> {
     pub livre: &'a Livre,
-    /// `None` là où le nom de l'imprimeur n'est pas disponible : l'ebook, qui n'en a pas,
-    /// et la couverture, dont la chaîne ne le porte pas jusqu'ici. `%IMPRIMEUR%` rend
-    /// alors la chaîne vide, jamais le jeton littéral.
+    /// `None` là où le nom de l'imprimeur n'a pas de sens : l'ebook, qui n'est imprimé
+    /// nulle part. Tout ce qui part chez un imprimeur le nomme — l'intérieur comme la
+    /// couverture, qui sortent de la même commande. `%IMPRIMEUR%` rend alors la chaîne
+    /// vide, jamais le jeton littéral : un `%IMPRIMEUR%` composé en toutes lettres serait
+    /// la faute que ce jeton existe pour éviter.
     pub imprimeur: Option<&'a str>,
 }
 
