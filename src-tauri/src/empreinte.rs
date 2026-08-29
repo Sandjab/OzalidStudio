@@ -55,6 +55,11 @@ pub fn interieur(projet: &Projet, l: &Livrable) -> String {
 /// Le papier et la pagination y figurent parce que le **dos** en découle. On y met les deux
 /// plutôt que le dos calculé : le dos est une fonction pure de ces deux-là, et le calculer
 /// ici obligerait ce module à connaître `planche`, qu'il n'a aucune raison de connaître.
+///
+/// Les deux relevés y sont, et pas seulement le dos : le fond perdu entre par la même `Cible`
+/// dans le `Gabarit` qui donne à la planche sa largeur et sa hauteur. La péremption couvre
+/// tout ce qui entre dans les fichiers (spec § 2) ; l'omettre laisserait un livrable annoncé
+/// à jour sur une planche aux mauvaises dimensions.
 pub fn couverture(projet: &Projet, l: &Livrable) -> String {
     let images: Vec<String> = projet
         .images
@@ -74,6 +79,7 @@ pub fn couverture(projet: &Projet, l: &Livrable) -> String {
             images.join(","),
             l.fabrication.papier.clone(),
             l.dos_mm.map(|d| d.to_string()).unwrap_or_default(),
+            l.fond_perdu_mm.map(|f| f.to_string()).unwrap_or_default(),
             pages,
         ]
         .join("|")
@@ -243,6 +249,26 @@ mod tests {
         let mut q = p.clone();
         q.images.insert("premiere.jpg".into(), vec![1, 2, 3]);
         assert_ne!(couverture(&q, &l), depart, "l'image fait la planche");
+    }
+
+    /// Le fond perdu relevé fait la planche autant que le dos : `commands::cible` le pose dans
+    /// la `Cible`, `planche::Gabarit` s'en sert quand l'imprimeur n'en publie pas, et la largeur
+    /// comme la hauteur de la planche en découlent. Le corriger sur un livrable déjà généré doit
+    /// donc le marquer périmé — sans quoi l'écran annoncerait à jour une planche aux mauvaises
+    /// dimensions, ce que l'imprimeur seul découvrirait.
+    #[test]
+    fn l_empreinte_de_couverture_suit_le_fond_perdu_releve() {
+        let p = projet_d_essai();
+        let l = p.meta.livraison.livrables[0].clone();
+        let depart = couverture(&p, &l);
+
+        let mut releve = l.clone();
+        releve.fond_perdu_mm = Some(5.0);
+        assert_ne!(
+            couverture(&p, &releve),
+            depart,
+            "le fond perdu relevé entre dans les octets de la planche"
+        );
     }
 
     /// Le manuscrit ne touche pas la planche : c'est ce qui permet, au lot 2, de recomposer

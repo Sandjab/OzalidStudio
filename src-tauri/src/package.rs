@@ -573,6 +573,56 @@ fn meme_gabarit(a: &Provider, b: &Provider) -> bool {
     }
 }
 
+/// L'intérieur qu'un autre livrable du même gabarit a déjà sur le disque, prêt à être copié.
+///
+/// C'est ce qui fait que trois papiers d'un même gabarit coûtent une composition et deux
+/// copies **qu'on les ajoute d'un coup ou un par un** (spec § 4). La pagination vient de la
+/// mesure retenue, jamais du PDF, qui ne la porte pas — et une mesure absente refuse donc le
+/// prêt, ce qui ne peut pas être un faux négatif : les trois mutateurs qui l'effacent changent
+/// tous l'empreinte d'intérieur (reconnaissance 4c).
+///
+/// **Les cibles de la passe sont exclues.** Sans quoi une régénération se prêterait son propre
+/// intérieur : le garde-fou d'`assembler` éviterait la troncature, mais rien ne serait
+/// recomposé et le package s'annoncerait pourtant partagé. C'est aussi ce qui laisse « Tout
+/// regénérer », dont toutes les cibles sont dans la passe, composer exactement comme avant.
+fn interieur_du_disque(
+    projet: &Projet,
+    racine: &Path,
+    gabarit: &str,
+    exclues: &[&str],
+) -> Option<InterieurCompose> {
+    let m = projet.meta.livraison.mesure(gabarit)?;
+    projet.meta.livraison.livrables.iter().find_map(|l| {
+        if l.fabrication.cle_gabarit() != gabarit {
+            return None;
+        }
+        let cle = l.cle();
+        if exclues.contains(&cle.as_str()) {
+            return None;
+        }
+        let crate::projet::Generation::Fait { interieur, .. } = &l.generation else {
+            return None;
+        };
+        if *interieur != crate::empreinte::interieur(projet, l) {
+            return None;
+        }
+        // Les deux fichiers, jamais un seul : `assembler` copie la source avec le PDF, et un
+        // `.typ` manquant laisserait dans le répertoire livré une source qui ne correspond à
+        // rien.
+        let dossier = racine.join(&cle);
+        let src = dossier.join(nom(&cle, "interieur", "typ"));
+        let pdf = dossier.join(nom(&cle, "interieur", "pdf"));
+        (src.is_file() && pdf.is_file()).then(|| InterieurCompose {
+            pages: m.pages,
+            gouttiere: m.gouttiere,
+            blanche: m.blanche,
+            polices_introuvables: m.polices_introuvables.clone(),
+            src,
+            pdf,
+        })
+    })
+}
+
 /// Packager un lot de livrables, l'intérieur composé **une fois par gabarit**.
 ///
 /// Le premier livrable d'un gabarit compose dans son répertoire ; les suivants copient.
@@ -585,12 +635,17 @@ pub fn lot(
     typst: &Typst,
 ) -> Vec<Result<Package, String>> {
     let mut prets: BTreeMap<String, (Provider, InterieurCompose)> = BTreeMap::new();
+    // Les cibles de cette passe ne se prêtent rien : elles sont là pour être composées.
+    let exclues: Vec<&str> = cibles.iter().map(|c| c.cle.as_str()).collect();
     cibles
         .iter()
         .map(|c| {
             let dossier = racine.join(&c.cle);
             if !prets.contains_key(&c.pr.cle) {
-                let i = composer_interieur(projet, &c.pr, &c.cle, &dossier, typst)?;
+                let i = match interieur_du_disque(projet, racine, &c.pr.cle, &exclues) {
+                    Some(i) => i,
+                    None => composer_interieur(projet, &c.pr, &c.cle, &dossier, typst)?,
+                };
                 prets.insert(c.pr.cle.clone(), (c.pr.clone(), i));
             }
             let (pr, interieur) = prets.get(&c.pr.cle).expect("vient d'être inséré si absent");
@@ -858,6 +913,79 @@ pub fn ecrire_table(
         }
     }
     Ok((une, quatre))
+}
+
+/// Ce qu'une suppression a laissé derrière elle.
+#[derive(Debug, Default, Serialize)]
+pub struct Nettoyage {
+    /// Fichiers connus qui n'étaient plus là. Ce n'est pas une erreur — une génération échouée
+    /// n'en écrit qu'une partie —, mais le compte rendu le dit.
+    pub absents: Vec<String>,
+    /// Ce qui restait et que l'application n'a pas écrit. Le répertoire survit pour eux.
+    pub etrangers: Vec<String>,
+    /// Le répertoire lui-même est parti : il ne restait rien.
+    pub dossier_retire: bool,
+}
+
+/// Les fichiers que l'application écrit dans le répertoire d'un livrable.
+///
+/// Cinq noms se reconstruisent de la clé (`nom`), la fiche n'en porte pas — il n'y en a qu'une
+/// par répertoire —, et les images de couverture sont écrites sous **leur nom d'origine** par
+/// `ecrire_table`. Cette dernière liste est celle du projet **courant** : une image retirée du
+/// projet après la génération ne sera pas reconnue, survivra, et se nommera au compte rendu.
+/// C'est le moindre mal — la spec préfère laisser survivre que d'effacer au jugé.
+pub fn fichiers_du_livrable(cle: &str, images: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = [
+        nom(cle, "interieur", "typ"),
+        nom(cle, "interieur", "pdf"),
+        nom(cle, "couverture", "typ"),
+        nom(cle, "couverture", "pdf"),
+        nom(cle, "couverture", "png"),
+        "televersement.txt".to_string(),
+    ]
+    .into();
+    v.extend(images.iter().cloned());
+    v
+}
+
+/// Efface ce que l'application a écrit pour ce livrable, puis le répertoire s'il est vide.
+///
+/// **Sélectif et non récursif** (spec § 3) : l'effacement sans condition emporterait sans
+/// recours ce qu'on aurait déposé là. Un fichier déjà parti n'est pas une erreur ; tout autre
+/// échec refuse, comme `ebook::efface` le fait — un fichier qui résiste à la suppression est
+/// exactement celui qu'une panne laisserait en place sous le nom du livre.
+pub fn effacer_livrable(dossier: &Path, cle: &str, images: &[String]) -> Result<Nettoyage, String> {
+    let mut n = Nettoyage::default();
+    for f in fichiers_du_livrable(cle, images) {
+        match std::fs::remove_file(dossier.join(&f)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => n.absents.push(f),
+            Err(e) => return Err(format!("{f} ne s'efface pas : {e}")),
+        }
+    }
+    // Ce qui reste porte le répertoire : on le lit avant de tenter de le retirer, pour pouvoir
+    // le nommer. Un répertoire absent n'a rien laissé ; tout autre échec de lecture (permissions)
+    // refuse plutôt que de se faire passer pour un répertoire vide.
+    let reste = match std::fs::read_dir(dossier) {
+        Ok(reste) => reste,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(n),
+        Err(e) => return Err(format!("{} illisible : {e}", dossier.display())),
+    };
+    for e in reste.flatten() {
+        n.etrangers
+            .push(e.file_name().to_string_lossy().into_owned());
+    }
+    n.etrangers.sort();
+    if n.etrangers.is_empty() {
+        std::fs::remove_dir(dossier).map_err(|e| {
+            format!(
+                "le répertoire ne se retire pas ({}) : {e}",
+                dossier.display()
+            )
+        })?;
+        n.dossier_retire = true;
+    }
+    Ok(n)
 }
 
 fn affiche(p: &Path) -> String {
@@ -1922,6 +2050,357 @@ mod tests {
             std::fs::read(dir.path().join(&*fichier)).unwrap(),
             jpeg,
             "les octets ont été retouchés sans qu'on l'ait demandé"
+        );
+    }
+
+    /// Un projet dont l'unique livrable est généré, à jour, et dont les deux fichiers d'intérieur
+    /// sont sur le disque : le cas nominal de la réutilisation.
+    ///
+    /// La fabrication est celle du catalogue réel (celle de `Projet::nouveau`) : `empreinte`
+    /// résout son gabarit, et le test vaut donc sur le même chemin que l'application.
+    fn projet_genere(racine: &std::path::Path, pages: u32) -> (crate::projet::Projet, String) {
+        let mut projet =
+            crate::projet::Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        let l = projet.meta.livraison.livrables[0].clone();
+        let cle = l.cle();
+        projet.meta.livraison.retenir_mesure(
+            &l.fabrication.cle_gabarit(),
+            crate::projet::Mesure {
+                pages,
+                gouttiere: 14.0,
+                blanche: false,
+                empreinte: None,
+                polices_introuvables: vec![],
+            },
+        );
+        let dossier = racine.join(&cle);
+        std::fs::create_dir_all(&dossier).unwrap();
+        std::fs::write(dossier.join(nom(&cle, "interieur", "typ")), b"source").unwrap();
+        std::fs::write(dossier.join(nom(&cle, "interieur", "pdf")), b"%PDF-faux").unwrap();
+        let empreinte = crate::empreinte::interieur(&projet, &l);
+        projet.meta.livraison.livrables[0].generation = crate::projet::Generation::Fait {
+            interieur: empreinte,
+            couverture: "peu importe".into(),
+        };
+        (projet, cle)
+    }
+
+    /// Le cas nominal : un livrable généré et à jour prête son intérieur, avec la pagination que
+    /// le projet a retenue — jamais relue dans le PDF, qui ne la porte pas.
+    #[test]
+    fn un_interieur_a_jour_sur_le_disque_se_prete() {
+        let racine = tempfile::tempdir().unwrap();
+        let (projet, cle) = projet_genere(racine.path(), 266);
+        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+
+        let i = interieur_du_disque(&projet, racine.path(), &gabarit, &[])
+            .expect("l'intérieur du livrable généré");
+        assert_eq!(i.pages, 266);
+        assert_eq!(
+            i.pdf,
+            racine.path().join(&cle).join(nom(&cle, "interieur", "pdf"))
+        );
+    }
+
+    /// **Le verdict qui fait que Régénérer régénère.** Une cible de la passe ne se prête pas son
+    /// propre intérieur : elle copierait son PDF sur lui-même, s'annoncerait `interieur_partage`,
+    /// et rien n'aurait été recomposé. C'est aussi ce qui laisse « Tout regénérer » composer comme
+    /// avant, toutes ses cibles étant exclues.
+    #[test]
+    fn une_cible_de_la_passe_ne_se_prete_pas_son_propre_interieur() {
+        let racine = tempfile::tempdir().unwrap();
+        let (projet, cle) = projet_genere(racine.path(), 266);
+        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+
+        assert!(
+            interieur_du_disque(&projet, racine.path(), &gabarit, &[&cle]).is_none(),
+            "régénérer se serait prêté son propre intérieur : il n'aurait rien recomposé"
+        );
+    }
+
+    /// Une empreinte qui a bougé ne prête rien : c'est tout le mécanisme du lot 1. Le PDF est là,
+    /// il est lisible, et il ne compose plus ce livre-là.
+    #[test]
+    fn un_interieur_perime_ne_se_prete_pas() {
+        let racine = tempfile::tempdir().unwrap();
+        let (mut projet, _) = projet_genere(racine.path(), 266);
+        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        projet.remplacer_texte("## 01 - Un\n\nUn autre paragraphe.".into());
+        // `remplacer_texte` oublie les mesures : on remet celle du gabarit pour prouver que c'est
+        // bien l'empreinte, et non l'absence de mesure, qui refuse le prêt.
+        projet.meta.livraison.retenir_mesure(
+            &gabarit,
+            crate::projet::Mesure {
+                pages: 266,
+                gouttiere: 14.0,
+                blanche: false,
+                empreinte: None,
+                polices_introuvables: vec![],
+            },
+        );
+
+        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+    }
+
+    /// Un PDF effacé à la main ne se copie pas : la source seule laisserait dans le répertoire
+    /// livré un `.typ` qui ne correspond à rien.
+    #[test]
+    fn un_fichier_manquant_ne_se_prete_pas() {
+        let racine = tempfile::tempdir().unwrap();
+        let (projet, cle) = projet_genere(racine.path(), 266);
+        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        std::fs::remove_file(racine.path().join(&cle).join(nom(&cle, "interieur", "pdf"))).unwrap();
+
+        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+    }
+
+    /// Sans mesure, pas de pagination à prêter — et rien à inventer : `InterieurCompose` la porte,
+    /// et le PDF ne la dit pas.
+    #[test]
+    fn sans_mesure_rien_ne_se_prete() {
+        let racine = tempfile::tempdir().unwrap();
+        let (mut projet, _) = projet_genere(racine.path(), 266);
+        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        projet.meta.livraison.oublier_mesures();
+
+        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+    }
+
+    /// **Spec § 8 : la réutilisation vaut d'un appel à l'autre, pas seulement dans une passe.**
+    /// C'est le risque nommé du chantier : générer à l'ajout déplace l'attente sur chaque ajout,
+    /// et si l'amorce était mal câblée le symptôme serait un ajout lent que rien ne dit.
+    ///
+    /// La preuve ne peut pas être « les octets sont identiques » : une recomposition les rendrait
+    /// identiques aussi. Le PDF du premier livrable est donc **marqué** entre les deux appels ; si
+    /// le second porte la marque, il l'a copié, et rien n'a été recomposé. Marquer ne périme rien :
+    /// les empreintes portent sur les données du projet, jamais sur le PDF.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn un_interieur_se_reutilise_d_un_appel_a_l_autre() {
+        let mut projet = Projet::nouveau(livre_d_essai(), "## 01 - Un\n\nParagraphe.".into());
+        projet.meta.couverture.maquette = Some(
+            crate::maquettes::par_cle(None, "filets")
+                .expect("maquette fournie « filets »")
+                .couverture,
+        );
+        let racine = tempfile::tempdir().unwrap();
+        let typst = Typst::new("typst")
+            .avec_polices(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
+
+        let pr = provider_d_essai();
+        let creme = pr.papiers[0].clone();
+        let blanc = Papier {
+            cle: "blanc-essai".into(),
+            nom: "Blanc d'essai".into(),
+            teinte: r##"#ffffff"##.into(),
+            dos: crate::catalogue::Dos::Multiplie {
+                par: 0.08,
+                plus: 2.0,
+            },
+            pages: None,
+            source: None,
+        };
+        let vue_plate = |papier: &str| Provider {
+            fabrication: crate::catalogue::Fabrication {
+                papier: papier.into(),
+                ..pr.fabrication.clone()
+            },
+            ..pr.clone()
+        };
+        let cle_a = "essai-livre-broche-creme";
+        let cle_b = "essai-livre-broche-blanc-essai";
+
+        // Les deux livrables sont dans le projet dès le départ : c'est là que l'amorce va les
+        // chercher, et non dans les cibles.
+        projet.meta.livraison.livrables = ["creme", "blanc-essai"]
+            .into_iter()
+            .map(|papier| {
+                crate::projet::Livrable::pour(crate::catalogue::Fabrication {
+                    papier: papier.into(),
+                    ..pr.fabrication.clone()
+                })
+            })
+            .collect();
+        projet.meta.livraison.courant = cle_a.into();
+
+        // Premier appel : une seule cible, le crème. Il compose.
+        let a = lot(
+            &projet,
+            &[Cible {
+                papier: creme,
+                ..cible_d_essai(&vue_plate("creme"), cle_a)
+            }],
+            racine.path(),
+            &typst,
+        )
+        .remove(0)
+        .expect("le premier package");
+        assert!(!a.interieur_partage, "le premier compose");
+
+        // Ce que `commands::retenir` fait dans l'application : la mesure, puis les empreintes.
+        let l = projet.meta.livraison.livrables[0].clone();
+        projet.meta.livraison.retenir_mesure(
+            &l.fabrication.cle_gabarit(),
+            crate::projet::Mesure {
+                pages: a.pages,
+                gouttiere: a.gouttiere,
+                blanche: a.blanche,
+                empreinte: None,
+                polices_introuvables: a.polices_introuvables.clone(),
+            },
+        );
+        projet.meta.livraison.livrables[0].generation = crate::projet::Generation::Fait {
+            interieur: crate::empreinte::interieur(&projet, &l),
+            couverture: crate::empreinte::couverture(&projet, &l),
+        };
+
+        // La marque : si le second package la porte, il a copié.
+        let pdf_a = racine
+            .path()
+            .join(cle_a)
+            .join(nom(cle_a, "interieur", "pdf"));
+        std::fs::write(&pdf_a, b"MARQUE-DU-PREMIER").unwrap();
+
+        // Second appel, séparé : le blanc. Il doit copier.
+        let b = lot(
+            &projet,
+            &[Cible {
+                papier: blanc,
+                ..cible_d_essai(&vue_plate("blanc-essai"), cle_b)
+            }],
+            racine.path(),
+            &typst,
+        )
+        .remove(0)
+        .expect("le second package");
+
+        assert!(
+            b.interieur_partage,
+            "le second devait copier, pas recomposer"
+        );
+        assert_eq!(b.pages, a.pages, "la pagination vient de la mesure retenue");
+        assert_eq!(
+            std::fs::read(
+                racine
+                    .path()
+                    .join(cle_b)
+                    .join(nom(cle_b, "interieur", "pdf"))
+            )
+            .unwrap(),
+            b"MARQUE-DU-PREMIER",
+            "l'intérieur a été recomposé au lieu d'être copié"
+        );
+    }
+
+    /// La liste de ce que l'application a écrit dans le répertoire d'un livrable : cinq noms
+    /// tirés de la clé, la fiche qui n'en porte pas, et les images de couverture sous leur nom
+    /// d'origine. C'est cette liste, et elle seule, que la suppression efface.
+    #[test]
+    fn les_fichiers_d_un_livrable_sont_ceux_que_l_application_a_ecrits() {
+        let f = fichiers_du_livrable("lulu-108x175-broche-creme", &["une.jpg".to_string()]);
+        for attendu in [
+            "interieur-lulu-108x175-broche-creme.typ",
+            "interieur-lulu-108x175-broche-creme.pdf",
+            "couverture-lulu-108x175-broche-creme.typ",
+            "couverture-lulu-108x175-broche-creme.pdf",
+            "couverture-lulu-108x175-broche-creme.png",
+            "televersement.txt",
+            "une.jpg",
+        ] {
+            assert!(f.iter().any(|x| x == attendu), "{attendu} manque : {f:?}");
+        }
+        assert_eq!(f.len(), 7, "rien d'autre ne doit y être : {f:?}");
+    }
+
+    /// **Ce qu'on a déposé là survit.** L'effacement récursif sans condition emporterait sans
+    /// recours un fichier qu'on aurait rangé dans ce répertoire — un bon de commande, une épreuve
+    /// annotée. Il reste, le répertoire avec lui, et le compte rendu le nomme.
+    #[test]
+    fn un_fichier_etranger_survit_et_se_nomme() {
+        let dir = tempfile::tempdir().unwrap();
+        let cle = "essai-livre-broche-creme";
+        for f in fichiers_du_livrable(cle, &["une.jpg".to_string()]) {
+            std::fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        std::fs::write(dir.path().join("bon-de-commande.pdf"), b"x").unwrap();
+
+        let n = effacer_livrable(dir.path(), cle, &["une.jpg".to_string()]).unwrap();
+
+        assert_eq!(n.etrangers, vec!["bon-de-commande.pdf".to_string()]);
+        assert!(
+            !n.dossier_retire,
+            "le répertoire porte encore quelque chose"
+        );
+        assert!(dir.path().join("bon-de-commande.pdf").is_file());
+        assert!(!dir.path().join(nom(cle, "interieur", "pdf")).exists());
+        assert!(n.absents.is_empty(), "tous les fichiers connus étaient là");
+    }
+
+    /// Rien d'étranger : le répertoire s'en va avec ce qu'il portait. C'est le cas ordinaire, et
+    /// laisser un répertoire vide sous le nom d'un livrable qui n'existe plus ferait douter de ce
+    /// qui a été supprimé.
+    #[test]
+    fn un_repertoire_vide_apres_effacement_s_en_va() {
+        let dir = tempfile::tempdir().unwrap();
+        let livrable = dir.path().join("essai-livre-broche-creme");
+        std::fs::create_dir_all(&livrable).unwrap();
+        for f in fichiers_du_livrable("essai-livre-broche-creme", &[]) {
+            std::fs::write(livrable.join(f), b"x").unwrap();
+        }
+
+        let n = effacer_livrable(&livrable, "essai-livre-broche-creme", &[]).unwrap();
+
+        assert!(n.dossier_retire);
+        assert!(!livrable.exists());
+    }
+
+    /// Un répertoire déjà parti — effacé à la main, ou jamais écrit parce que la génération avait
+    /// échoué — n'est pas une erreur : le livrable s'en va, et le compte rendu dit ce qui n'était
+    /// plus là. C'est l'arbitrage d'`ebook::efface`.
+    #[test]
+    fn un_repertoire_deja_parti_ne_fait_pas_echouer() {
+        let dir = tempfile::tempdir().unwrap();
+        let absent = dir.path().join("jamais-ecrit");
+
+        let n = effacer_livrable(&absent, "essai-livre-broche-creme", &[]).unwrap();
+
+        assert_eq!(
+            n.absents.len(),
+            6,
+            "les six fichiers connus manquaient : {n:?}"
+        );
+        assert!(n.etrangers.is_empty());
+        assert!(
+            !n.dossier_retire,
+            "il n'y avait pas de répertoire à retirer"
+        );
+    }
+
+    /// Un répertoire présent mais illisible n'est pas « rien n'y est resté » : la confondre avec
+    /// un répertoire absent ferait rendre `Ok` alors que le contenu n'a pas pu être vérifié — et
+    /// la tâche 6 retire le livrable du projet dès que cette fonction rend `Ok`. Un fichier qui
+    /// résiste doit refuser, comme `remove_file` le fait déjà pour les siens.
+    #[test]
+    #[cfg(unix)]
+    fn un_repertoire_illisible_fait_echouer() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let livrable = dir.path().join("essai-livre-broche-creme");
+        std::fs::create_dir_all(&livrable).unwrap();
+        // Écriture et exécution sans lecture : les `remove_file` trouvent un répertoire vide
+        // (NotFound), mais `read_dir` ne peut plus lister ce qu'il contient.
+        std::fs::set_permissions(&livrable, std::fs::Permissions::from_mode(0o300)).unwrap();
+
+        let resultat = effacer_livrable(&livrable, "essai-livre-broche-creme", &[]);
+
+        // Remis lisible avant toute assertion : sinon un échec laisserait le `tempdir` sur des
+        // permissions qui empêchent aussi sa propre suppression en fin de test.
+        std::fs::set_permissions(&livrable, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(
+            resultat.is_err(),
+            "un répertoire illisible doit refuser, pas se faire passer pour vide : {resultat:?}"
         );
     }
 }
