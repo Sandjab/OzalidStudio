@@ -1852,17 +1852,21 @@ pub struct Suppression {
 ///
 /// Le dernier livrable ne se supprime pas, comme il ne se retirait pas : c'est lui qui donne
 /// le format sous lequel on regarde la couverture.
+///
+/// L'appartenance passe **avant** ce refus-là, comme `livrable_regler` cherche déjà son rang
+/// avant de regarder le doublon : sur un livre à un seul livrable, une clé absente répondrait
+/// sinon qu'on garde le dernier, et le message parlerait d'un livrable que personne n'a désigné.
 fn supprimer(o: &mut Ouvert, cle: &str) -> Result<Suppression, String> {
     let l = &o.projet.meta.livraison;
+    if !l.livrables.iter().any(|d| d.cle() == cle) {
+        return Err(format!("{cle} n'est pas un livrable de ce livre."));
+    }
     if l.livrables.len() < 2 {
         return Err(
             "un livre garde au moins un livrable : c'est lui qui donne le format \
              sous lequel on regarde la couverture."
                 .into(),
         );
-    }
-    if !l.livrables.iter().any(|d| d.cle() == cle) {
-        return Err(format!("{cle} n'est pas un livrable de ce livre."));
     }
     let racine = sorties_racine(o)?;
     let images: Vec<String> = o.projet.images.keys().cloned().collect();
@@ -4018,6 +4022,61 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 
         assert!(e.contains("au moins un livrable"), "{e}");
         assert!(pdf.is_file(), "le refus ne doit rien effacer");
+    }
+
+    /// **L'appartenance se vérifie avant le refus du dernier.** Sur un livre qui n'a qu'un
+    /// livrable, demander la suppression d'une clé absente répondait « un livre garde au moins un
+    /// livrable » : un message qui parle d'autre chose, et qui laisse croire que la clé demandée
+    /// est celle qu'on regarde. Le refus reste sans effet sur le disque, comme l'autre.
+    #[test]
+    fn supprimer_une_cle_absente_le_dit_meme_sur_un_seul_livrable() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let seul = o.projet.meta.livraison.livrables[0].clone();
+        let dossier = sorties_racine(&o).unwrap().join(seul.cle());
+        std::fs::create_dir_all(&dossier).unwrap();
+        let pdf = dossier.join(package::nom(&seul.cle(), "interieur", "pdf"));
+        std::fs::write(&pdf, b"%PDF").unwrap();
+
+        let e = supprimer(&mut o, "pod-inconnu-broche-creme").unwrap_err();
+
+        assert!(e.contains("n'est pas un livrable"), "{e}");
+        assert_eq!(o.projet.meta.livraison.livrables.len(), 1);
+        assert!(pdf.is_file(), "le refus ne doit rien effacer");
+    }
+
+    /// **Spec § 9, tenue d'un seul tenant :** un livrable dont le répertoire n'a jamais été écrit
+    /// se supprime sans refuser. Les deux moitiés étaient prouvées à part — que l'effacement ne
+    /// refuse pas sur un répertoire absent (`package`), que le livrable quitte le livre (le test
+    /// voisin) —, jamais ensemble. C'est pourtant leur rencontre que l'on voit à l'écran : un
+    /// livrable en erreur, qui n'a donc rien écrit, et qu'on veut retirer.
+    #[test]
+    fn supprimer_sur_un_repertoire_deja_parti_retire_le_livrable_sans_echouer() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let second = Livrable::pour(fabrication_seconde(&o));
+        o.projet.meta.livraison.livrables.push(second.clone());
+        let dossier = sorties_racine(&o).unwrap().join(second.cle());
+        assert!(!dossier.exists(), "le répertoire n'a jamais été écrit");
+
+        let s =
+            supprimer(&mut o, &second.cle()).expect("un répertoire absent n'est pas une erreur");
+
+        assert!(!s.nettoyage.dossier_retire, "il n'y avait rien à retirer");
+        assert!(
+            !s.nettoyage.absents.is_empty(),
+            "le compte rendu dit ce qui n'était plus là : {:?}",
+            s.nettoyage
+        );
+        assert!(
+            !o.projet
+                .meta
+                .livraison
+                .livrables
+                .iter()
+                .any(|l| l.cle() == second.cle()),
+            "le livrable doit avoir quitté le livre"
+        );
     }
 
     /// Supprimer efface les fichiers, retire le livrable, et rend le pointeur à quelqu'un : celui
