@@ -2935,4 +2935,194 @@ mod tests {
             "les repères ne suivent pas l'ouverture de leur pièce"
         );
     }
+
+    /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
+
+    /// Les folios que la source publie sous `<mesures>`, un par repère, dans l'ordre.
+    ///
+    /// C'est exactement ce que la table affiche : elle lit les mêmes repères par la même
+    /// requête, et rend le même `.location().page()`. Mesurer ici, plutôt que de lire la
+    /// table rendue, évite de reconnaître des chiffres dans un PNG pour vérifier une
+    /// valeur que Typst sait dire.
+    fn folios_des_reperes(typst: &Typst, dossier: &Path, nom: &str, mut s: String) -> Vec<f64> {
+        s.push_str(
+            "\n#context [#metadata(query(<ozalid-tdm>).enumerate().fold((:), (d, it) => \
+             d + ((str(it.at(0))): it.at(1).location().page())))<mesures>]\n",
+        );
+        let chemin = dossier.join(format!("{nom}.typ"));
+        std::fs::write(&chemin, &s).expect("source non écrite");
+        let folios = typst.mesures(&chemin).expect("mesures refusées");
+        (0..folios.len())
+            .map(|i| {
+                *folios
+                    .get(&i.to_string())
+                    .unwrap_or_else(|| panic!("aucun repère au rang {i} : {folios:?}"))
+            })
+            .collect()
+    }
+
+    /// **La preuve du lot.** La table se compte elle-même dans les folios qu'elle
+    /// affiche.
+    ///
+    /// C'est toute la mécanique de la spec § 2.3, et elle ne se raisonne pas : insérer
+    /// une table décale les pièces qui la suivent, donc les folios qu'elle vient
+    /// d'annoncer. Si Typst ne résolvait pas cette auto-référence en une invocation, la
+    /// table renverrait le lecteur deux pages trop tôt — sur toutes les entrées, sans
+    /// qu'aucun compte de pages ni aucun rendu ne le signale.
+    ///
+    /// L'écart entre les deux compositions est vérifié **constant**, et non figé à une
+    /// valeur : c'est l'intention exacte — la table pousse tout le livre du même nombre
+    /// de pages, celui qu'elle occupe elle-même, blanche de parité comprise. Un écart
+    /// qui varierait d'une pièce à l'autre dirait que les folios ont été relevés avant
+    /// l'insertion, ce que la spec écarte comme « deux passes côté Rust ».
+    ///
+    /// Les deux positions sont exercées : en fin, la table n'a rien à décaler et l'écart
+    /// doit être **nul** sur les pièces, qui la précèdent toutes.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn la_table_se_compte_elle_meme_dans_les_folios_qu_elle_affiche() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces = pieces_des_quatre_sortes();
+        let compose = |table: Table| {
+            source(
+                &livre(),
+                &Interieur {
+                    table,
+                    ..Interieur::default()
+                },
+                pr,
+                &r,
+                &pieces,
+                None,
+            )
+        };
+
+        let sans = compose(Table::Absente);
+        let n_sans = pages_de(&typst, dossier.path(), "sans", &sans);
+        let f_sans = folios_des_reperes(&typst, dossier.path(), "sans-m", sans);
+        assert_eq!(
+            f_sans.len(),
+            pieces.len(),
+            "les repères du livre nu ne sont pas au complet : {f_sans:?}"
+        );
+
+        let en_tete = compose(Table::EnTete);
+        let n_en_tete = pages_de(&typst, dossier.path(), "tete", &en_tete);
+        let f_en_tete = folios_des_reperes(&typst, dossier.path(), "tete-m", en_tete);
+        assert_eq!(
+            f_en_tete.len(),
+            pieces.len(),
+            "la table s'est ajoutée aux repères, ou en a perdu : {f_en_tete:?}"
+        );
+
+        let ecarts: Vec<f64> = f_en_tete
+            .iter()
+            .zip(f_sans.iter())
+            .map(|(a, s)| a - s)
+            .collect();
+        let decalage = ecarts[0];
+        assert!(
+            decalage >= 2.0,
+            "la table en tête n'a poussé le livre que de {decalage} page(s) : \
+             elle ne s'imprime pas, ou pas en belle page"
+        );
+        assert!(
+            ecarts.iter().all(|e| *e == decalage),
+            "la table n'a pas décalé toutes les pièces du même nombre de pages : \
+             {ecarts:?} — les folios ont été relevés avant son insertion"
+        );
+        assert_eq!(
+            f64::from(n_en_tete) - f64::from(n_sans),
+            decalage,
+            "le livre n'a pas grossi de ce dont la table a décalé les pièces : \
+             {n_en_tete} pages contre {n_sans}"
+        );
+
+        let en_fin = compose(Table::EnFin);
+        let n_en_fin = pages_de(&typst, dossier.path(), "fin", &en_fin);
+        let f_en_fin = folios_des_reperes(&typst, dossier.path(), "fin-m", en_fin);
+        assert_eq!(
+            f_en_fin, f_sans,
+            "une table en fin a déplacé des pièces qui la précèdent toutes"
+        );
+        assert!(
+            n_en_fin > n_sans,
+            "une table en fin n'a ajouté aucune page : {n_en_fin} contre {n_sans}"
+        );
+        // **La belle page se prouve ici, et nulle part ailleurs en composant.** En tête,
+        // le copyright rend toujours la main sur une impaire : un saut simple donnerait
+        // le même livre, et le saut de parité y est une garde sans effet observable. En
+        // fin, la parité dépend de la longueur des annexes — le livre nu s'arrête sur
+        // une impaire, la table doit donc sauter la paire qui suit.
+        assert_eq!(
+            n_sans % 2,
+            1,
+            "ce test ne prouve la belle page que sur un livre dont la pagination nue est \
+             impaire ; elle vaut {n_sans}. Allonger le manuscrit de test d'une page — ne \
+             pas retirer cette garde, elle est ce qui empêche le test de devenir muet."
+        );
+        let ouverture = n_sans + 2;
+        assert!(
+            n_en_fin >= ouverture,
+            "la table en fin s'est ouverte au verso : le livre fait {n_en_fin} pages, \
+             elle devait s'ouvrir en {ouverture}"
+        );
+    }
+
+    /// Une table longue ne dérange **ni la pagination ni l'ancrage des repères**.
+    ///
+    /// Le cas court d'à côté ne l'exerce pas : cinq entrées tiennent sur une page, et
+    /// une table qui insérerait un saut parasite tous les N blocs y passerait inaperçue.
+    /// Quarante chapitres d'une page font déborder la table, et les folios doivent
+    /// rester **consécutifs** à partir de sa sortie.
+    ///
+    /// **Ce que ce test ne prouve pas, et qu'aucun test Rust ne peut prouver :** que les
+    /// folios *imprimés dans la table* tiennent compte des pages qu'elle occupe.
+    /// `typst query` refuse `text` comme `block` — « is not locatable » —, si bien que
+    /// le seul élément interrogeable est le repère, dont le folio est juste que la table
+    /// converge ou non. Le point fixe de la spec § 2.3 a été vérifié par composition le
+    /// 29/08, sur PNG, et reste une vérification à l'œil ; la liaison entre le repère et
+    /// ce qui s'imprime est gardée, elle, par
+    /// `la_table_affiche_le_folio_de_chaque_repere`.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn une_table_longue_ne_derange_pas_l_ancrage_des_reperes() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces = manuscrit_long();
+        let s = source(
+            &livre(),
+            &Interieur {
+                table: Table::EnTete,
+                ..Interieur::default()
+            },
+            pr,
+            &r,
+            &pieces,
+            None,
+        );
+        let folios = folios_des_reperes(&typst, dossier.path(), "longue", s);
+        assert_eq!(folios.len(), pieces.len());
+        let premier = folios[0];
+        assert!(
+            premier >= 7.0,
+            "la table n'a pas repoussé le premier chapitre : il ouvre en {premier}"
+        );
+        let attendus: Vec<f64> = (0..pieces.len()).map(|i| premier + i as f64).collect();
+        assert_eq!(
+            folios, attendus,
+            "une table longue a dérangé l'ancrage : les folios ne sont plus consécutifs"
+        );
+    }
 }
