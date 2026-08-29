@@ -371,8 +371,9 @@ fn assemble(
                     s.push_str("#context if calc.odd(here().page()) { page(footer: none)[] }\n");
                 }
                 s.push_str(&format!(
-                    "#page(footer: none)[\n#v(22mm)\n\
+                    "#page(footer: none)[\n{}#v(22mm)\n\
                      #align(center, text(size: {}pt)[{r}])\n",
+                    repere(p),
                     int.numero
                 ));
                 s.push_str(&titre_sous_numero(&p.titre, int.titre_section));
@@ -385,6 +386,7 @@ fn assemble(
                 if i > 0 && !apres_page {
                     s.push_str("#pagebreak()\n");
                 }
+                s.push_str(&repere(p));
                 s.push_str(&format!(
                     "#v(22mm)\n#align(center, text(size: {}pt)[{numero}])\n",
                     int.numero
@@ -409,6 +411,7 @@ fn assemble(
             if i > 0 {
                 s.push_str("#pagebreak()\n");
             }
+            s.push_str(&repere(p));
             s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
             s.push_str(&blocs_typst(&p.blocs));
         }
@@ -620,6 +623,7 @@ fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
     // Les pièces liminaires du manuscrit ferment la série : `footer: none` court encore,
     // le folio ne sera rétabli qu'au premier chapitre.
     for p in pieces {
+        s.push_str(&repere(p));
         s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
         s.push_str(&blocs_typst(&p.blocs));
         // Ce qui suit une pièce liminaire ouvre en belle page — le corps, ou la pièce
@@ -658,6 +662,39 @@ fn ouverture_piece(titre: &str, pt: f64) -> String {
     format!(
         "#v(22mm)\n#align(center, text(size: {pt}pt, tracking: 0.14em)[{}])\n#v(14.5mm)\n",
         majuscules(titre)
+    )
+}
+
+/// L'étiquette que porte chaque repère de table, telle qu'une requête Typst la nomme.
+///
+/// Publique parce que la table la lira — `context query(<ozalid-tdm>)` — et qu'un nom
+/// recopié à deux endroits est un nom qui divergera.
+pub const TDM: &str = "ozalid-tdm";
+
+/// Le repère qu'une pièce laisse à l'ouverture de sa page, pour la table des matières.
+///
+/// **Il ne s'affiche pas et n'occupe aucune place** : un `metadata` n'est pas mis en
+/// page, il est seulement situé. C'est ce qui permet de le poser dans tous les livres,
+/// table allumée ou non, et de prouver par le témoin qu'il ne coûte rien — une preuve
+/// impossible si la pose dépendait du réglage, puisque l'allumer changerait alors deux
+/// choses à la fois.
+///
+/// Trois champs, et non un libellé prémâché : le rang indente, le numéro et le titre
+/// sont ce que la page d'ouverture imprime. Composer la ligne ici enfermerait la mise
+/// en forme dans le Rust, alors qu'elle appartient à la table.
+///
+/// Les valeurs sont **citées, non composées** : `echappe_chaine`, jamais `echappe`.
+fn repere(p: &Piece) -> String {
+    let (rang, numero) = match &p.sorte {
+        // Une partie tient le premier rang ; tout le reste est indenté sous elle.
+        Sorte::Partie(romain) => (1, romain.clone()),
+        Sorte::Chapitre(n) => (2, n.to_string()),
+        Sorte::Liminaire | Sorte::Annexe => (2, String::new()),
+    };
+    format!(
+        "#metadata((rang: {rang}, numero: \"{}\", titre: \"{}\"))<{TDM}>\n",
+        echappe_chaine(&numero),
+        echappe_chaine(&p.titre)
     )
 }
 
@@ -2046,6 +2083,219 @@ mod tests {
         assert_eq!(seul, sur_la_page, "le canevas ne montrera pas le rendu");
     }
 
+    /* ---------- les repères de table ---------- */
+
+    /// Ce qu'un repère porte, sorte par sorte. Les quatre lignes de ce test sont les
+    /// quatre cas que `Sorte` admet : la table du lot 3 n'aura rien d'autre à composer.
+    ///
+    /// Le rang n'est pas décoratif — c'est lui qui indente. Une `Partie` rendue au
+    /// second rang mettrait la partie au niveau de ses propres chapitres, et la table
+    /// mentirait sur la structure du livre.
+    #[test]
+    fn chaque_sorte_porte_son_rang_son_numero_et_son_titre() {
+        let cas = [
+            (
+                Sorte::Partie("II".into()),
+                "Seconde",
+                r#"#metadata((rang: 1, numero: "II", titre: "Seconde"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Chapitre(7),
+                "Le vent",
+                r#"#metadata((rang: 2, numero: "7", titre: "Le vent"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Liminaire,
+                "Préface",
+                r#"#metadata((rang: 2, numero: "", titre: "Préface"))<ozalid-tdm>"#,
+            ),
+            (
+                Sorte::Annexe,
+                "Postface",
+                r#"#metadata((rang: 2, numero: "", titre: "Postface"))<ozalid-tdm>"#,
+            ),
+        ];
+        for (sorte, titre, attendu) in cas {
+            let p = Piece {
+                sorte: sorte.clone(),
+                titre: titre.into(),
+                blocs: vec![],
+            };
+            assert_eq!(
+                repere(&p).trim_end(),
+                attendu,
+                "le repère de {sorte:?} ne dit pas ce que la table lira"
+            );
+        }
+    }
+
+    /// Un chapitre sans titre est un cas admis du format (`## 7`). La table ne fabrique
+    /// aucun libellé que le livre n'imprime pas : elle n'aura que le numéro à composer,
+    /// et le titre vide est ce qui le lui dit.
+    #[test]
+    fn une_piece_sans_titre_laisse_le_titre_vide() {
+        let p = Piece {
+            sorte: Sorte::Chapitre(7),
+            titre: String::new(),
+            blocs: vec![],
+        };
+        assert_eq!(
+            repere(&p).trim_end(),
+            r#"#metadata((rang: 2, numero: "7", titre: ""))<ozalid-tdm>"#
+        );
+    }
+
+    /// Un guillemet dans un titre refermerait la chaîne du dictionnaire, et la source
+    /// ne composerait plus — le même piège que la page de titre, déjà tenu par
+    /// `echappe_chaine`. Ici la faute serait pire : elle casserait la composition d'un
+    /// livre dont le seul tort est d'avoir un titre à guillemets.
+    #[test]
+    fn un_titre_a_guillemets_ne_referme_pas_le_dictionnaire_du_repere() {
+        let p = Piece {
+            sorte: Sorte::Liminaire,
+            titre: "L'« ouverture » dite\nen deux temps".into(),
+            blocs: vec![],
+        };
+        let s = repere(&p);
+        assert!(
+            s.contains(r#"titre: "L'« ouverture » dite\nen deux temps""#),
+            "titre mal cité : {s}"
+        );
+        assert_eq!(s.lines().count(), 1, "le repère tient sur une ligne : {s}");
+    }
+
+    /// Un manuscrit qui exerce les quatre ouvertures que l'intérieur compose. L'ordre
+    /// est celui que `decoupe` impose : liminaires, corps, annexes.
+    fn pieces_des_quatre_sortes() -> Vec<Piece> {
+        vec![
+            Piece {
+                sorte: Sorte::Liminaire,
+                titre: "Préface".into(),
+                blocs: vec![Bloc::Paragraphe("Avant.".into())],
+            },
+            Piece {
+                sorte: Sorte::Partie("I".into()),
+                titre: "Première".into(),
+                blocs: vec![],
+            },
+            Piece {
+                sorte: Sorte::Chapitre(1),
+                titre: "Un".into(),
+                blocs: vec![Bloc::Paragraphe("Texte.".into())],
+            },
+            Piece {
+                sorte: Sorte::Chapitre(2),
+                titre: "Deux".into(),
+                blocs: vec![Bloc::Paragraphe("Encore.".into())],
+            },
+            Piece {
+                sorte: Sorte::Annexe,
+                titre: "Postface".into(),
+                blocs: vec![Bloc::Paragraphe("Après.".into())],
+            },
+        ]
+    }
+
+    fn source_des_quatre_sortes() -> String {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        source(
+            &livre(),
+            &Interieur::default(),
+            provider("bod").unwrap(),
+            &r,
+            &pieces_des_quatre_sortes(),
+            None,
+        )
+    }
+
+    /// Chaque pièce laisse son repère, et une seule fois. Une pièce oubliée — la
+    /// postface, la page de partie — manquerait dans la table sans que rien ne le dise,
+    /// et c'est exactement le défaut que la spec refuse : « une préface qui a sa page
+    /// d'ouverture et n'apparaît pas dans la table serait un défaut ».
+    #[test]
+    fn les_quatre_sortes_laissent_chacune_leur_repere_dans_l_ordre() {
+        let s = source_des_quatre_sortes();
+        let reperes: Vec<&str> = s.lines().filter(|l| l.contains(TDM)).collect();
+        assert_eq!(
+            reperes,
+            vec![
+                r#"#metadata((rang: 2, numero: "", titre: "Préface"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 1, numero: "I", titre: "Première"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "1", titre: "Un"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "2", titre: "Deux"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "", titre: "Postface"))<ozalid-tdm>"#,
+            ],
+            "les repères de la source ne suivent pas le manuscrit"
+        );
+    }
+
+    /// **Le repère du chapitre se pose après le saut de page, jamais avant.** Écrit
+    /// avant, il serait situé sur la dernière page de la pièce précédente : la table
+    /// afficherait un folio d'une page trop tôt, et le lecteur ouvrirait à la fin du
+    /// chapitre d'avant. Rien ne le signalerait — ni le compte de pages, ni le rendu,
+    /// seulement un livre faux.
+    #[test]
+    fn le_repere_d_un_chapitre_suit_le_saut_de_page_qui_l_ouvre() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#pagebreak()\n#metadata((rang: 2, numero: \"2\", titre: \"Deux\"))<ozalid-tdm>"
+            ),
+            "le repère du chapitre 2 n'est pas collé derrière son saut de page :\n{s}"
+        );
+    }
+
+    /// **Le repère de l'annexe suit la directive qui ouvre sa zone**, pas un saut de
+    /// page : la première annexe n'a pas de `#pagebreak()` à elle — c'est
+    /// `#set page(footer: none)` qui ouvre la zone hors folio, et le repère doit s'y
+    /// coller. Un ancrage différent le situerait sur la dernière page du corps, et la
+    /// table enverrait le lecteur à la fin du dernier chapitre.
+    #[test]
+    fn le_repere_d_une_annexe_suit_la_directive_qui_ouvre_sa_zone() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#set page(footer: none)\n#metadata((rang: 2, numero: \"\", titre: \"Postface\"))"
+            ),
+            "le repère de l'annexe n'ouvre pas sa page :\n{s}"
+        );
+    }
+
+    /// **Le repère de la pièce liminaire ouvre sa page**, au même titre que les trois
+    /// autres poses. Rien ne le garantissait jusqu'ici : le test d'ordre ne compare que
+    /// les lignes portant `TDM`, filtrées de leur contexte — déplacer le repère en fin
+    /// de boucle, après `blocs_typst()` ou après le saut de parité qui clôt la pièce,
+    /// laisserait cette suite intacte alors que le repère se serait décalé d'une pièce.
+    #[test]
+    fn le_repere_d_une_piece_liminaire_ouvre_sa_page() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#pagebreak()\n\n#metadata((rang: 2, numero: \"\", titre: \"Préface\"))\
+                 <ozalid-tdm>\n#v(22mm)"
+            ),
+            "le repère de la pièce liminaire n'ouvre pas sa page :\n{s}"
+        );
+    }
+
+    /// La page de partie est composée par `#page(footer: none)[…]`, qui rompt le flux de
+    /// lui-même. Le repère doit vivre **dedans** : posé avant, il serait situé sur la
+    /// page précédente ; posé après, sur la blanche du verso. Dans les deux cas la table
+    /// enverrait le lecteur à côté de la page de partie.
+    #[test]
+    fn le_repere_d_une_partie_vit_dans_sa_page() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#page(footer: none)[\n#metadata((rang: 1, numero: \"I\", titre: \"Première\"))<ozalid-tdm>\n#v(22mm)"
+            ),
+            "le repère de la partie n'ouvre pas sa page :\n{s}"
+        );
+    }
+
     /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
 
     /// Un PNG minuscule mais valide : 2 × 2 pixels, deux gris.
@@ -2200,5 +2450,147 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// **La preuve du lot, et son seul livrable.** Les repères ne déplacent aucune page
+    /// et ne se voient sur aucune.
+    ///
+    /// Compter les `#metadata` dans la source ne prouverait rien : c'est Typst qui décide
+    /// de la mise en page, et un élément « invisible » qui ouvrirait un paragraphe
+    /// ajouterait un espacement — donc, sur un livre entier, des pages. La pagination
+    /// change alors le dos, donc la planche, et les exemplaires partent avec une
+    /// couverture fausse sans que rien ne le signale.
+    ///
+    /// La référence est la **même source privée de ses repères**, ligne à ligne : la
+    /// seule différence entre les deux documents est ce que ce lot ajoute. Comparer
+    /// chaque page rendue, et pas seulement le compte, ferme la porte au cas où deux
+    /// écarts se compenseraient.
+    ///
+    /// Les deux variantes sont rendues par `Typst::apercus`, une invocation chacune :
+    /// `apercu` page à page recomposerait le livre entier à chaque page, plus de
+    /// quatre-vingts fois ici pour deux compositions qui suffisent.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn les_reperes_n_occupent_aucune_place_et_ne_se_voient_nulle_part() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let avec = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            &r,
+            &manuscrit_long(),
+            None,
+        );
+        let sans: String = avec
+            .lines()
+            .filter(|l| !l.contains(TDM))
+            .collect::<Vec<_>>()
+            .join("\n");
+        // `avec.lines().join("\n")` perdrait le saut de ligne final quel que soit le
+        // nombre de repères : un simple `assert_ne!` resterait vert même si `repere()`
+        // rendait la chaîne vide. Compter les lignes qui portent `TDM` ferme la porte.
+        assert!(
+            avec.lines().filter(|l| l.contains(TDM)).count() >= 40,
+            "la source ne porte pas les repères attendus : rien n'est prouvé"
+        );
+
+        let n_avec = pages_de(&typst, dossier.path(), "avec", &avec);
+        let n_sans = pages_de(&typst, dossier.path(), "sans", &sans);
+        assert!(n_sans > 30, "manuscrit trop court pour prouver : {n_sans}");
+        assert_eq!(
+            n_avec, n_sans,
+            "les repères ont déplacé la pagination : {n_avec} au lieu de {n_sans}"
+        );
+
+        let pages_avec = typst
+            .apercus(
+                &dossier.path().join("avec.typ"),
+                &dossier.path().join("avec-{p}.png"),
+                40,
+            )
+            .expect("rendu refusé");
+        let pages_sans = typst
+            .apercus(
+                &dossier.path().join("sans.typ"),
+                &dossier.path().join("sans-{p}.png"),
+                40,
+            )
+            .expect("rendu refusé");
+        assert_eq!(
+            pages_avec.len(),
+            pages_sans.len(),
+            "les repères ont déplacé la pagination : {} pages avec, {} sans",
+            pages_avec.len(),
+            pages_sans.len()
+        );
+        for (page, (a, s)) in pages_avec.iter().zip(pages_sans.iter()).enumerate() {
+            assert_eq!(
+                std::fs::read(a).expect("rendu illisible"),
+                std::fs::read(s).expect("rendu illisible"),
+                "un repère se voit sur la page {}",
+                page + 1
+            );
+        }
+    }
+
+    /// **Le repère est situé sur la page qu'il ouvre**, et c'est tout ce qui fera la
+    /// justesse des folios de la table au lot 3. Posé un cran trop tôt, il enverrait le
+    /// lecteur à la fin de la pièce précédente ; rien dans le compte de pages ni dans le
+    /// rendu ne le dirait.
+    ///
+    /// Le manuscrit exerce **les quatre poses** — `pieces_des_quatre_sortes()` : une
+    /// pièce liminaire, une page de partie, deux chapitres, une annexe, dans l'ordre que
+    /// `decoupe` impose. C'est la page de partie qui porte le risque : posée à
+    /// l'intérieur de son `#page(footer: none)[…]` mais mal placée dans le bloc, elle ne
+    /// se verrait ni au compte de pages ni au rendu, et ce test est le seul à composer
+    /// pour de vrai jusque-là. Les folios ne sont pas consécutifs — parties et annexe
+    /// intercalent des pages blanches ou de parité — mais **aucun ne doit se répéter** :
+    /// un repère mal ancré rend deux fois le même folio, exactement le défaut cherché.
+    ///
+    /// Les folios sont relevés par `Typst::mesures`, qui lit `<mesures>` sans composer de
+    /// PDF : la source de test publie ce que la table interrogera, sans qu'aucune API
+    /// neuve n'entre dans le code de production — la table, elle, lira ses repères depuis
+    /// Typst même. Les valeurs attendues sont un relevé, pas un calcul : composées une
+    /// fois, puis figées ici.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn chaque_repere_est_situe_sur_la_page_qu_il_ouvre() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces = pieces_des_quatre_sortes();
+        let mut s = source(&livre(), &Interieur::default(), pr, &r, &pieces, None);
+        // Le folio de chaque repère, indexé par son rang d'apparition : `mesures` rend
+        // un dictionnaire de nombres, c'est exactement ce qu'il faut.
+        s.push_str(
+            "\n#context [#metadata(query(<ozalid-tdm>).enumerate().fold((:), (d, it) => \
+             d + ((str(it.at(0))): it.at(1).location().page())))<mesures>]\n",
+        );
+        let chemin = dossier.path().join("ancrage.typ");
+        std::fs::write(&chemin, &s).expect("source non écrite");
+        let folios = typst.mesures(&chemin).expect("mesures refusées");
+
+        let releves: Vec<f64> = (0..pieces.len())
+            .map(|i| {
+                *folios
+                    .get(&i.to_string())
+                    .unwrap_or_else(|| panic!("aucun repère au rang {i} : {folios:?}"))
+            })
+            .collect();
+        assert_eq!(
+            releves,
+            vec![5.0, 7.0, 9.0, 10.0, 11.0],
+            "les repères ne suivent pas l'ouverture de leur pièce"
+        );
     }
 }
