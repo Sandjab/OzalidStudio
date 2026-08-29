@@ -964,9 +964,12 @@ pub fn effacer_livrable(dossier: &Path, cle: &str, images: &[String]) -> Result<
         }
     }
     // Ce qui reste porte le répertoire : on le lit avant de tenter de le retirer, pour pouvoir
-    // le nommer. Un répertoire absent ne se lit pas, et n'a rien laissé.
-    let Ok(reste) = std::fs::read_dir(dossier) else {
-        return Ok(n);
+    // le nommer. Un répertoire absent n'a rien laissé ; tout autre échec de lecture (permissions)
+    // refuse plutôt que de se faire passer pour un répertoire vide.
+    let reste = match std::fs::read_dir(dossier) {
+        Ok(reste) => reste,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(n),
+        Err(e) => return Err(format!("{} illisible : {e}", dossier.display())),
     };
     for e in reste.flatten() {
         n.etrangers
@@ -2370,6 +2373,34 @@ mod tests {
         assert!(
             !n.dossier_retire,
             "il n'y avait pas de répertoire à retirer"
+        );
+    }
+
+    /// Un répertoire présent mais illisible n'est pas « rien n'y est resté » : la confondre avec
+    /// un répertoire absent ferait rendre `Ok` alors que le contenu n'a pas pu être vérifié — et
+    /// la tâche 6 retire le livrable du projet dès que cette fonction rend `Ok`. Un fichier qui
+    /// résiste doit refuser, comme `remove_file` le fait déjà pour les siens.
+    #[test]
+    #[cfg(unix)]
+    fn un_repertoire_illisible_fait_echouer() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let livrable = dir.path().join("essai-livre-broche-creme");
+        std::fs::create_dir_all(&livrable).unwrap();
+        // Écriture et exécution sans lecture : les `remove_file` trouvent un répertoire vide
+        // (NotFound), mais `read_dir` ne peut plus lister ce qu'il contient.
+        std::fs::set_permissions(&livrable, std::fs::Permissions::from_mode(0o300)).unwrap();
+
+        let resultat = effacer_livrable(&livrable, "essai-livre-broche-creme", &[]);
+
+        // Remis lisible avant toute assertion : sinon un échec laisserait le `tempdir` sur des
+        // permissions qui empêchent aussi sa propre suppression en fin de test.
+        std::fs::set_permissions(&livrable, std::fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(
+            resultat.is_err(),
+            "un répertoire illisible doit refuser, pas se faire passer pour vide : {resultat:?}"
         );
     }
 }
