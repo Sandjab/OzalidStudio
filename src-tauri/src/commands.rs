@@ -805,6 +805,14 @@ pub fn livrable_remplacer(
     remplacer(o, &cle, livrable, &typst)
 }
 
+/// Retire un livrable du livre et efface ce que l'application avait écrit pour lui.
+#[tauri::command]
+pub fn livrable_supprimer(cle: String, atelier: State<Atelier>) -> Result<Suppression, String> {
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    supprimer(o, &cle)
+}
+
 /// Compose l'intérieur du projet ouvert pour le livrable visé, et rend le compte
 /// de pages avec le dos qui en découle.
 #[tauri::command]
@@ -1796,6 +1804,51 @@ fn regenerer(o: &mut Ouvert, cle: &str, typst: &Typst) -> Result<Generation, Str
         return Err(format!("{cle} n'est pas un livrable de ce livre."));
     }
     composer_lot(o, &[cle.to_string()], typst)
+}
+
+/// Ce que rend une suppression : le projet tel qu'elle l'a laissé, et ce que le répertoire a
+/// gardé.
+#[derive(Debug, Serialize)]
+pub struct Suppression {
+    pub projet: ProjetVue,
+    pub nettoyage: package::Nettoyage,
+}
+
+/// Efface les fichiers du livrable, puis le retire du livre.
+///
+/// Cet ordre-là (spec § 3) : un effacement qui refuse — un fichier verrouillé — laisse le
+/// livrable en place, avec ses fichiers, plutôt qu'un livre qui ne parle plus d'un répertoire
+/// qui existe encore.
+///
+/// Le dernier livrable ne se supprime pas, comme il ne se retirait pas : c'est lui qui donne
+/// le format sous lequel on regarde la couverture.
+fn supprimer(o: &mut Ouvert, cle: &str) -> Result<Suppression, String> {
+    let l = &o.projet.meta.livraison;
+    if l.livrables.len() < 2 {
+        return Err(
+            "un livre garde au moins un livrable : c'est lui qui donne le format \
+             sous lequel on regarde la couverture."
+                .into(),
+        );
+    }
+    if !l.livrables.iter().any(|d| d.cle() == cle) {
+        return Err(format!("{cle} n'est pas un livrable de ce livre."));
+    }
+    let racine = sorties_racine(o)?;
+    let images: Vec<String> = o.projet.images.keys().cloned().collect();
+    let nettoyage = package::effacer_livrable(&racine.join(cle), cle, &images)?;
+
+    let l = &mut o.projet.meta.livraison;
+    l.livrables.retain(|d| d.cle() != cle);
+    // Supprimer celui qu'on visait laisse le pointeur en l'air : il retombe sur le premier,
+    // plutôt que de désigner un absent jusqu'au prochain geste.
+    if l.courant().is_none() {
+        l.courant = l.livrables[0].cle();
+    }
+    Ok(Suppression {
+        projet: vue_modifiee(o)?,
+        nettoyage,
+    })
 }
 
 /// Remplace un livrable par un autre, à sa place, et recompose.
@@ -3769,6 +3822,53 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
             ancien.cle(),
             "courant visait l'ancien : il ne doit pas rester sur une clé que le livre ne \
              porte plus"
+        );
+    }
+
+    /// Un livre garde au moins un livrable : c'est lui qui donne le format sous lequel on regarde
+    /// la couverture. Le refus tombe **avant** l'effacement — sinon on laisserait un livrable sans
+    /// package, ce qui est pire que les deux états qu'on voulait éviter.
+    #[test]
+    fn supprimer_le_dernier_livrable_se_refuse_sans_rien_effacer() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let seul = o.projet.meta.livraison.livrables[0].clone();
+        let dossier = sorties_racine(&o).unwrap().join(seul.cle());
+        std::fs::create_dir_all(&dossier).unwrap();
+        let pdf = dossier.join(package::nom(&seul.cle(), "interieur", "pdf"));
+        std::fs::write(&pdf, b"%PDF").unwrap();
+
+        let e = supprimer(&mut o, &seul.cle()).unwrap_err();
+
+        assert!(e.contains("au moins un livrable"), "{e}");
+        assert!(pdf.is_file(), "le refus ne doit rien effacer");
+    }
+
+    /// Supprimer efface les fichiers, retire le livrable, et rend le pointeur à quelqu'un : celui
+    /// qu'on visait s'en va, `courant` retombe sur le premier plutôt que de désigner un absent
+    /// jusqu'au prochain geste.
+    #[test]
+    fn supprimer_efface_les_fichiers_retire_le_livrable_et_rend_le_pointeur() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let second = Livrable::pour(fabrication_seconde(&o));
+        o.projet.meta.livraison.livrables.push(second.clone());
+        o.projet.meta.livraison.courant = second.cle();
+        let dossier = sorties_racine(&o).unwrap().join(second.cle());
+        std::fs::create_dir_all(&dossier).unwrap();
+        for f in package::fichiers_du_livrable(&second.cle(), &[]) {
+            std::fs::write(dossier.join(f), b"x").unwrap();
+        }
+
+        let s = supprimer(&mut o, &second.cle()).unwrap();
+
+        assert!(s.nettoyage.dossier_retire, "{:?}", s.nettoyage);
+        assert!(!dossier.exists());
+        assert_eq!(o.projet.meta.livraison.livrables.len(), 1);
+        assert_eq!(
+            o.projet.meta.livraison.courant,
+            o.projet.meta.livraison.livrables[0].cle(),
+            "le pointeur ne doit pas désigner un absent"
         );
     }
 }
