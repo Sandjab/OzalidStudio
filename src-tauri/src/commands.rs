@@ -792,6 +792,19 @@ pub fn livrable_regenerer(cle: String, atelier: State<Atelier>) -> Result<Genera
     regenerer(o, &cle, &typst)
 }
 
+/// Remplace un livrable par celui que le formulaire porte, et recompose.
+#[tauri::command]
+pub fn livrable_remplacer(
+    cle: String,
+    livrable: Livrable,
+    atelier: State<Atelier>,
+) -> Result<Generation, String> {
+    let typst = typst()?;
+    let mut garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_mut().ok_or_else(aucun_projet)?;
+    remplacer(o, &cle, livrable, &typst)
+}
+
 /// Compose l'intérieur du projet ouvert pour le livrable visé, et rend le compte
 /// de pages avec le dos qui en découle.
 #[tauri::command]
@@ -1783,6 +1796,100 @@ fn regenerer(o: &mut Ouvert, cle: &str, typst: &Typst) -> Result<Generation, Str
         return Err(format!("{cle} n'est pas un livrable de ce livre."));
     }
     composer_lot(o, &[cle.to_string()], typst)
+}
+
+/// Remplace un livrable par un autre, à sa place, et recompose.
+///
+/// **Composer avant d'effacer** (spec § 3) : si la nouvelle composition échouait après qu'on a
+/// vidé l'ancien répertoire, on aurait échangé un package qui marchait contre un qui ne marche
+/// pas. L'ancien répertoire n'est donc effacé qu'après une composition réussie, et seulement
+/// si la clé a bougé — à clé égale, c'est le même répertoire, et la composition vient d'y
+/// réécrire.
+///
+/// Le POD et le format se changent ici, quand `livrable_regler` les refusait : ce refus tenait
+/// à ce que régler ne recomposait pas. Ce qui en survit est la finition, qui doit exister chez
+/// l'imprimeur.
+///
+/// Le rang suit la décision du 29/08 : conservé quand le POD ne change pas, poussé en queue
+/// quand il change — le livrable entre alors dans son nouveau groupe comme s'il venait d'y
+/// être ajouté.
+///
+/// Une composition ratée rend la pose **quand la clé a bougé**, et la garde à clé égale : voir
+/// le corps, où les deux cas sont dits.
+fn remplacer(
+    o: &mut Ouvert,
+    cle: &str,
+    livrable: Livrable,
+    typst: &Typst,
+) -> Result<Generation, String> {
+    // Le candidat est résolu **avant** d'être posé : un axe ou un papier inconnu doit laisser
+    // le livrable tel qu'il était, et non l'abandonner à moitié réglé.
+    let r = catalogue::resout(&livrable.fabrication)?;
+    if let Some(f) = &livrable.finition {
+        if !r.pod.finitions.iter().any(|x| &x.cle == f) {
+            return Err(format!("finition inconnue chez {} : {f}.", r.pod.nom));
+        }
+    }
+    let racine = sorties_racine(o)?;
+    let l = &mut o.projet.meta.livraison;
+    let neuve = livrable.cle();
+    let rang = l
+        .livrables
+        .iter()
+        .position(|x| x.cle() == cle)
+        .ok_or_else(|| format!("{cle} n'est pas un livrable de ce livre."))?;
+    // Le livrable édité ne se compte pas comme doublon de lui-même (spec § 3).
+    if neuve != cle && refuse_doublon(&l.livrables, &neuve) {
+        return Err(format!("{neuve} est déjà un livrable de ce livre."));
+    }
+    let ancien = l.livrables[rang].clone();
+    let change_de_pod = ancien.fabrication.pod != livrable.fabrication.pod;
+    if change_de_pod {
+        l.livrables.remove(rang);
+        l.livrables.push(livrable);
+    } else {
+        l.livrables[rang] = livrable;
+    }
+    if l.courant == cle {
+        l.courant = neuve.clone();
+    }
+
+    let g = composer_lot(o, std::slice::from_ref(&neuve), typst)?;
+    if g.packages.iter().any(|p| p.erreur.is_some()) {
+        // Un échec ne laisse pas effacer l'ancien : le package neuf n'existe pas.
+        //
+        // Et **la pose est rendue quand la clé a bougé** : la composition ratée écrivait dans
+        // un autre répertoire, celui de l'ancien est intact, et son état reste vrai. Le
+        // garder posé mettrait hors de portée de l'application un package qui marche — plus
+        // rien ne le nommerait, donc plus rien ne pourrait l'effacer. Le projet ne touche pas
+        // le disque avant l'enregistrement : la restauration est exacte.
+        //
+        // À clé égale, au contraire, la composition a écrit dans le répertoire de ce
+        // livrable-là : le neuf reste posé, en erreur, parce que c'est la vérité de ses
+        // fichiers — et ses axes sont ceux de l'ancien, à un relevé près.
+        if neuve != cle {
+            let l = &mut o.projet.meta.livraison;
+            if change_de_pod {
+                l.livrables.pop();
+                l.livrables.insert(rang, ancien.clone());
+            } else {
+                l.livrables[rang] = ancien.clone();
+            }
+            if l.courant == neuve {
+                l.courant = cle.to_string();
+            }
+            return Ok(Generation {
+                projet: vue_modifiee(o)?,
+                packages: g.packages,
+            });
+        }
+        return Ok(g);
+    }
+    if neuve != cle {
+        let images: Vec<String> = o.projet.images.keys().cloned().collect();
+        package::effacer_livrable(&racine.join(cle), cle, &images)?;
+    }
+    Ok(g)
 }
 
 /// Génère le package de chaque livrable du livre, chacun dans son répertoire.
@@ -3527,5 +3634,80 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         )
         .unwrap_err();
         assert!(e.contains("n'est pas un livrable"), "{e}");
+    }
+
+    /// **L'ancien package survit à une composition ratée.** C'est tout le sens de l'ordre
+    /// composer-puis-effacer : sans lui, on aurait échangé un package qui marchait contre un qui
+    /// ne marche pas, et sans recours.
+    #[test]
+    fn un_remplacement_rate_laisse_l_ancien_package_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let ancien = o.projet.meta.livraison.livrables[0].clone();
+        let racine = sorties_racine(&o).unwrap();
+        let dossier = racine.join(ancien.cle());
+        std::fs::create_dir_all(&dossier).unwrap();
+        let pdf = dossier.join(package::nom(&ancien.cle(), "interieur", "pdf"));
+        std::fs::write(&pdf, b"%PDF-ancien").unwrap();
+
+        let neuf = Livrable::pour(fabrication_seconde(&o));
+        let g = remplacer(&mut o, &ancien.cle(), neuf, &Typst::new("typst-absent"))
+            .expect("le remplacement rend son compte rendu");
+
+        assert!(
+            g.packages[0].erreur.is_some(),
+            "la composition devait échouer, Typst est absent"
+        );
+        assert_eq!(
+            std::fs::read(&pdf).unwrap(),
+            b"%PDF-ancien",
+            "l'ancien package a été effacé avant que le neuf ne soit acquis"
+        );
+        assert_eq!(
+            o.projet.meta.livraison.livrables[0].cle(),
+            ancien.cle(),
+            "le livre doit rester sur l'ancien livrable : lui seul a un package, et rien d'autre \
+             ne pourrait plus le nommer"
+        );
+    }
+
+    /// Un livrable ne se refuse pas lui-même au titre du doublon : c'est le même, on le règle.
+    /// Sans cette exception, corriger un relevé serait impossible.
+    #[test]
+    fn remplacer_ne_se_refuse_pas_lui_meme() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let ancien = o.projet.meta.livraison.livrables[0].clone();
+        let mut neuf = ancien.clone();
+        neuf.dos_mm = Some(18.4);
+
+        let r = remplacer(&mut o, &ancien.cle(), neuf, &Typst::new("typst-absent"));
+
+        // La composition échoue — Typst est absent —, mais pas le remplacement : le refus de
+        // doublon aurait, lui, échoué avant toute composition et avec un autre message.
+        assert!(
+            r.is_ok(),
+            "le livrable s'est refusé à lui-même : {}",
+            r.unwrap_err()
+        );
+        assert_eq!(o.projet.meta.livraison.livrables[0].dos_mm, Some(18.4));
+    }
+
+    /// Une finition que le POD ne porte pas se refuse : elle nomme une option de commande, et une
+    /// option inventée ne se commande nulle part. C'est le seul membre de `reglage_refuse` qui
+    /// survit au remplacement — le POD et le format, eux, se changent désormais, puisque Remplacer
+    /// recompose.
+    #[test]
+    fn remplacer_refuse_une_finition_etrangere_au_pod() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let ancien = o.projet.meta.livraison.livrables[0].clone();
+        let mut neuf = ancien.clone();
+        neuf.finition = Some("dorure-a-chaud-inventee".into());
+
+        let e = remplacer(&mut o, &ancien.cle(), neuf, &Typst::new("typst-absent")).unwrap_err();
+
+        assert!(e.contains("finition inconnue"), "{e}");
+        assert!(o.projet.meta.livraison.livrables[0].finition.is_none());
     }
 }
