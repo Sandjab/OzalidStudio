@@ -2232,10 +2232,11 @@ mod tests {
         );
     }
 
-    /// **Le repère se pose après le saut de page, jamais avant.** Écrit avant, il serait
-    /// situé sur la dernière page de la pièce précédente : la table afficherait un folio
-    /// d'une page trop tôt, et le lecteur ouvrirait à la fin du chapitre d'avant. Rien
-    /// ne le signalerait — ni le compte de pages, ni le rendu, seulement un livre faux.
+    /// **Le repère du chapitre se pose après le saut de page, jamais avant.** Écrit
+    /// avant, il serait situé sur la dernière page de la pièce précédente : la table
+    /// afficherait un folio d'une page trop tôt, et le lecteur ouvrirait à la fin du
+    /// chapitre d'avant. Rien ne le signalerait — ni le compte de pages, ni le rendu,
+    /// seulement un livre faux.
     #[test]
     fn le_repere_d_un_chapitre_suit_le_saut_de_page_qui_l_ouvre() {
         let s = source_des_quatre_sortes();
@@ -2245,11 +2246,38 @@ mod tests {
             ),
             "le repère du chapitre 2 n'est pas collé derrière son saut de page :\n{s}"
         );
+    }
+
+    /// **Le repère de l'annexe suit la directive qui ouvre sa zone**, pas un saut de
+    /// page : la première annexe n'a pas de `#pagebreak()` à elle — c'est
+    /// `#set page(footer: none)` qui ouvre la zone hors folio, et le repère doit s'y
+    /// coller. Un ancrage différent le situerait sur la dernière page du corps, et la
+    /// table enverrait le lecteur à la fin du dernier chapitre.
+    #[test]
+    fn le_repere_d_une_annexe_suit_la_directive_qui_ouvre_sa_zone() {
+        let s = source_des_quatre_sortes();
         assert!(
             s.contains(
                 "#set page(footer: none)\n#metadata((rang: 2, numero: \"\", titre: \"Postface\"))"
             ),
             "le repère de l'annexe n'ouvre pas sa page :\n{s}"
+        );
+    }
+
+    /// **Le repère de la pièce liminaire ouvre sa page**, au même titre que les trois
+    /// autres poses. Rien ne le garantissait jusqu'ici : le test d'ordre ne compare que
+    /// les lignes portant `TDM`, filtrées de leur contexte — déplacer le repère en fin
+    /// de boucle, après `blocs_typst()` ou après le saut de parité qui clôt la pièce,
+    /// laisserait cette suite intacte alors que le repère se serait décalé d'une pièce.
+    #[test]
+    fn le_repere_d_une_piece_liminaire_ouvre_sa_page() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#pagebreak()\n\n#metadata((rang: 2, numero: \"\", titre: \"Préface\"))\
+                 <ozalid-tdm>\n#v(22mm)"
+            ),
+            "le repère de la pièce liminaire n'ouvre pas sa page :\n{s}"
         );
     }
 
@@ -2437,6 +2465,10 @@ mod tests {
     /// seule différence entre les deux documents est ce que ce lot ajoute. Comparer
     /// chaque page rendue, et pas seulement le compte, ferme la porte au cas où deux
     /// écarts se compenseraient.
+    ///
+    /// Les deux variantes sont rendues par `Typst::apercus`, une invocation chacune :
+    /// `apercu` page à page recomposerait le livre entier à chaque page, plus de
+    /// quatre-vingts fois ici pour deux compositions qui suffisent.
     #[test]
     #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
     fn les_reperes_n_occupent_aucune_place_et_ne_se_voient_nulle_part() {
@@ -2460,9 +2492,12 @@ mod tests {
             .filter(|l| !l.contains(TDM))
             .collect::<Vec<_>>()
             .join("\n");
-        assert_ne!(
-            avec, sans,
-            "la source ne porte aucun repère : rien n'est prouvé"
+        // `avec.lines().join("\n")` perdrait le saut de ligne final quel que soit le
+        // nombre de repères : un simple `assert_ne!` resterait vert même si `repere()`
+        // rendait la chaîne vide. Compter les lignes qui portent `TDM` ferme la porte.
+        assert!(
+            avec.lines().filter(|l| l.contains(TDM)).count() >= 40,
+            "la source ne porte pas les repères attendus : rien n'est prouvé"
         );
 
         let n_avec = pages_de(&typst, dossier.path(), "avec", &avec);
@@ -2472,29 +2507,57 @@ mod tests {
             n_avec, n_sans,
             "les repères ont déplacé la pagination : {n_avec} au lieu de {n_sans}"
         );
-        for page in 1..=n_sans {
+
+        let pages_avec = typst
+            .apercus(
+                &dossier.path().join("avec.typ"),
+                &dossier.path().join("avec-{p}.png"),
+                40,
+            )
+            .expect("rendu refusé");
+        let pages_sans = typst
+            .apercus(
+                &dossier.path().join("sans.typ"),
+                &dossier.path().join("sans-{p}.png"),
+                40,
+            )
+            .expect("rendu refusé");
+        assert_eq!(
+            pages_avec.len(),
+            pages_sans.len(),
+            "les repères ont déplacé la pagination : {} pages avec, {} sans",
+            pages_avec.len(),
+            pages_sans.len()
+        );
+        for (page, (a, s)) in pages_avec.iter().zip(pages_sans.iter()).enumerate() {
             assert_eq!(
-                page_rendue(&typst, dossier.path(), "avec", page),
-                page_rendue(&typst, dossier.path(), "sans", page),
-                "un repère se voit sur la page {page}"
+                std::fs::read(a).expect("rendu illisible"),
+                std::fs::read(s).expect("rendu illisible"),
+                "un repère se voit sur la page {}",
+                page + 1
             );
         }
     }
 
     /// **Le repère est situé sur la page qu'il ouvre**, et c'est tout ce qui fera la
-    /// justesse des folios de la table au lot 3. Posé un cran trop tôt — avant le saut
-    /// de page —, il enverrait le lecteur à la fin de la pièce précédente ; rien dans le
-    /// compte de pages ni dans le rendu ne le dirait.
+    /// justesse des folios de la table au lot 3. Posé un cran trop tôt, il enverrait le
+    /// lecteur à la fin de la pièce précédente ; rien dans le compte de pages ni dans le
+    /// rendu ne le dirait.
     ///
-    /// Le manuscrit est fait de chapitres d'une page : les folios attendus sont donc
-    /// **consécutifs**, à partir de la page 5 — celle où le corps s'ouvre quand le livre
-    /// n'a pas de dédicace (`assemble`, commentaire du corps). Un repère mal ancré rend
-    /// deux fois le même folio, et la suite cesse d'être consécutive.
+    /// Le manuscrit exerce **les quatre poses** — `pieces_des_quatre_sortes()` : une
+    /// pièce liminaire, une page de partie, deux chapitres, une annexe, dans l'ordre que
+    /// `decoupe` impose. C'est la page de partie qui porte le risque : posée à
+    /// l'intérieur de son `#page(footer: none)[…]` mais mal placée dans le bloc, elle ne
+    /// se verrait ni au compte de pages ni au rendu, et ce test est le seul à composer
+    /// pour de vrai jusque-là. Les folios ne sont pas consécutifs — parties et annexe
+    /// intercalent des pages blanches ou de parité — mais **aucun ne doit se répéter** :
+    /// un repère mal ancré rend deux fois le même folio, exactement le défaut cherché.
     ///
     /// Les folios sont relevés par `Typst::mesures`, qui lit `<mesures>` sans composer de
     /// PDF : la source de test publie ce que la table interrogera, sans qu'aucune API
     /// neuve n'entre dans le code de production — la table, elle, lira ses repères depuis
-    /// Typst même.
+    /// Typst même. Les valeurs attendues sont un relevé, pas un calcul : composées une
+    /// fois, puis figées ici.
     #[test]
     #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
     fn chaque_repere_est_situe_sur_la_page_qu_il_ouvre() {
@@ -2505,7 +2568,7 @@ mod tests {
             gouttiere: pr.gouttieres[0].2,
             blanche: false,
         };
-        let pieces: Vec<Piece> = manuscrit_long().into_iter().take(6).collect();
+        let pieces = pieces_des_quatre_sortes();
         let mut s = source(&livre(), &Interieur::default(), pr, &r, &pieces, None);
         // Le folio de chaque repère, indexé par son rang d'apparition : `mesures` rend
         // un dictionnaire de nombres, c'est exactement ce qu'il faut.
@@ -2526,8 +2589,8 @@ mod tests {
             .collect();
         assert_eq!(
             releves,
-            vec![5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
-            "les repères ne suivent pas l'ouverture des chapitres"
+            vec![5.0, 7.0, 9.0, 10.0, 11.0],
+            "les repères ne suivent pas l'ouverture de leur pièce"
         );
     }
 }
