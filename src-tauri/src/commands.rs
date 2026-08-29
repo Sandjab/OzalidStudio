@@ -630,6 +630,21 @@ fn refuse_doublon(livrables: &[Livrable], cle: &str) -> bool {
     livrables.iter().any(|x| x.cle() == cle)
 }
 
+/// Ce qui interdit cette finition chez ce POD, s'il y a lieu.
+///
+/// Une fonction et non deux `if` recopiés : Générer et Remplacer posent la même cinquième
+/// liste, et deux messages qui divergeraient diraient deux règles là où il n'y en a qu'une.
+/// `reglage_refuse` en porte encore une troisième copie — elle s'en va au lot 3 avec
+/// `livrable_regler`, et l'y toucher aujourd'hui serait remuer un code condamné.
+fn finition_refuse(neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
+    match &neuf.finition {
+        Some(f) if !pod.finitions.iter().any(|x| &x.cle == f) => {
+            Some(format!("finition inconnue chez {} : {f}.", pod.nom))
+        }
+        _ => None,
+    }
+}
+
 /// Ce qui interdit de régler cette ligne, s'il y a lieu.
 ///
 /// Hors de la commande pour la même raison que `refuse_doublon` : une commande réclame
@@ -773,14 +788,11 @@ pub fn livrable_viser(cle: String, atelier: State<Atelier>) -> Result<ProjetVue,
 
 /// Pose un livrable et compose son package dans la foulée : un livrable naît généré.
 #[tauri::command]
-pub fn livrable_generer(
-    fabrication: catalogue::Fabrication,
-    atelier: State<Atelier>,
-) -> Result<Generation, String> {
+pub fn livrable_generer(livrable: Livrable, atelier: State<Atelier>) -> Result<Generation, String> {
     let typst = typst()?;
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    generer(o, fabrication, &typst)
+    generer(o, livrable, &typst)
 }
 
 /// Recompose un livrable sans toucher à ses axes.
@@ -1768,14 +1780,17 @@ fn composer_lot(o: &mut Ouvert, cles: &[String], typst: &Typst) -> Result<Genera
 /// La racine des sorties se vérifie **avant** la pose : elle ne concerne aucun livrable en
 /// particulier, et poser pour buter dessus laisserait dans le livre un livrable que personne
 /// n'a demandé.
-fn generer(
-    o: &mut Ouvert,
-    fabrication: catalogue::Fabrication,
-    typst: &Typst,
-) -> Result<Generation, String> {
-    let r = catalogue::resout(&fabrication)?;
+///
+/// Le livrable entier et non sa seule fabrication : le formulaire porte cinq listes et les
+/// relevés dessous (spec § 5). La cinquième — le pelliculage — et les deux relevés se posent
+/// donc ici, comme Remplacer les pose déjà, et sous le même refus de finition inconnue.
+fn generer(o: &mut Ouvert, livrable: Livrable, typst: &Typst) -> Result<Generation, String> {
+    let r = catalogue::resout(&livrable.fabrication)?;
+    if let Some(e) = finition_refuse(&livrable, r.pod) {
+        return Err(e);
+    }
     sorties_racine(o)?;
-    let cle = fabrication.cle();
+    let cle = livrable.cle();
     if refuse_doublon(&o.projet.meta.livraison.livrables, &cle) {
         return Err(format!(
             "{} en {} est déjà un livrable de ce livre — la finition seule n'en fait \
@@ -1783,11 +1798,13 @@ fn generer(
             r.pod.nom, r.papier.nom
         ));
     }
-    o.projet
-        .meta
-        .livraison
-        .livrables
-        .push(Livrable::pour(fabrication));
+    o.projet.meta.livraison.livrables.push(Livrable {
+        // Un livrable qu'on pose n'a rien généré, quoi qu'en dise le formulaire : `generation`
+        // est `#[serde(default)]`, donc désérialisable depuis le front, et c'est la composition
+        // qui l'écrira deux lignes plus bas.
+        generation: crate::projet::Generation::Jamais,
+        ..livrable
+    });
     composer_lot(o, std::slice::from_ref(&cle), typst)
 }
 
@@ -1878,11 +1895,15 @@ fn remplacer(
     // Le candidat est résolu **avant** d'être posé : un axe ou un papier inconnu doit laisser
     // le livrable tel qu'il était, et non l'abandonner à moitié réglé.
     let r = catalogue::resout(&livrable.fabrication)?;
-    if let Some(f) = &livrable.finition {
-        if !r.pod.finitions.iter().any(|x| &x.cle == f) {
-            return Err(format!("finition inconnue chez {} : {f}.", r.pod.nom));
-        }
+    if let Some(e) = finition_refuse(&livrable, r.pod) {
+        return Err(e);
     }
+    // Un livrable qu'on pose n'a rien généré : voir `generer`, où la même précaution est prise
+    // pour la même raison — `generation` vient du front, la composition l'écrira.
+    let livrable = Livrable {
+        generation: crate::projet::Generation::Jamais,
+        ..livrable
+    };
     let racine = sorties_racine(o)?;
     let l = &mut o.projet.meta.livraison;
     let neuve = livrable.cle();
@@ -3625,7 +3646,7 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         let avant = o.projet.meta.livraison.livrables.len();
         let f = fabrication_seconde(&o);
 
-        let e = generer(&mut o, f, &Typst::new("typst-absent")).unwrap_err();
+        let e = generer(&mut o, Livrable::pour(f), &Typst::new("typst-absent")).unwrap_err();
 
         assert!(e.contains("enregistrer"), "{e}");
         assert_eq!(o.projet.meta.livraison.livrables.len(), avant);
@@ -3641,7 +3662,8 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         let f = fabrication_seconde(&o);
         let cle = f.cle();
 
-        let g = generer(&mut o, f, &Typst::new("typst-absent")).expect("le livrable est posé");
+        let g = generer(&mut o, Livrable::pour(f), &Typst::new("typst-absent"))
+            .expect("le livrable est posé");
 
         assert_eq!(g.packages.len(), 1, "une cible, un résultat");
         assert!(g.packages[0].erreur.is_some());
@@ -3669,11 +3691,73 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         let mut o = ouvert_enregistre(&dir);
         let f = o.projet.meta.livraison.livrables[0].fabrication.clone();
 
-        let e = generer(&mut o, f, &Typst::new("typst-absent")).unwrap_err();
+        let e = generer(&mut o, Livrable::pour(f), &Typst::new("typst-absent")).unwrap_err();
 
         assert!(e.contains("déjà un livrable"), "{e}");
         assert_eq!(o.projet.meta.livraison.livrables.len(), 1);
         assert!(!dir.path().join("livre").exists(), "rien n'a été écrit");
+    }
+
+    /// Le formulaire porte **cinq** listes et les relevés dessous (spec § 5) : ce qu'il envoie
+    /// doit se retrouver sur le livrable posé. Ne garder que la fabrication perdrait le
+    /// pelliculage — que la fiche de téléversement porte, et lui seul distingue deux commandes
+    /// identiques par ailleurs — et le fond perdu, qui dimensionne la planche.
+    #[test]
+    fn generer_pose_les_releves_et_la_finition_du_formulaire() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let f = fabrication_seconde(&o);
+        let cle = f.cle();
+        let finition = catalogue::resout(&f)
+            .expect("une fabrication du catalogue réel")
+            .pod
+            .finitions
+            .first()
+            .expect("le POD d'office porte au moins une finition")
+            .cle
+            .clone();
+        let neuf = Livrable {
+            finition: Some(finition.clone()),
+            dos_mm: Some(18.4),
+            fond_perdu_mm: Some(3.5),
+            ..Livrable::pour(f)
+        };
+
+        generer(&mut o, neuf, &Typst::new("typst-absent")).expect("le livrable est posé");
+
+        let pose = o
+            .projet
+            .meta
+            .livraison
+            .livrables
+            .iter()
+            .find(|l| l.cle() == cle)
+            .expect("le livrable est dans le livre");
+        assert_eq!(pose.finition, Some(finition));
+        assert_eq!(pose.dos_mm, Some(18.4));
+        assert_eq!(pose.fond_perdu_mm, Some(3.5));
+    }
+
+    /// Une finition que le POD ne porte pas se refuse à la génération comme au remplacement : la
+    /// cinquième liste nomme une option de commande, et une option inventée ne se commande nulle
+    /// part. Sans ce refus, la fiche de téléversement enverrait l'imprimeur chercher ce qu'il ne
+    /// vend pas — et le refus doit tomber avant la pose, sinon le livre garderait un livrable
+    /// que personne ne pourra commander.
+    #[test]
+    fn generer_refuse_une_finition_etrangere_au_pod() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let mut neuf = Livrable::pour(fabrication_seconde(&o));
+        neuf.finition = Some("dorure-a-chaud-inventee".into());
+
+        let e = generer(&mut o, neuf, &Typst::new("typst-absent")).unwrap_err();
+
+        assert!(e.contains("finition inconnue"), "{e}");
+        assert_eq!(
+            o.projet.meta.livraison.livrables.len(),
+            1,
+            "le refus ne doit rien poser"
+        );
     }
 
     /// Régénérer ne touche à aucun axe : le livrable est le même après qu'avant, seul son état
