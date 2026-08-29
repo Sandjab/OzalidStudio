@@ -371,8 +371,9 @@ fn assemble(
                     s.push_str("#context if calc.odd(here().page()) { page(footer: none)[] }\n");
                 }
                 s.push_str(&format!(
-                    "#page(footer: none)[\n#v(22mm)\n\
+                    "#page(footer: none)[\n{}#v(22mm)\n\
                      #align(center, text(size: {}pt)[{r}])\n",
+                    repere(p),
                     int.numero
                 ));
                 s.push_str(&titre_sous_numero(&p.titre, int.titre_section));
@@ -385,6 +386,7 @@ fn assemble(
                 if i > 0 && !apres_page {
                     s.push_str("#pagebreak()\n");
                 }
+                s.push_str(&repere(p));
                 s.push_str(&format!(
                     "#v(22mm)\n#align(center, text(size: {}pt)[{numero}])\n",
                     int.numero
@@ -409,6 +411,7 @@ fn assemble(
             if i > 0 {
                 s.push_str("#pagebreak()\n");
             }
+            s.push_str(&repere(p));
             s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
             s.push_str(&blocs_typst(&p.blocs));
         }
@@ -620,6 +623,7 @@ fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
     // Les pièces liminaires du manuscrit ferment la série : `footer: none` court encore,
     // le folio ne sera rétabli qu'au premier chapitre.
     for p in pieces {
+        s.push_str(&repere(p));
         s.push_str(&ouverture_piece(&p.titre, int.ouverture_piece));
         s.push_str(&blocs_typst(&p.blocs));
         // Ce qui suit une pièce liminaire ouvre en belle page — le corps, ou la pièce
@@ -2158,6 +2162,110 @@ mod tests {
             "titre mal cité : {s}"
         );
         assert_eq!(s.lines().count(), 1, "le repère tient sur une ligne : {s}");
+    }
+
+    /// Un manuscrit qui exerce les quatre ouvertures que l'intérieur compose. L'ordre
+    /// est celui que `decoupe` impose : liminaires, corps, annexes.
+    fn pieces_des_quatre_sortes() -> Vec<Piece> {
+        vec![
+            Piece {
+                sorte: Sorte::Liminaire,
+                titre: "Préface".into(),
+                blocs: vec![Bloc::Paragraphe("Avant.".into())],
+            },
+            Piece {
+                sorte: Sorte::Partie("I".into()),
+                titre: "Première".into(),
+                blocs: vec![],
+            },
+            Piece {
+                sorte: Sorte::Chapitre(1),
+                titre: "Un".into(),
+                blocs: vec![Bloc::Paragraphe("Texte.".into())],
+            },
+            Piece {
+                sorte: Sorte::Chapitre(2),
+                titre: "Deux".into(),
+                blocs: vec![Bloc::Paragraphe("Encore.".into())],
+            },
+            Piece {
+                sorte: Sorte::Annexe,
+                titre: "Postface".into(),
+                blocs: vec![Bloc::Paragraphe("Après.".into())],
+            },
+        ]
+    }
+
+    fn source_des_quatre_sortes() -> String {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        source(
+            &livre(),
+            &Interieur::default(),
+            provider("bod").unwrap(),
+            &r,
+            &pieces_des_quatre_sortes(),
+            None,
+        )
+    }
+
+    /// Chaque pièce laisse son repère, et une seule fois. Une pièce oubliée — la
+    /// postface, la page de partie — manquerait dans la table sans que rien ne le dise,
+    /// et c'est exactement le défaut que la spec refuse : « une préface qui a sa page
+    /// d'ouverture et n'apparaît pas dans la table serait un défaut ».
+    #[test]
+    fn les_quatre_sortes_laissent_chacune_leur_repere_dans_l_ordre() {
+        let s = source_des_quatre_sortes();
+        let reperes: Vec<&str> = s.lines().filter(|l| l.contains(TDM)).collect();
+        assert_eq!(
+            reperes,
+            vec![
+                r#"#metadata((rang: 2, numero: "", titre: "Préface"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 1, numero: "I", titre: "Première"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "1", titre: "Un"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "2", titre: "Deux"))<ozalid-tdm>"#,
+                r#"#metadata((rang: 2, numero: "", titre: "Postface"))<ozalid-tdm>"#,
+            ],
+            "les repères de la source ne suivent pas le manuscrit"
+        );
+    }
+
+    /// **Le repère se pose après le saut de page, jamais avant.** Écrit avant, il serait
+    /// situé sur la dernière page de la pièce précédente : la table afficherait un folio
+    /// d'une page trop tôt, et le lecteur ouvrirait à la fin du chapitre d'avant. Rien
+    /// ne le signalerait — ni le compte de pages, ni le rendu, seulement un livre faux.
+    #[test]
+    fn le_repere_d_un_chapitre_suit_le_saut_de_page_qui_l_ouvre() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#pagebreak()\n#metadata((rang: 2, numero: \"2\", titre: \"Deux\"))<ozalid-tdm>"
+            ),
+            "le repère du chapitre 2 n'est pas collé derrière son saut de page :\n{s}"
+        );
+        assert!(
+            s.contains(
+                "#set page(footer: none)\n#metadata((rang: 2, numero: \"\", titre: \"Postface\"))"
+            ),
+            "le repère de l'annexe n'ouvre pas sa page :\n{s}"
+        );
+    }
+
+    /// La page de partie est composée par `#page(footer: none)[…]`, qui rompt le flux de
+    /// lui-même. Le repère doit vivre **dedans** : posé avant, il serait situé sur la
+    /// page précédente ; posé après, sur la blanche du verso. Dans les deux cas la table
+    /// enverrait le lecteur à côté de la page de partie.
+    #[test]
+    fn le_repere_d_une_partie_vit_dans_sa_page() {
+        let s = source_des_quatre_sortes();
+        assert!(
+            s.contains(
+                "#page(footer: none)[\n#metadata((rang: 1, numero: \"I\", titre: \"Première\"))<ozalid-tdm>\n#v(22mm)"
+            ),
+            "le repère de la partie n'ouvre pas sa page :\n{s}"
+        );
     }
 
     /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
