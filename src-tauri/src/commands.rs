@@ -3550,6 +3550,18 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         }
     }
 
+    /// La fabrication d'office du premier POD du catalogue dont la clé n'est dans `exclus` :
+    /// la façon la plus sûre de faire varier le POD dans un test, sans se soucier des axes
+    /// qui le suivent.
+    fn fabrication_pod_hors(exclus: &[&str]) -> catalogue::Fabrication {
+        catalogue::pods()
+            .iter()
+            .find(|p| !exclus.contains(&p.cle.as_str()))
+            .expect("le catalogue de test porte assez de POD distincts")
+            .fabrication_defaut()
+            .expect("un POD vérifié porte une fabrication par défaut")
+    }
+
     /// **La racine se vérifie avant que le livrable ne soit posé.** Un projet jamais enregistré
     /// n'a pas de répertoire de sorties ; poser le livrable puis buter dessus laisserait dans le
     /// livre un livrable *jamais généré* que personne n'a demandé, sous un message qui parle
@@ -3709,5 +3721,54 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
 
         assert!(e.contains("finition inconnue"), "{e}");
         assert!(o.projet.meta.livraison.livrables[0].finition.is_none());
+    }
+
+    /// La restauration après un changement de POD manipule un rang au travers d'un `remove`
+    /// puis d'un `push` : c'est l'endroit où une erreur d'index ne se voit pas à la lecture.
+    /// `fabrication_seconde` ne change que le papier — `change_de_pod` y vaut toujours
+    /// `false` —, donc aucun des trois tests qui précèdent n'exerce cette branche.
+    ///
+    /// L'ancien doit revenir à son rang d'origine (pas en queue) au milieu de trois livrables,
+    /// et le pointeur `courant`, qui visait l'ancien sous sa clé neuve le temps de la
+    /// composition ratée, doit revenir dessus plutôt que de désigner un livrable disparu.
+    #[test]
+    fn un_remplacement_rate_avec_changement_de_pod_restaure_le_rang_et_le_pointeur() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut o = ouvert_enregistre(&dir);
+        let a = o.projet.meta.livraison.livrables[0].clone();
+        let ancien = Livrable::pour(fabrication_seconde(&o));
+        let c = Livrable::pour(fabrication_pod_hors(&[&a.fabrication.pod]));
+        o.projet.meta.livraison.livrables.push(ancien.clone());
+        o.projet.meta.livraison.livrables.push(c.clone());
+        o.projet.meta.livraison.courant = ancien.cle();
+
+        let neuf = Livrable::pour(fabrication_pod_hors(&[
+            &a.fabrication.pod,
+            &c.fabrication.pod,
+        ]));
+        let g = remplacer(&mut o, &ancien.cle(), neuf, &Typst::new("typst-absent"))
+            .expect("le remplacement rend son compte rendu");
+
+        assert!(
+            g.packages[0].erreur.is_some(),
+            "la composition devait échouer, Typst est absent"
+        );
+        assert_eq!(
+            o.projet
+                .meta
+                .livraison
+                .livrables
+                .iter()
+                .map(|l| l.cle())
+                .collect::<Vec<_>>(),
+            vec![a.cle(), ancien.cle(), c.cle()],
+            "l'ancien doit revenir à son rang d'origine, pas en queue"
+        );
+        assert_eq!(
+            o.projet.meta.livraison.courant,
+            ancien.cle(),
+            "courant visait l'ancien : il ne doit pas rester sur une clé que le livre ne \
+             porte plus"
+        );
     }
 }
