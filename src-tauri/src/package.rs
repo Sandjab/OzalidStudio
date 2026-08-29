@@ -915,6 +915,76 @@ pub fn ecrire_table(
     Ok((une, quatre))
 }
 
+/// Ce qu'une suppression a laissé derrière elle.
+#[derive(Debug, Default, Serialize)]
+pub struct Nettoyage {
+    /// Fichiers connus qui n'étaient plus là. Ce n'est pas une erreur — une génération échouée
+    /// n'en écrit qu'une partie —, mais le compte rendu le dit.
+    pub absents: Vec<String>,
+    /// Ce qui restait et que l'application n'a pas écrit. Le répertoire survit pour eux.
+    pub etrangers: Vec<String>,
+    /// Le répertoire lui-même est parti : il ne restait rien.
+    pub dossier_retire: bool,
+}
+
+/// Les fichiers que l'application écrit dans le répertoire d'un livrable.
+///
+/// Cinq noms se reconstruisent de la clé (`nom`), la fiche n'en porte pas — il n'y en a qu'une
+/// par répertoire —, et les images de couverture sont écrites sous **leur nom d'origine** par
+/// `ecrire_table`. Cette dernière liste est celle du projet **courant** : une image retirée du
+/// projet après la génération ne sera pas reconnue, survivra, et se nommera au compte rendu.
+/// C'est le moindre mal — la spec préfère laisser survivre que d'effacer au jugé.
+pub fn fichiers_du_livrable(cle: &str, images: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = [
+        nom(cle, "interieur", "typ"),
+        nom(cle, "interieur", "pdf"),
+        nom(cle, "couverture", "typ"),
+        nom(cle, "couverture", "pdf"),
+        nom(cle, "couverture", "png"),
+        "televersement.txt".to_string(),
+    ]
+    .into();
+    v.extend(images.iter().cloned());
+    v
+}
+
+/// Efface ce que l'application a écrit pour ce livrable, puis le répertoire s'il est vide.
+///
+/// **Sélectif et non récursif** (spec § 3) : l'effacement sans condition emporterait sans
+/// recours ce qu'on aurait déposé là. Un fichier déjà parti n'est pas une erreur ; tout autre
+/// échec refuse, comme `ebook::efface` le fait — un fichier qui résiste à la suppression est
+/// exactement celui qu'une panne laisserait en place sous le nom du livre.
+pub fn effacer_livrable(dossier: &Path, cle: &str, images: &[String]) -> Result<Nettoyage, String> {
+    let mut n = Nettoyage::default();
+    for f in fichiers_du_livrable(cle, images) {
+        match std::fs::remove_file(dossier.join(&f)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => n.absents.push(f),
+            Err(e) => return Err(format!("{f} ne s'efface pas : {e}")),
+        }
+    }
+    // Ce qui reste porte le répertoire : on le lit avant de tenter de le retirer, pour pouvoir
+    // le nommer. Un répertoire absent ne se lit pas, et n'a rien laissé.
+    let Ok(reste) = std::fs::read_dir(dossier) else {
+        return Ok(n);
+    };
+    for e in reste.flatten() {
+        n.etrangers
+            .push(e.file_name().to_string_lossy().into_owned());
+    }
+    n.etrangers.sort();
+    if n.etrangers.is_empty() {
+        std::fs::remove_dir(dossier).map_err(|e| {
+            format!(
+                "le répertoire ne se retire pas ({}) : {e}",
+                dossier.display()
+            )
+        })?;
+        n.dossier_retire = true;
+    }
+    Ok(n)
+}
+
 fn affiche(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
@@ -2216,6 +2286,90 @@ mod tests {
             .unwrap(),
             b"MARQUE-DU-PREMIER",
             "l'intérieur a été recomposé au lieu d'être copié"
+        );
+    }
+
+    /// La liste de ce que l'application a écrit dans le répertoire d'un livrable : cinq noms
+    /// tirés de la clé, la fiche qui n'en porte pas, et les images de couverture sous leur nom
+    /// d'origine. C'est cette liste, et elle seule, que la suppression efface.
+    #[test]
+    fn les_fichiers_d_un_livrable_sont_ceux_que_l_application_a_ecrits() {
+        let f = fichiers_du_livrable("lulu-108x175-broche-creme", &["une.jpg".to_string()]);
+        for attendu in [
+            "interieur-lulu-108x175-broche-creme.typ",
+            "interieur-lulu-108x175-broche-creme.pdf",
+            "couverture-lulu-108x175-broche-creme.typ",
+            "couverture-lulu-108x175-broche-creme.pdf",
+            "couverture-lulu-108x175-broche-creme.png",
+            "televersement.txt",
+            "une.jpg",
+        ] {
+            assert!(f.iter().any(|x| x == attendu), "{attendu} manque : {f:?}");
+        }
+        assert_eq!(f.len(), 7, "rien d'autre ne doit y être : {f:?}");
+    }
+
+    /// **Ce qu'on a déposé là survit.** L'effacement récursif sans condition emporterait sans
+    /// recours un fichier qu'on aurait rangé dans ce répertoire — un bon de commande, une épreuve
+    /// annotée. Il reste, le répertoire avec lui, et le compte rendu le nomme.
+    #[test]
+    fn un_fichier_etranger_survit_et_se_nomme() {
+        let dir = tempfile::tempdir().unwrap();
+        let cle = "essai-livre-broche-creme";
+        for f in fichiers_du_livrable(cle, &["une.jpg".to_string()]) {
+            std::fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        std::fs::write(dir.path().join("bon-de-commande.pdf"), b"x").unwrap();
+
+        let n = effacer_livrable(dir.path(), cle, &["une.jpg".to_string()]).unwrap();
+
+        assert_eq!(n.etrangers, vec!["bon-de-commande.pdf".to_string()]);
+        assert!(
+            !n.dossier_retire,
+            "le répertoire porte encore quelque chose"
+        );
+        assert!(dir.path().join("bon-de-commande.pdf").is_file());
+        assert!(!dir.path().join(nom(cle, "interieur", "pdf")).exists());
+        assert!(n.absents.is_empty(), "tous les fichiers connus étaient là");
+    }
+
+    /// Rien d'étranger : le répertoire s'en va avec ce qu'il portait. C'est le cas ordinaire, et
+    /// laisser un répertoire vide sous le nom d'un livrable qui n'existe plus ferait douter de ce
+    /// qui a été supprimé.
+    #[test]
+    fn un_repertoire_vide_apres_effacement_s_en_va() {
+        let dir = tempfile::tempdir().unwrap();
+        let livrable = dir.path().join("essai-livre-broche-creme");
+        std::fs::create_dir_all(&livrable).unwrap();
+        for f in fichiers_du_livrable("essai-livre-broche-creme", &[]) {
+            std::fs::write(livrable.join(f), b"x").unwrap();
+        }
+
+        let n = effacer_livrable(&livrable, "essai-livre-broche-creme", &[]).unwrap();
+
+        assert!(n.dossier_retire);
+        assert!(!livrable.exists());
+    }
+
+    /// Un répertoire déjà parti — effacé à la main, ou jamais écrit parce que la génération avait
+    /// échoué — n'est pas une erreur : le livrable s'en va, et le compte rendu dit ce qui n'était
+    /// plus là. C'est l'arbitrage d'`ebook::efface`.
+    #[test]
+    fn un_repertoire_deja_parti_ne_fait_pas_echouer() {
+        let dir = tempfile::tempdir().unwrap();
+        let absent = dir.path().join("jamais-ecrit");
+
+        let n = effacer_livrable(&absent, "essai-livre-broche-creme", &[]).unwrap();
+
+        assert_eq!(
+            n.absents.len(),
+            6,
+            "les six fichiers connus manquaient : {n:?}"
+        );
+        assert!(n.etrangers.is_empty());
+        assert!(
+            !n.dossier_retire,
+            "il n'y avait pas de répertoire à retirer"
         );
     }
 }
