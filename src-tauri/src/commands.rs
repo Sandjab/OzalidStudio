@@ -887,12 +887,14 @@ pub fn polices_liste() -> Vec<&'static str> {
     couverture::POLICES.to_vec()
 }
 
-/// Charge une maquette de départ. Elle remplace la mise en page **et les images**,
-/// jamais l'identité du livre : le titre et l'auteur imprimés restent ceux du projet.
+/// Charge une maquette de départ. Elle remplace la mise en page, jamais l'identité du
+/// livre — le titre et l'auteur imprimés restent ceux du projet —, ni ses photos.
 ///
-/// Les images se posent rôle par rôle : une maquette qui porte une photo de 1ère la
-/// pose, une maquette qui n'en porte pas laisse celle du livre où elle est. Sans quoi
-/// charger une maquette purement typographique effacerait la photo du livre.
+/// Les images de la maquette ne font que **combler**, par [`combler_images`] : un livre
+/// déjà illustré garde les siennes, et seule une face qu'il laisse nue reçoit celle de
+/// l'archive. Une photo appartient au livre, pas à la mise en page : deux fournies en
+/// portent une, comme toute personnalisée écrite depuis un projet illustré, et aucune
+/// n'a à l'imposer au livre ouvert.
 #[tauri::command]
 pub fn maquette_choisir(
     cle: String,
@@ -904,9 +906,7 @@ pub fn maquette_choisir(
     let mut garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_mut().ok_or_else(aucun_projet)?;
     o.projet.meta.couverture.maquette = Some(m.couverture);
-    for (nom, octets) in m.images {
-        poser_image(&mut o.projet.images, nom, octets);
-    }
+    combler_images(&mut o.projet.images, &m.images);
     vue_modifiee(o)
 }
 
@@ -1078,11 +1078,37 @@ fn poser_image(images: &mut BTreeMap<String, Vec<u8>>, nom: String, octets: Vec<
     images.insert(nom, octets);
 }
 
+/// Complète les images du livre par celles de la maquette, sans jamais en remplacer.
+///
+/// Une maquette porte une mise en page ; les photos qu'elle emporte ne sont qu'un
+/// **repli**, pour le livre qui n'en a pas encore. Un livre déjà illustré garde donc les
+/// siennes : c'est l'inverse de [`poser_image`], et c'est voulu — la photo appartient au
+/// livre, la maquette n'est que la façon dont il paraît.
+///
+/// Le comblement se fait rôle par rôle, comme le remplacement : une maquette qui porte
+/// les deux faces peut n'en poser qu'une, sur un livre qui n'avait que sa 1ère.
+///
+/// La règle ne regarde pas d'où vient l'archive, et c'est ce qui la rend cohérente :
+/// une fournie et une personnalisée qui portent chacune une 1ère se comportent pareil
+/// devant un livre illustré — elles s'effacent.
+fn combler_images(projet: &mut BTreeMap<String, Vec<u8>>, maquette: &BTreeMap<String, Vec<u8>>) {
+    for (nom, octets) in maquette {
+        let quatre = package::sert_la_quatrieme(nom);
+        if projet
+            .keys()
+            .any(|n| package::sert_la_quatrieme(n) == quatre)
+        {
+            continue;
+        }
+        projet.insert(nom.clone(), octets.clone());
+    }
+}
+
 /// Les images sous lesquelles une maquette se *verrait*, sans que le projet bouge.
 ///
 /// Une vignette doit montrer ce que choisir la maquette donnerait, pas ce que l'archive
-/// contient : la règle est donc exactement celle de [`maquette_choisir`] — rôle par rôle,
-/// par [`poser_image`] —, et c'est de la partager qui garantit que la vignette ne ment
+/// contient : la règle est donc exactement celle de [`maquette_choisir`] — le comblement
+/// de [`combler_images`] —, et c'est de la partager qui garantit que la vignette ne ment
 /// pas. Une maquette purement typographique n'emporte aucune photo, et composée seule
 /// elle montrerait une couverture nue là où la choisir aurait gardé celle du livre.
 fn images_vignette(
@@ -1090,9 +1116,7 @@ fn images_vignette(
     maquette: &BTreeMap<String, Vec<u8>>,
 ) -> BTreeMap<String, Vec<u8>> {
     let mut fondues = projet.clone();
-    for (nom, octets) in maquette {
-        poser_image(&mut fondues, nom.clone(), octets.clone());
-    }
+    combler_images(&mut fondues, maquette);
     fondues
 }
 
@@ -2519,33 +2543,54 @@ mod tests {
         assert_eq!(reponse_garde(R::Custom("autre chose".into())), "annuler");
     }
 
-    /// La vignette d'une maquette montre ce que la *choisir* donnerait, pas l'archive
-    /// nue. La règle est celle de `maquette_choisir` — rôle par rôle —, et c'est de la
-    /// partager qui l'empêche de mentir : une maquette typographique laisserait sinon
-    /// voir une couverture sans photo, alors que la choisir garde celle du livre.
+    /// L'image d'une maquette ne fait que **combler** : le livre garde ses photos, et
+    /// seule une face qu'il laisse nue reçoit celle de l'archive.
+    ///
+    /// Sans quoi une maquette enregistrée depuis un livre imposerait sa photo à tous les
+    /// autres. La règle ne regarde pas d'où vient l'archive — fournie ou personnalisée,
+    /// une maquette qui porte une 1ère s'efface devant celle du livre —, et c'est de ne
+    /// pas dépendre de l'origine qui la rend cohérente.
+    ///
+    /// La vignette montre ce que la *choisir* donnerait, pas l'archive nue, et c'est de
+    /// partager [`combler_images`] avec `maquette_choisir` qui l'empêche de mentir.
     #[test]
-    fn la_vignette_garde_du_livre_les_photos_que_la_maquette_ne_remplace_pas() {
+    fn la_maquette_ne_comble_que_les_faces_que_le_livre_laisse_nues() {
         let projet = BTreeMap::from([
             ("couverture.jpg".to_string(), b"photo du livre".to_vec()),
             ("quatrieme.jpg".to_string(), b"quatrieme du livre".to_vec()),
+        ]);
+        let m = BTreeMap::from([
+            (
+                "couverture.png".to_string(),
+                b"1ere de la maquette".to_vec(),
+            ),
+            ("quatrieme.png".to_string(), b"4eme de la maquette".to_vec()),
         ]);
 
         // Une maquette purement typographique : rien à poser, tout reste.
         assert_eq!(images_vignette(&projet, &BTreeMap::new()), projet);
 
-        // Une maquette qui porte sa 1ère : elle prend la place de celle du livre — par
-        // rôle, donc jusque sous un autre nom de fichier — et laisse la 4ème.
-        let m = BTreeMap::from([(
-            "couverture.png".to_string(),
-            b"photo de la maquette".to_vec(),
-        )]);
-        let f = images_vignette(&projet, &m);
-        assert_eq!(f.get("couverture.png"), m.get("couverture.png"));
+        // Un livre déjà illustré ne bouge pas, si chargée qu'elle soit.
+        assert_eq!(
+            images_vignette(&projet, &m),
+            projet,
+            "la maquette a imposé ses photos à un livre qui avait les siennes"
+        );
+
+        // Une face nue reçoit celle de l'archive — par rôle, donc jusque sous un autre
+        // nom de fichier : le livre n'a ici que sa 1ère, sous un nom à lui.
+        let une_seule = BTreeMap::from([("photo.jpg".to_string(), b"photo du livre".to_vec())]);
+        let f = images_vignette(&une_seule, &m);
+        assert_eq!(f.get("photo.jpg"), une_seule.get("photo.jpg"));
         assert!(
-            !f.contains_key("couverture.jpg"),
+            !f.contains_key("couverture.png"),
             "deux photos de 1ère se disputeraient la face"
         );
-        assert_eq!(f.get("quatrieme.jpg"), projet.get("quatrieme.jpg"));
+        assert_eq!(f.get("quatrieme.png"), m.get("quatrieme.png"));
+
+        // Un livre neuf, lui, reçoit tout : c'est là que les images d'une maquette
+        // servent, et la seule situation où elles se composent.
+        assert_eq!(images_vignette(&BTreeMap::new(), &m), m);
     }
 
     fn fabrication(pod: &str, format: &str, reliure: &str, papier: &str) -> catalogue::Fabrication {

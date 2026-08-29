@@ -1019,4 +1019,31 @@ mod tests {
         assert_eq!(fournie("filets").voile, Voile::Aucun);
         assert_ne!(fournie("surimpression").voile, Voile::Aucun);
     }
+
+    /// Une fournie dont le fond est une image en porte une ; une typographique, aucune.
+    ///
+    /// Sur un livre neuf, une maquette n'a que ses propres photos à montrer : « Bandeau »
+    /// et « Surimpression » sans image ne donneraient qu'un aplat, là où leur vignette
+    /// promet une couverture illustrée. L'archive est un binaire opaque, et c'est le seul
+    /// endroit où cette promesse se vérifie — la boucle porte sur toutes les fournies,
+    /// pour qu'une quatrième ne puisse pas arriver muette.
+    #[test]
+    fn une_fournie_a_fond_image_porte_sa_premiere() {
+        for (cle, _) in FOURNIES {
+            let m = par_cle(None, cle).unwrap_or_else(|| panic!("{cle} illisible"));
+            if m.couverture.mode == Mode::Typo {
+                assert!(
+                    m.images.is_empty(),
+                    "{cle} : une maquette typographique n'a aucune photo à emporter"
+                );
+            } else {
+                assert!(
+                    m.images
+                        .keys()
+                        .any(|n| !crate::package::sert_la_quatrieme(n)),
+                    "{cle} : fond image sans image, la 1ère ne serait qu'un aplat"
+                );
+            }
+        }
+    }
 }
