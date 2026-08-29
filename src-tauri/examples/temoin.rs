@@ -25,21 +25,37 @@
 use std::path::{Path, PathBuf};
 
 use ozalid_lib::catalogue;
+use ozalid_lib::interieur::{Interieur, Table};
 use ozalid_lib::maquettes;
 use ozalid_lib::package;
 use ozalid_lib::planche::Releve;
 use ozalid_lib::projet::{Livre, Projet};
 use ozalid_lib::typst::Typst;
 
-/// Les fabrications composées, et la pagination attendue de chacune.
+/// Les fabrications composées, la table qu'elles portent, et la pagination attendue de
+/// chacune.
 ///
 /// Chaque pagination est **relevée**, sur macOS avec Typst 0.15.1 et EB Garamond, au
 /// corps et à l'interligne que `interieur` fixe pour tout gabarit. Elle dépend de chacun
 /// de ces éléments : la déplacer est un acte délibéré, à revalider sur un livre réel —
 /// jamais un ajustement pour faire passer l'intégration continue.
-const TEMOINS: &[(&str, &str, &str, &str, u32)] = &[
-    ("bod", "135x215", "broche", "creme-90", 98),
-    ("bod", "120x190", "broche", "photo-brillant-130", 118),
+///
+/// **Le troisième témoin allume la table**, sur le même gabarit que le premier : c'est
+/// la seule façon de garder la pagination d'un livre qui en porte une. Sans lui, la
+/// mesure ne vivrait que dans un document, et un document ne se relance pas. Les deux
+/// premiers restent table absente — ils gardent, eux, la promesse que ce lot n'a rien
+/// changé aux livres qui n'ont rien demandé.
+const TEMOINS: &[(&str, &str, &str, &str, Table, u32)] = &[
+    ("bod", "135x215", "broche", "creme-90", Table::Absente, 98),
+    (
+        "bod",
+        "120x190",
+        "broche",
+        "photo-brillant-130",
+        Table::Absente,
+        118,
+    ),
+    ("bod", "135x215", "broche", "creme-90", Table::EnTete, 100),
 ];
 
 fn main() -> Result<(), String> {
@@ -81,13 +97,25 @@ fn main() -> Result<(), String> {
     // disent « la version de Typst a bougé » là où une seule dit « ce gabarit-là ». Le
     // premier écart rencontré ne doit donc pas masquer le second.
     let mut ecarts = Vec::new();
-    for &(pod, format, reliure, papier, attendues) in TEMOINS {
-        match compose(&projet, &typst, &sortie, (pod, format, reliure, papier)) {
+    for &(pod, format, reliure, papier, table, attendues) in TEMOINS {
+        projet.modifier_interieur(Interieur {
+            table,
+            ..Default::default()
+        });
+        let ou = sortie.join(match table {
+            Table::Absente => "sans-table",
+            Table::EnTete => "table-en-tete",
+            Table::EnFin => "table-en-fin",
+        });
+        match compose(&projet, &typst, &ou, (pod, format, reliure, papier)) {
             Ok(pages) if pages != attendues => ecarts.push(format!(
-                "{pod}-{format}-{reliure}-{papier} : {pages} pages, {attendues} attendues"
+                "{pod}-{format}-{reliure}-{papier} ({table:?}) : {pages} pages, \
+                 {attendues} attendues"
             )),
             Ok(_) => {}
-            Err(e) => ecarts.push(format!("{pod}-{format}-{reliure}-{papier} : {e}")),
+            Err(e) => ecarts.push(format!(
+                "{pod}-{format}-{reliure}-{papier} ({table:?}) : {e}"
+            )),
         }
     }
     if !ecarts.is_empty() {

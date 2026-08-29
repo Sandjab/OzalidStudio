@@ -28,14 +28,15 @@ const PROJET = {
   couverture: null,
   couverture_importee: false,
   images: ['couverture.jpg'],
-  // Les onze tailles telles que le Rust les sert : `Interieur` n'en tait aucune, et
-  // une fixture qui en oublierait ferait paraître des champs vides là où l'application
-  // en montre toujours onze.
+  // Les douze tailles et le réglage de table, tels que le Rust les sert : `Interieur`
+  // n'en tait aucun, et une fixture qui en oublierait ferait paraître un champ vide là
+  // où l'application en montre toujours douze.
   interieur: {
     police: 'Alegreya',
+    table: 'absente',
     corps: 9.5, faux_titre: 11, page_titre_auteur: 10.5, page_titre_titre: 15,
     page_titre_genre: 10, copyright: 8, dedicace: 9.5, numero: 13,
-    titre_section: 10, ouverture_piece: 10, folio: 8,
+    titre_section: 10, ouverture_piece: 10, entree_table: 9, folio: 8,
   },
   envois: { main: { mode: 'police', police: 'Caveat' }, liste: [] },
   livraison: {
@@ -178,6 +179,61 @@ test('changer une taille enregistre le réglage dans le projet', async () => {
   );
   assert.strictEqual(typeof recu.page_titre_titre, 'number');
   assert.strictEqual(els.get('inTailleTitre').value, '18.5');
+});
+
+/**
+ * Allumer la table part au Rust dans la forme qu'il attend — `"en-tete"`, la valeur de
+ * l'option, et non un libellé d'interface. Une chaîne que serde ne connaît pas
+ * échouerait à mi-chemin, sur un message qui ne nomme aucun champ.
+ *
+ * Le réglage voyage avec les douze tailles, dans le même envoi : `interieur_modifier`
+ * reçoit un `Interieur` entier, jamais un champ isolé.
+ */
+test('allumer la table enregistre le réglage dans le projet', async () => {
+  let recu = null;
+  const { els } = await charge({
+    invoke: faux([LULU], {
+      projet_importer: PROJET,
+      interieur_modifier: (args) => {
+        recu = args.interieur;
+        return { ...PROJET, interieur: args.interieur };
+      },
+    }),
+    open: async () => '/dev/ozalid/build/LHC/livre.toml',
+  });
+  await els.get('btImporter').declenche('click');
+  els.get('inTable').value = 'en-tete';
+  await els.get('inTable').declenche('change');
+  assert.deepStrictEqual(
+    { ...recu },
+    { ...PROJET.interieur, table: 'en-tete' },
+    'le réglage part seul, les douze tailles inchangées',
+  );
+  assert.strictEqual(els.get('inTable').value, 'en-tete');
+});
+
+/**
+ * La taille d'une entrée de table est une taille comme les onze autres : elle part en
+ * nombre, et elle revient du projet. Le sélecteur d'à côté ne la remplace pas — une
+ * table absente garde sa taille, qui reparaîtra telle quelle si on l'allume.
+ */
+test('la taille d\'une entrée de table fait l\'aller-retour', async () => {
+  let recu = null;
+  const { els } = await charge({
+    invoke: faux([LULU], {
+      projet_importer: PROJET,
+      interieur_modifier: (args) => {
+        recu = args.interieur;
+        return { ...PROJET, interieur: args.interieur };
+      },
+    }),
+    open: async () => '/dev/ozalid/build/LHC/livre.toml',
+  });
+  await els.get('btImporter').declenche('click');
+  els.get('inTailleTable').value = '8.5';
+  await els.get('inTailleTable').declenche('change');
+  assert.deepStrictEqual({ ...recu }, { ...PROJET.interieur, entree_table: 8.5 });
+  assert.strictEqual(typeof recu.entree_table, 'number');
 });
 
 /**

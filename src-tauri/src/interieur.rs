@@ -58,6 +58,24 @@ fn police_defaut() -> String {
 pub const MIN_PT: f64 = 4.0;
 pub const MAX_PT: f64 = 48.0;
 
+/// Où la table des matières se compose — ou pas du tout.
+///
+/// **Absente par défaut**, et pour la raison qui a éteint la collection sur le dos :
+/// allumée d'office, elle ajouterait des pages à tous les livres déjà composés, donc
+/// changerait leur dos sans que personne l'ait demandé.
+///
+/// Le réglage vit dans `Interieur` et non dans `Livre` : c'est un choix de composition,
+/// qui déplace la pagination comme la police le fait, pas un trait de l'identité du
+/// livre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Table {
+    #[default]
+    Absente,
+    EnTete,
+    EnFin,
+}
+
 /// Réglages d'intérieur du projet.
 ///
 /// L'imprimeur impose le format, les marges et la gouttière ; le livre choisit son
@@ -75,6 +93,10 @@ pub const MAX_PT: f64 = 48.0;
 #[serde(default)]
 pub struct Interieur {
     pub police: String,
+    /// Où la table des matières se compose. L'allumer ajoute des pages, donc change le
+    /// dos : `modifier_interieur` oublie les mesures pour cette raison, comme il le fait
+    /// pour la police.
+    pub table: Table,
     /// Le texte courant.
     pub corps: f64,
     /// Le faux-titre, seul sur la page 1.
@@ -97,6 +119,9 @@ pub struct Interieur {
     /// Le titre d'une pièce à texte — préface, postface : le mot occupe la ligne du
     /// numéro, mais composé comme un titre, d'où sa taille à lui.
     pub ouverture_piece: f64,
+    /// Une ligne de la table des matières — celle du titre de la table, lui, est
+    /// `ouverture_piece` : la table s'ouvre comme une préface, c'est une pièce du livre.
+    pub entree_table: f64,
     /// Le folio.
     pub folio: f64,
 }
@@ -105,6 +130,7 @@ impl Default for Interieur {
     fn default() -> Self {
         Self {
             police: police_defaut(),
+            table: Table::Absente,
             corps: CORPS_PT,
             faux_titre: 11.0,
             page_titre_auteur: 10.5,
@@ -115,17 +141,18 @@ impl Default for Interieur {
             numero: 13.0,
             titre_section: 10.0,
             ouverture_piece: 10.0,
+            entree_table: 9.0,
             folio: FOLIO_PT,
         }
     }
 }
 
 impl Interieur {
-    /// Les onze tailles, chacune sous le nom que l'interface lui donne.
+    /// Les douze tailles, chacune sous le nom que l'interface lui donne.
     ///
     /// Une liste plutôt que onze conditions recopiées : le message d'erreur nomme le
     /// champ fautif, et un douzième réglage s'ajoute ici en une ligne.
-    fn tailles(&self) -> [(&'static str, f64); 11] {
+    fn tailles(&self) -> [(&'static str, f64); 12] {
         [
             ("corps du texte", self.corps),
             ("faux-titre", self.faux_titre),
@@ -137,6 +164,7 @@ impl Interieur {
             ("numéro de partie ou de chapitre", self.numero),
             ("titre de partie ou de chapitre", self.titre_section),
             ("titre de préface ou de postface", self.ouverture_piece),
+            ("entrée de table des matières", self.entree_table),
             ("folio", self.folio),
         ]
     }
@@ -417,6 +445,20 @@ fn assemble(
         }
     }
 
+    // La table en fin ferme le volume, annexes comprises : c'est la dernière chose du
+    // livre. Elle rejoint la zone hors folio que les annexes occupent déjà — et quand il
+    // n'y a pas d'annexe, c'est ici que cette zone s'ouvre, dans l'ordre qu'emploie le
+    // bloc ci-dessus : le saut de page d'abord, le `set page` ensuite.
+    if int.table == Table::EnFin {
+        if annexes.is_empty() {
+            if !apres_page {
+                s.push_str("#pagebreak()\n");
+            }
+            s.push_str("#set page(footer: none)\n");
+        }
+        s.push_str(&table_matieres(int));
+    }
+
     // Page blanche de fin, sans folio — même dispositif que la blanche des liminaires.
     if r.blanche {
         s.push_str("\n#page(footer: none)[]\n");
@@ -620,6 +662,20 @@ fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
         ));
     }
 
+    // La table en tête rejoint la série des liminaires : après le copyright et la
+    // dédicace, **avant** la préface. Le lecteur trouve le plan du livre sans traverser
+    // un texte, et la table annonce la préface elle-même.
+    //
+    // `footer: none` court encore ici : la table est hors folio, comme tout ce qui la
+    // précède.
+    if int.table == Table::EnTete {
+        s.push_str(&table_matieres(int));
+        // Ce qui suit ouvre en belle page — la préface, ou le corps. Même dispositif
+        // qu'après une pièce liminaire, et pour la même raison : la longueur de la table
+        // dépend du nombre de pièces, donc d'un manuscrit qu'on retouche.
+        s.push_str("#pagebreak(to: \"odd\", weak: true)\n\n");
+    }
+
     // Les pièces liminaires du manuscrit ferment la série : `footer: none` court encore,
     // le folio ne sera rétabli qu'au premier chapitre.
     for p in pieces {
@@ -665,6 +721,12 @@ fn ouverture_piece(titre: &str, pt: f64) -> String {
     )
 }
 
+/// Le titre que la table porte, dans les deux positions.
+///
+/// Un seul libellé, et non « Sommaire » en tête : rien à expliquer dans l'interface, et
+/// c'est le mot que tout lecteur reconnaît. Décision de produit du 29/08.
+const TITRE_TABLE: &str = "Table des matières";
+
 /// L'étiquette que porte chaque repère de table, telle qu'une requête Typst la nomme.
 ///
 /// Publique parce que la table la lira — `context query(<ozalid-tdm>)` — et qu'un nom
@@ -696,6 +758,58 @@ fn repere(p: &Piece) -> String {
         echappe_chaine(&numero),
         echappe_chaine(&p.titre)
     )
+}
+
+/// La table des matières, composée par Typst depuis les repères que chaque pièce a
+/// laissés à l'ouverture de sa page.
+///
+/// **Typst résout seul l'auto-référence** : la table occupe des pages, et les folios
+/// qu'elle affiche en tiennent compte, en une seule invocation. Relevé par composition
+/// le 29/08 sur une table de deux pages — les folios sortent consécutifs à partir de la
+/// page qui suit la table, pas de celle qui l'aurait suivie sans elle. Les deux voies
+/// écartées sont dans la spec § 2.3 : `outline()` natif, que l'intérieur ne peut pas
+/// employer faute d'un seul `heading`, et deux passes côté Rust, qui devraient itérer
+/// jusqu'au point fixe comme `converge` le fait pour la gouttière.
+///
+/// **La table ne porte pas l'étiquette `<ozalid-tdm>`** : elle se listerait elle-même.
+///
+/// Elle s'ouvre en belle page. La blanche qui la suit, quand elle finit sur une impaire,
+/// appartient à l'appelant — en tête c'est le saut de parité qui ouvre la pièce
+/// suivante, en fin c'est la blanche de parité du livre. Un saut de sortie posé ici
+/// ajouterait une page en fin de volume que rien n'occuperait.
+///
+/// L'indentation du second rang ne paraît que si le livre porte une partie : un roman
+/// sans parties verrait sinon toutes ses lignes décalées sous un rang qui n'existe pas.
+///
+/// **Écart assumé à la lettre de la spec** : chaque ligne reprend le numéro et le titre
+/// que la page d'ouverture imprime, mais pas leur casse — seul le rang 1 est mis en
+/// capitales. La page d'ouverture compose tout en capitales ; une table entière en
+/// capitales serait illisible.
+fn table_matieres(int: &Interieur) -> String {
+    let mut s = String::from("#pagebreak(to: \"odd\", weak: true)\n");
+    // La table s'ouvre comme une préface : c'est une pièce du livre, et le mot occupe
+    // la ligne du numéro.
+    s.push_str(&ouverture_piece(TITRE_TABLE, int.ouverture_piece));
+    // Le `set par` local défait la justification et l'alinéa du corps : une ligne de
+    // table justifiée écarterait ses points de conduite jusqu'à la marge.
+    s.push_str(&format!(
+        r#"#context {{
+  let entrees = query(<{TDM}>)
+  let parties = entrees.any(e => e.value.rang == 1)
+  set par(justify: false, first-line-indent: 0pt, leading: 0.6em, spacing: 0.6em)
+  set text(size: {pt}pt)
+  for e in entrees {{
+    let v = e.value
+    let libelle = if v.numero == "" {{ v.titre }} else if v.titre == "" {{ v.numero }} else {{ v.numero + " — " + v.titre }}
+    block(above: if v.rang == 1 {{ 1.2em }} else {{ 0.6em }})[
+      #h(if v.rang == 1 or not parties {{ 0mm }} else {{ 5mm }})#if v.rang == 1 {{ upper(libelle) }} else {{ libelle }}#box(width: 1fr, repeat[#h(0.3em).#h(0.3em)])#e.location().page()
+    ]
+  }}
+}}
+"#,
+        pt = int.entree_table
+    ));
+    s
 }
 
 /// Le titre sous le numéro d'une partie ou d'un chapitre — même casse, même espacement
@@ -1097,6 +1211,10 @@ mod tests {
     ///
     /// Les deux mutualisations voulues sont vérifiées par le compte : le numéro sert à
     /// la page de partie **et** au chapitre, le titre de section aux deux également.
+    ///
+    /// La douzième taille — l'entrée de table — ne paraît dans aucune source tant que le
+    /// réglage est absent : elle est couverte par
+    /// `la_taille_d_entree_regle_les_lignes_de_la_table`.
     #[test]
     fn chaque_role_typographique_prend_sa_taille() {
         let int = Interieur {
@@ -1189,6 +1307,71 @@ mod tests {
         }
     }
 
+    /// La table naît **absente**, et un `.ozalid` écrit avant ce lot la relit absente.
+    ///
+    /// C'est le même parti que la collection sur le dos : allumée d'office, elle
+    /// ajouterait des pages à tous les livres déjà composés, donc changerait leur dos
+    /// sans que personne l'ait demandé. `VERSION` n'a pas à bouger pour autant —
+    /// `#[serde(default)]` porte sur la structure entière, et un projet ancien reçoit
+    /// exactement le livre qu'il composait.
+    #[test]
+    fn la_table_nait_absente_et_un_projet_ancien_la_relit_absente() {
+        assert_eq!(Interieur::default().table, Table::Absente);
+        let ancien: Interieur = serde_json::from_str("{}").expect("un projet sans intérieur");
+        assert_eq!(
+            ancien.table,
+            Table::Absente,
+            "un .ozalid ancien s'allume tout seul"
+        );
+        assert_eq!(
+            ancien.entree_table,
+            Interieur::default().entree_table,
+            "la douzième taille manque à un projet ancien"
+        );
+    }
+
+    /// Les trois états passent la frontière dans la forme que le front envoie.
+    ///
+    /// Le sélecteur de l'onglet Livre pose `"en-tete"` dans la valeur de son option :
+    /// une sérialisation en `"EnTete"` ferait échouer `interieur_modifier` sur un
+    /// message de serde, à mi-chemin entre les deux côtés, là où rien ne se lit.
+    #[test]
+    fn les_trois_etats_de_la_table_se_serialisent_en_kebab() {
+        for (etat, attendu) in [
+            (Table::Absente, r#""absente""#),
+            (Table::EnTete, r#""en-tete""#),
+            (Table::EnFin, r#""en-fin""#),
+        ] {
+            let json = serde_json::to_string(&etat).expect("état sérialisable");
+            assert_eq!(json, attendu);
+            let relu: Table = serde_json::from_str(&json).expect("état relisible");
+            assert_eq!(relu, etat);
+        }
+    }
+
+    /// La douzième taille est bornée comme les onze autres, et l'erreur la nomme.
+    ///
+    /// `tailles()` est la seule liste que `verifie()` parcourt : un champ ajouté à la
+    /// struct mais oublié dans la liste passerait à 0 pt sans un mot, et Typst
+    /// composerait une table invisible dont la pagination donnerait un dos faux.
+    #[test]
+    fn la_taille_d_entree_de_table_est_bornee_comme_les_autres() {
+        let mauvais = Interieur {
+            entree_table: 0.0,
+            ..Interieur::default()
+        };
+        let err = mauvais.verifie().unwrap_err();
+        assert!(
+            err.contains("table des matières"),
+            "l'erreur doit nommer le rôle : {err}"
+        );
+        // Le compte de douze tailles est garanti par la signature de `tailles()` :
+        // `[(&'static str, f64); 12]`. Une assertion sur la longueur ne pourrait jamais
+        // échouer, et tomberait donc sous la même règle que tout test qui n'a jamais été
+        // rouge : elle ne protège rien. Seul le contrôle de sa présence dans `verifie()`
+        // importe, et c'est ce que la mutation du brief teste.
+    }
+
     /// L'ebook est le livre **sans son imposition** : la gouttière revient à la marge
     /// extérieure, et il n'y a pas de blanche de parité. Les deux n'ont de sens qu'une fois
     /// le livre relié — à l'écran, l'une décale le texte une page sur deux et l'autre ajoute
@@ -1210,6 +1393,40 @@ mod tests {
         assert!(
             !s.contains("#page(footer: none)[]"),
             "blanche de parité présente : {s}"
+        );
+    }
+
+    /// **Le PDF ebook porte la table** : c'est le même livre, sans son imposition
+    /// (spec § 3). L'archive EPUB, elle, garde sa table de navigation native — elle ne
+    /// se pagine pas, et `epub.rs` ne connaît pas `Interieur`.
+    #[test]
+    fn le_pdf_ebook_suit_le_reglage_de_table() {
+        let pr = provider("lulu").expect("gabarit lulu");
+        let pieces = pieces_des_quatre_sortes();
+        let sans = source_ebook(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            &pieces,
+            "#page[couverture]\n",
+        );
+        assert!(
+            !sans.contains("Table des matières"),
+            "table non demandée\n{sans}"
+        );
+        let avec = source_ebook(
+            &livre(),
+            &Interieur {
+                table: Table::EnFin,
+                ..Interieur::default()
+            },
+            pr,
+            &pieces,
+            "#page[couverture]\n",
+        );
+        assert!(
+            avec.contains("Table des matières") && avec.contains(&format!("query(<{TDM}>)")),
+            "l'ebook n'a pas composé la table\n{avec}"
         );
     }
 
@@ -2296,6 +2513,224 @@ mod tests {
         );
     }
 
+    /* ---------- la table des matières ---------- */
+
+    /// La source des quatre sortes sous un réglage de table donné — `source_des_quatre_sortes`
+    /// avec le réglage en plus, mêmes gabarit et gouttière.
+    fn source_avec_table(table: Table) -> String {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        source(
+            &livre(),
+            &Interieur {
+                table,
+                ..Interieur::default()
+            },
+            provider("bod").unwrap(),
+            &r,
+            &pieces_des_quatre_sortes(),
+            None,
+        )
+    }
+
+    /// **Le livre par défaut ne porte aucune table**, et pas même la requête qui
+    /// l'aurait composée. C'est la garde des livres déjà composés : leur dos ne bouge
+    /// pas parce que ce lot existe.
+    #[test]
+    fn une_table_absente_ne_compose_rien() {
+        let s = source_avec_table(Table::Absente);
+        assert!(
+            !s.contains("Table des matières"),
+            "un livre sans réglage porte une table\n{s}"
+        );
+        assert!(
+            !s.contains(&format!("query(<{TDM}>)")),
+            "un livre sans réglage interroge les repères\n{s}"
+        );
+    }
+
+    /// En tête, la table vient **après le copyright et avant la préface** : le lecteur
+    /// trouve le plan du livre sans traverser un texte, et la table annonce la préface
+    /// elle-même. Décision de produit du 29/08 — voir le plan du lot, § décisions.
+    #[test]
+    fn la_table_en_tete_se_compose_apres_le_copyright_et_avant_la_preface() {
+        let s = source_avec_table(Table::EnTete);
+        let table = s.find("Table des matières").expect("aucune table composée");
+        let copyright = s.find("©").expect("aucun pavé de copyright");
+        let preface = s.find("Préface").expect("aucune préface");
+        assert!(copyright < table, "la table précède le copyright\n{s}");
+        assert!(table < preface, "la table suit la préface\n{s}");
+    }
+
+    /// En fin, la table ferme le volume — **après les annexes**, qui font partie du
+    /// livre qu'elle indexe.
+    #[test]
+    fn la_table_en_fin_ferme_le_volume_apres_les_annexes() {
+        let s = source_avec_table(Table::EnFin);
+        let table = s.find("Table des matières").expect("aucune table composée");
+        // L'annexe de `pieces_des_quatre_sortes` s'intitule « Postface » : c'est sa
+        // zone qui en fait une annexe, pas son titre.
+        let annexe = s.find("Postface").expect("aucune annexe");
+        assert!(annexe < table, "la table précède l'annexe\n{s}");
+        assert!(
+            s[table..].contains(MARQUEUR),
+            "la table déborde après le marqueur de fin\n{s}"
+        );
+    }
+
+    /// **La table ne porte pas l'étiquette des repères**, sous peine de se lister
+    /// elle-même — une ligne « Table des matières » dans la table, avec le folio de sa
+    /// propre première page.
+    ///
+    /// Le compte des `#metadata((rang:` est la mesure juste : il vaut le nombre de
+    /// pièces, table allumée ou non. Chercher l'absence de l'étiquette ne dirait rien,
+    /// puisque la table doit justement l'employer dans sa requête.
+    #[test]
+    fn la_table_ne_se_liste_pas_elle_meme() {
+        let pieces = pieces_des_quatre_sortes();
+        for table in [Table::Absente, Table::EnTete, Table::EnFin] {
+            let s = source_avec_table(table);
+            assert_eq!(
+                s.matches("#metadata((rang:").count(),
+                pieces.len(),
+                "{table:?} : la table s'est ajoutée aux repères\n{s}"
+            );
+        }
+        assert!(
+            source_avec_table(Table::EnTete).contains(&format!("query(<{TDM}>)")),
+            "la table ne lit pas les repères"
+        );
+    }
+
+    /// **La table s'ouvre en belle page**, dans les deux positions : une table qui
+    /// commence au verso se lit à contre-page, et rien dans le compte de pages ne le
+    /// dirait.
+    ///
+    /// Le saut est un `pagebreak(to: "odd", weak: true)` et non un compte à la main sur
+    /// `here().page()` : c'est l'outil que les pièces liminaires emploient déjà, et pour
+    /// la même raison — la table est hors folio, donc la page qu'il insère ne porte
+    /// aucun numéro.
+    #[test]
+    fn la_table_s_ouvre_en_belle_page() {
+        // Le saut de parité **collé** à l'ouverture de pièce : construite depuis
+        // `ouverture_piece`, l'attente ne fige aucun littéral de mise en forme et suit
+        // le gabarit de titre si celui-ci bouge.
+        let attendu = format!(
+            "#pagebreak(to: \"odd\", weak: true)\n{}",
+            ouverture_piece(TITRE_TABLE, Interieur::default().ouverture_piece)
+        );
+        for table in [Table::EnTete, Table::EnFin] {
+            let s = source_avec_table(table);
+            assert!(
+                s.contains(&attendu),
+                "{table:?} : la table ne s'ouvre pas en belle page\n{s}"
+            );
+        }
+    }
+
+    /// La taille d'entrée règle les lignes de la table.
+    ///
+    /// C'est la douzième taille de `tailles()`, et la seule que
+    /// `chaque_role_typographique_prend_sa_taille` ne peut pas couvrir — elle ne paraît
+    /// dans aucune source tant que le réglage est absent. Le titre de la table, lui,
+    /// prend `ouverture_piece`, ce que `la_table_s_ouvre_en_belle_page` vérifie déjà.
+    #[test]
+    fn la_taille_d_entree_regle_les_lignes_de_la_table() {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(
+            &livre(),
+            &Interieur {
+                table: Table::EnTete,
+                entree_table: 22.25,
+                ..Interieur::default()
+            },
+            provider("bod").unwrap(),
+            &r,
+            &pieces_des_quatre_sortes(),
+            None,
+        );
+        assert!(
+            s.contains("set text(size: 22.25pt)"),
+            "les lignes de la table ignorent leur taille\n{s}"
+        );
+    }
+
+    /// **La table affiche le folio du repère qu'elle lit**, sans arithmétique entre les
+    /// deux.
+    ///
+    /// C'est le seul endroit où cette liaison se vérifie. Les tests composés de la tâche
+    /// suivante lisent les repères par la même requête que la table, mais **pas ce que
+    /// la table imprime** : un `- 2` glissé sur le folio les laisserait tous verts, et
+    /// la table renverrait le lecteur deux pages trop tôt sur chaque entrée. Rien dans
+    /// le PDF ne le dirait à qui ne compte pas les pages à la main.
+    #[test]
+    fn la_table_affiche_le_folio_de_chaque_repere() {
+        let s = source_avec_table(Table::EnTete);
+        assert!(
+            s.contains(")#e.location().page()\n"),
+            "la table n'affiche pas le folio de son repère, ou le retouche\n{s}"
+        );
+    }
+
+    /// **Le rang commande l'indentation, et lui seul commande la capitale.**
+    ///
+    /// Rien d'autre ne regarde dans le `#context { … }` de `table_matieres` : inverser le
+    /// test de rang dans le `#h(...)` — une `Partie` rendue au second rang, la mutation
+    /// que la spec § 5 nomme — laisserait `cargo test`, `cargo test -- --ignored` et le
+    /// témoin tous verts, l'indentation ne changeant aucun compte de pages.
+    #[test]
+    fn le_rang_indente_le_second_niveau_et_capitalise_le_premier() {
+        let s = source_avec_table(Table::EnTete);
+        assert!(
+            s.contains("#h(if v.rang == 1 or not parties { 0mm } else { 5mm })"),
+            "l'indentation ne dépend plus du rang\n{s}"
+        );
+        assert!(
+            s.contains("#if v.rang == 1 { upper(libelle) } else { libelle }"),
+            "la capitalisation ne dépend plus du rang\n{s}"
+        );
+    }
+
+    /// **Sans annexe, la table en fin ouvre elle-même la zone hors folio.**
+    ///
+    /// `pieces_des_quatre_sortes()` porte toujours une annexe : la branche
+    /// `annexes.is_empty()` d'`assemble()`, qui pose `#set page(footer: none)` avant la
+    /// table quand il n'y en a pas, n'est donc atteinte par aucun autre test de ce
+    /// module. Sans cette directive, le pied du corps courrait sur la table, qui
+    /// sortirait foliotée — invisible au compte de pages, visible seulement au bas du
+    /// PDF.
+    #[test]
+    fn la_table_en_fin_sans_annexe_ouvre_elle_meme_la_zone_hors_folio() {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(
+            &livre(),
+            &Interieur {
+                table: Table::EnFin,
+                ..Interieur::default()
+            },
+            provider("bod").unwrap(),
+            &r,
+            &chapitres(),
+            None,
+        );
+        let attendu = format!(
+            "#set page(footer: none)\n#pagebreak(to: \"odd\", weak: true)\n{}",
+            ouverture_piece(TITRE_TABLE, Interieur::default().ouverture_piece)
+        );
+        assert!(
+            s.contains(&attendu),
+            "sans annexe, la table en fin n'ouvre pas elle-même la zone hors folio\n{s}"
+        );
+    }
+
     /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
 
     /// Un PNG minuscule mais valide : 2 × 2 pixels, deux gris.
@@ -2591,6 +3026,215 @@ mod tests {
             releves,
             vec![5.0, 7.0, 9.0, 10.0, 11.0],
             "les repères ne suivent pas l'ouverture de leur pièce"
+        );
+    }
+
+    /* ---------- la table composée pour de vrai ---------- */
+
+    /// Les folios que la source publie sous `<mesures>`, un par repère, dans l'ordre.
+    ///
+    /// C'est exactement ce que la table affiche : elle lit les mêmes repères par la même
+    /// requête, et rend le même `.location().page()`. Mesurer ici, plutôt que de lire la
+    /// table rendue, évite de reconnaître des chiffres dans un PNG pour vérifier une
+    /// valeur que Typst sait dire.
+    fn folios_des_reperes(typst: &Typst, dossier: &Path, nom: &str, mut s: String) -> Vec<f64> {
+        s.push_str(
+            "\n#context [#metadata(query(<ozalid-tdm>).enumerate().fold((:), (d, it) => \
+             d + ((str(it.at(0))): it.at(1).location().page())))<mesures>]\n",
+        );
+        let chemin = dossier.join(format!("{nom}.typ"));
+        std::fs::write(&chemin, &s).expect("source non écrite");
+        let folios = typst.mesures(&chemin).expect("mesures refusées");
+        (0..folios.len())
+            .map(|i| {
+                *folios
+                    .get(&i.to_string())
+                    .unwrap_or_else(|| panic!("aucun repère au rang {i} : {folios:?}"))
+            })
+            .collect()
+    }
+
+    /// **La preuve du lot.** La table se compte elle-même dans les folios qu'elle
+    /// affiche.
+    ///
+    /// C'est toute la mécanique de la spec § 2.3, et elle ne se raisonne pas : insérer
+    /// une table décale les pièces qui la suivent, donc les folios qu'elle vient
+    /// d'annoncer. Si Typst ne résolvait pas cette auto-référence en une invocation, la
+    /// table renverrait le lecteur deux pages trop tôt — sur toutes les entrées, sans
+    /// qu'aucun compte de pages ni aucun rendu ne le signale.
+    ///
+    /// L'écart entre les deux compositions est vérifié **constant**, et non figé à une
+    /// valeur : c'est l'intention exacte — la table pousse tout le livre du même nombre
+    /// de pages, celui qu'elle occupe elle-même, blanche de parité comprise. Un écart
+    /// qui varierait d'une pièce à l'autre dirait que les folios ont été relevés avant
+    /// l'insertion, ce que la spec écarte comme « deux passes côté Rust ».
+    ///
+    /// Les deux positions sont exercées : en fin, la table n'a rien à décaler et l'écart
+    /// doit être **nul** sur les pièces, qui la précèdent toutes.
+    ///
+    /// **Ce que l'assertion d'uniformité ne prouve pas aujourd'hui, sur ce manuscrit.**
+    /// `decalage` est pair par construction : le saut de parité en entrée de
+    /// `table_matieres` garantit une ouverture impaire, celui que `liminaires()` pose en
+    /// sortie garantit une reprise impaire, donc leur différence est paire. Dans le
+    /// corps, la seule logique sensible à la parité absolue — `#context if
+    /// calc.odd(here().page())`, qui protège l'ouverture d'une **deuxième** partie — ne
+    /// s'exécute jamais ici : l'unique `Sorte::Partie` de `pieces_des_quatre_sortes()`
+    /// ouvre le corps, la branche est sautée. Casser l'uniformité sans casser
+    /// `decalage >= 2.0` supposerait donc un décalage positif mais impair — ce qui
+    /// romprait déjà la garantie que la première assertion sanctionne. L'assertion
+    /// d'uniformité est ici **redondante** avec elle.
+    ///
+    /// Elle redeviendrait décisive sur un manuscrit portant une seconde partie plus loin
+    /// dans le corps — ce que ni `pieces_des_quatre_sortes()` ni `manuscrit_long()` ne
+    /// font — puisque cette branche de parité redeviendrait atteignable et pourrait
+    /// décaler cette seule pièce d'une page de plus ou de moins. Elle garde donc sa
+    /// place : c'est elle qui protégerait contre une implémentation à deux passes côté
+    /// Rust, où les folios seraient relevés avant l'insertion de la table.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn la_table_se_compte_elle_meme_dans_les_folios_qu_elle_affiche() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces = pieces_des_quatre_sortes();
+        let compose = |table: Table| {
+            source(
+                &livre(),
+                &Interieur {
+                    table,
+                    ..Interieur::default()
+                },
+                pr,
+                &r,
+                &pieces,
+                None,
+            )
+        };
+
+        let sans = compose(Table::Absente);
+        let n_sans = pages_de(&typst, dossier.path(), "sans", &sans);
+        let f_sans = folios_des_reperes(&typst, dossier.path(), "sans-m", sans);
+        assert_eq!(
+            f_sans.len(),
+            pieces.len(),
+            "les repères du livre nu ne sont pas au complet : {f_sans:?}"
+        );
+
+        let en_tete = compose(Table::EnTete);
+        let n_en_tete = pages_de(&typst, dossier.path(), "tete", &en_tete);
+        let f_en_tete = folios_des_reperes(&typst, dossier.path(), "tete-m", en_tete);
+        assert_eq!(
+            f_en_tete.len(),
+            pieces.len(),
+            "la table s'est ajoutée aux repères, ou en a perdu : {f_en_tete:?}"
+        );
+
+        let ecarts: Vec<f64> = f_en_tete
+            .iter()
+            .zip(f_sans.iter())
+            .map(|(a, s)| a - s)
+            .collect();
+        let decalage = ecarts[0];
+        assert!(
+            decalage >= 2.0,
+            "la table en tête n'a poussé le livre que de {decalage} page(s) : \
+             elle ne s'imprime pas, ou pas en belle page"
+        );
+        assert!(
+            ecarts.iter().all(|e| *e == decalage),
+            "la table n'a pas décalé toutes les pièces du même nombre de pages : \
+             {ecarts:?} — les folios ont été relevés avant son insertion"
+        );
+        assert_eq!(
+            f64::from(n_en_tete) - f64::from(n_sans),
+            decalage,
+            "le livre n'a pas grossi de ce dont la table a décalé les pièces : \
+             {n_en_tete} pages contre {n_sans}"
+        );
+
+        let en_fin = compose(Table::EnFin);
+        let n_en_fin = pages_de(&typst, dossier.path(), "fin", &en_fin);
+        let f_en_fin = folios_des_reperes(&typst, dossier.path(), "fin-m", en_fin);
+        assert_eq!(
+            f_en_fin, f_sans,
+            "une table en fin a déplacé des pièces qui la précèdent toutes"
+        );
+        assert!(
+            n_en_fin > n_sans,
+            "une table en fin n'a ajouté aucune page : {n_en_fin} contre {n_sans}"
+        );
+        // **La belle page se prouve ici, et nulle part ailleurs en composant.** En tête,
+        // le copyright rend toujours la main sur une impaire : un saut simple donnerait
+        // le même livre, et le saut de parité y est une garde sans effet observable. En
+        // fin, la parité dépend de la longueur des annexes — le livre nu s'arrête sur
+        // une impaire, la table doit donc sauter la paire qui suit.
+        assert_eq!(
+            n_sans % 2,
+            1,
+            "ce test ne prouve la belle page que sur un livre dont la pagination nue est \
+             impaire ; elle vaut {n_sans}. Allonger le manuscrit de test d'une page — ne \
+             pas retirer cette garde, elle est ce qui empêche le test de devenir muet."
+        );
+        let ouverture = n_sans + 2;
+        assert_eq!(
+            n_en_fin, ouverture,
+            "la table en fin ne s'est pas ouverte en belle page : le livre fait \
+             {n_en_fin} pages, elle devait s'ouvrir en {ouverture}"
+        );
+    }
+
+    /// Une table longue ne dérange **ni la pagination ni l'ancrage des repères**.
+    ///
+    /// Le cas court d'à côté ne l'exerce pas : cinq entrées tiennent sur une page, et
+    /// une table qui insérerait un saut parasite tous les N blocs y passerait inaperçue.
+    /// Quarante chapitres d'une page font déborder la table, et les folios doivent
+    /// rester **consécutifs** à partir de sa sortie.
+    ///
+    /// **Ce que ce test ne prouve pas, et qu'aucun test Rust ne peut prouver :** que les
+    /// folios *imprimés dans la table* tiennent compte des pages qu'elle occupe.
+    /// `typst query` refuse `text` comme `block` — « is not locatable » —, si bien que
+    /// le seul élément interrogeable est le repère, dont le folio est juste que la table
+    /// converge ou non. Le point fixe de la spec § 2.3 a été vérifié par composition le
+    /// 29/08, sur PNG, et reste une vérification à l'œil ; la liaison entre le repère et
+    /// ce qui s'imprime est gardée, elle, par
+    /// `la_table_affiche_le_folio_de_chaque_repere`.
+    #[test]
+    #[ignore = "lance le sidecar Typst : cargo test -- --ignored"]
+    fn une_table_longue_ne_derange_pas_l_ancrage_des_reperes() {
+        let typst = typst_de_test();
+        let dossier = tempfile::tempdir().expect("répertoire de travail");
+        let pr = provider("kdp-5x8").expect("gabarit kdp-5x8");
+        let r = Reglage {
+            gouttiere: pr.gouttieres[0].2,
+            blanche: false,
+        };
+        let pieces = manuscrit_long();
+        let s = source(
+            &livre(),
+            &Interieur {
+                table: Table::EnTete,
+                ..Interieur::default()
+            },
+            pr,
+            &r,
+            &pieces,
+            None,
+        );
+        let folios = folios_des_reperes(&typst, dossier.path(), "longue", s);
+        assert_eq!(folios.len(), pieces.len());
+        let premier = folios[0];
+        assert!(
+            premier >= 7.0,
+            "la table n'a pas repoussé le premier chapitre : il ouvre en {premier}"
+        );
+        let attendus: Vec<f64> = (0..pieces.len()).map(|i| premier + i as f64).collect();
+        assert_eq!(
+            folios, attendus,
+            "une table longue a dérangé l'ancrage : les folios ne sont plus consécutifs"
         );
     }
 }
