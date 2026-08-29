@@ -113,7 +113,9 @@ fn main() -> Result<(), String> {
                  {attendues} attendues"
             )),
             Ok(_) => {}
-            Err(e) => ecarts.push(format!("{pod}-{format}-{reliure}-{papier} : {e}")),
+            Err(e) => ecarts.push(format!(
+                "{pod}-{format}-{reliure}-{papier} ({table:?}) : {e}"
+            )),
         }
     }
     if !ecarts.is_empty() {

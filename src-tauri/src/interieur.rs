@@ -780,6 +780,11 @@ fn repere(p: &Piece) -> String {
 ///
 /// L'indentation du second rang ne paraît que si le livre porte une partie : un roman
 /// sans parties verrait sinon toutes ses lignes décalées sous un rang qui n'existe pas.
+///
+/// **Écart assumé à la lettre de la spec** : chaque ligne reprend le numéro et le titre
+/// que la page d'ouverture imprime, mais pas leur casse — seul le rang 1 est mis en
+/// capitales. La page d'ouverture compose tout en capitales ; une table entière en
+/// capitales serait illisible.
 fn table_matieres(int: &Interieur) -> String {
     let mut s = String::from("#pagebreak(to: \"odd\", weak: true)\n");
     // La table s'ouvre comme une préface : c'est une pièce du livre, et le mot occupe
@@ -2672,6 +2677,60 @@ mod tests {
         );
     }
 
+    /// **Le rang commande l'indentation, et lui seul commande la capitale.**
+    ///
+    /// Rien d'autre ne regarde dans le `#context { … }` de `table_matieres` : inverser le
+    /// test de rang dans le `#h(...)` — une `Partie` rendue au second rang, la mutation
+    /// que la spec § 5 nomme — laisserait `cargo test`, `cargo test -- --ignored` et le
+    /// témoin tous verts, l'indentation ne changeant aucun compte de pages.
+    #[test]
+    fn le_rang_indente_le_second_niveau_et_capitalise_le_premier() {
+        let s = source_avec_table(Table::EnTete);
+        assert!(
+            s.contains("#h(if v.rang == 1 or not parties { 0mm } else { 5mm })"),
+            "l'indentation ne dépend plus du rang\n{s}"
+        );
+        assert!(
+            s.contains("#if v.rang == 1 { upper(libelle) } else { libelle }"),
+            "la capitalisation ne dépend plus du rang\n{s}"
+        );
+    }
+
+    /// **Sans annexe, la table en fin ouvre elle-même la zone hors folio.**
+    ///
+    /// `pieces_des_quatre_sortes()` porte toujours une annexe : la branche
+    /// `annexes.is_empty()` d'`assemble()`, qui pose `#set page(footer: none)` avant la
+    /// table quand il n'y en a pas, n'est donc atteinte par aucun autre test de ce
+    /// module. Sans cette directive, le pied du corps courrait sur la table, qui
+    /// sortirait foliotée — invisible au compte de pages, visible seulement au bas du
+    /// PDF.
+    #[test]
+    fn la_table_en_fin_sans_annexe_ouvre_elle_meme_la_zone_hors_folio() {
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(
+            &livre(),
+            &Interieur {
+                table: Table::EnFin,
+                ..Interieur::default()
+            },
+            provider("bod").unwrap(),
+            &r,
+            &chapitres(),
+            None,
+        );
+        let attendu = format!(
+            "#set page(footer: none)\n#pagebreak(to: \"odd\", weak: true)\n{}",
+            ouverture_piece(TITRE_TABLE, Interieur::default().ouverture_piece)
+        );
+        assert!(
+            s.contains(&attendu),
+            "sans annexe, la table en fin n'ouvre pas elle-même la zone hors folio\n{s}"
+        );
+    }
+
     /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
 
     /// Un PNG minuscule mais valide : 2 × 2 pixels, deux gris.
@@ -2970,7 +3029,7 @@ mod tests {
         );
     }
 
-    /* ---------- le témoin de l'invariant, composé pour de vrai ---------- */
+    /* ---------- la table composée pour de vrai ---------- */
 
     /// Les folios que la source publie sous `<mesures>`, un par repère, dans l'ordre.
     ///
@@ -3121,10 +3180,10 @@ mod tests {
              pas retirer cette garde, elle est ce qui empêche le test de devenir muet."
         );
         let ouverture = n_sans + 2;
-        assert!(
-            n_en_fin >= ouverture,
-            "la table en fin s'est ouverte au verso : le livre fait {n_en_fin} pages, \
-             elle devait s'ouvrir en {ouverture}"
+        assert_eq!(
+            n_en_fin, ouverture,
+            "la table en fin ne s'est pas ouverte en belle page : le livre fait \
+             {n_en_fin} pages, elle devait s'ouvrir en {ouverture}"
         );
     }
 
