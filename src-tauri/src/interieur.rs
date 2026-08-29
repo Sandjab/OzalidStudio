@@ -1275,7 +1275,11 @@ mod tests {
             err.contains("table des matières"),
             "l'erreur doit nommer le rôle : {err}"
         );
-        assert_eq!(Interieur::default().tailles().len(), 12);
+        // Le compte de douze tailles est garanti par la signature de `tailles()` :
+        // `[(&'static str, f64); 12]`. Une assertion sur la longueur ne pourrait jamais
+        // échouer, et tomberait donc sous la même règle que tout test qui n'a jamais été
+        // rouge : elle ne protège rien. Seul le contrôle de sa présence dans `verifie()`
+        // importe, et c'est ce que la mutation du brief teste.
     }
 
     /// L'ebook est le livre **sans son imposition** : la gouttière revient à la marge
