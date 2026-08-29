@@ -58,6 +58,24 @@ fn police_defaut() -> String {
 pub const MIN_PT: f64 = 4.0;
 pub const MAX_PT: f64 = 48.0;
 
+/// Où la table des matières se compose — ou pas du tout.
+///
+/// **Absente par défaut**, et pour la raison qui a éteint la collection sur le dos :
+/// allumée d'office, elle ajouterait des pages à tous les livres déjà composés, donc
+/// changerait leur dos sans que personne l'ait demandé.
+///
+/// Le réglage vit dans `Interieur` et non dans `Livre` : c'est un choix de composition,
+/// qui déplace la pagination comme la police le fait, pas un trait de l'identité du
+/// livre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Table {
+    #[default]
+    Absente,
+    EnTete,
+    EnFin,
+}
+
 /// Réglages d'intérieur du projet.
 ///
 /// L'imprimeur impose le format, les marges et la gouttière ; le livre choisit son
@@ -75,6 +93,10 @@ pub const MAX_PT: f64 = 48.0;
 #[serde(default)]
 pub struct Interieur {
     pub police: String,
+    /// Où la table des matières se compose. L'allumer ajoute des pages, donc change le
+    /// dos : `modifier_interieur` oublie les mesures pour cette raison, comme il le fait
+    /// pour la police.
+    pub table: Table,
     /// Le texte courant.
     pub corps: f64,
     /// Le faux-titre, seul sur la page 1.
@@ -97,6 +119,9 @@ pub struct Interieur {
     /// Le titre d'une pièce à texte — préface, postface : le mot occupe la ligne du
     /// numéro, mais composé comme un titre, d'où sa taille à lui.
     pub ouverture_piece: f64,
+    /// Une ligne de la table des matières — celle du titre de la table, lui, est
+    /// `ouverture_piece` : la table s'ouvre comme une préface, c'est une pièce du livre.
+    pub entree_table: f64,
     /// Le folio.
     pub folio: f64,
 }
@@ -105,6 +130,7 @@ impl Default for Interieur {
     fn default() -> Self {
         Self {
             police: police_defaut(),
+            table: Table::Absente,
             corps: CORPS_PT,
             faux_titre: 11.0,
             page_titre_auteur: 10.5,
@@ -115,17 +141,18 @@ impl Default for Interieur {
             numero: 13.0,
             titre_section: 10.0,
             ouverture_piece: 10.0,
+            entree_table: 9.0,
             folio: FOLIO_PT,
         }
     }
 }
 
 impl Interieur {
-    /// Les onze tailles, chacune sous le nom que l'interface lui donne.
+    /// Les douze tailles, chacune sous le nom que l'interface lui donne.
     ///
     /// Une liste plutôt que onze conditions recopiées : le message d'erreur nomme le
     /// champ fautif, et un douzième réglage s'ajoute ici en une ligne.
-    fn tailles(&self) -> [(&'static str, f64); 11] {
+    fn tailles(&self) -> [(&'static str, f64); 12] {
         [
             ("corps du texte", self.corps),
             ("faux-titre", self.faux_titre),
@@ -137,6 +164,7 @@ impl Interieur {
             ("numéro de partie ou de chapitre", self.numero),
             ("titre de partie ou de chapitre", self.titre_section),
             ("titre de préface ou de postface", self.ouverture_piece),
+            ("entrée de table des matières", self.entree_table),
             ("folio", self.folio),
         ]
     }
@@ -1187,6 +1215,67 @@ mod tests {
             };
             assert!(int.verifie().is_ok(), "{bord} pt est admis");
         }
+    }
+
+    /// La table naît **absente**, et un `.ozalid` écrit avant ce lot la relit absente.
+    ///
+    /// C'est le même parti que la collection sur le dos : allumée d'office, elle
+    /// ajouterait des pages à tous les livres déjà composés, donc changerait leur dos
+    /// sans que personne l'ait demandé. `VERSION` n'a pas à bouger pour autant —
+    /// `#[serde(default)]` porte sur la structure entière, et un projet ancien reçoit
+    /// exactement le livre qu'il composait.
+    #[test]
+    fn la_table_nait_absente_et_un_projet_ancien_la_relit_absente() {
+        assert_eq!(Interieur::default().table, Table::Absente);
+        let ancien: Interieur = serde_json::from_str("{}").expect("un projet sans intérieur");
+        assert_eq!(
+            ancien.table,
+            Table::Absente,
+            "un .ozalid ancien s'allume tout seul"
+        );
+        assert_eq!(
+            ancien.entree_table,
+            Interieur::default().entree_table,
+            "la douzième taille manque à un projet ancien"
+        );
+    }
+
+    /// Les trois états passent la frontière dans la forme que le front envoie.
+    ///
+    /// Le sélecteur de l'onglet Livre pose `"en-tete"` dans la valeur de son option :
+    /// une sérialisation en `"EnTete"` ferait échouer `interieur_modifier` sur un
+    /// message de serde, à mi-chemin entre les deux côtés, là où rien ne se lit.
+    #[test]
+    fn les_trois_etats_de_la_table_se_serialisent_en_kebab() {
+        for (etat, attendu) in [
+            (Table::Absente, r#""absente""#),
+            (Table::EnTete, r#""en-tete""#),
+            (Table::EnFin, r#""en-fin""#),
+        ] {
+            let json = serde_json::to_string(&etat).expect("état sérialisable");
+            assert_eq!(json, attendu);
+            let relu: Table = serde_json::from_str(&json).expect("état relisible");
+            assert_eq!(relu, etat);
+        }
+    }
+
+    /// La douzième taille est bornée comme les onze autres, et l'erreur la nomme.
+    ///
+    /// `tailles()` est la seule liste que `verifie()` parcourt : un champ ajouté à la
+    /// struct mais oublié dans la liste passerait à 0 pt sans un mot, et Typst
+    /// composerait une table invisible dont la pagination donnerait un dos faux.
+    #[test]
+    fn la_taille_d_entree_de_table_est_bornee_comme_les_autres() {
+        let mauvais = Interieur {
+            entree_table: 0.0,
+            ..Interieur::default()
+        };
+        let err = mauvais.verifie().unwrap_err();
+        assert!(
+            err.contains("table des matières"),
+            "l'erreur doit nommer le rôle : {err}"
+        );
+        assert_eq!(Interieur::default().tailles().len(), 12);
     }
 
     /// L'ebook est le livre **sans son imposition** : la gouttière revient à la marge
