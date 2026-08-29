@@ -2627,6 +2627,54 @@ fn interieur_pdf(dossier: &Path, cle: &str) -> PathBuf {
     dossier.join(package::nom(cle, "interieur", "pdf"))
 }
 
+/// Les vignettes de planche qu'une génération a laissées sur le disque, par clé de livrable.
+///
+/// Un livrable sans fichier est **absent** de la table, jamais présent avec une valeur vide :
+/// l'écran distingue « pas encore généré » de « vignette illisible », et une entrée creuse
+/// confondrait les deux.
+///
+/// Fonction libre, éprouvable sans `State` ni Typst — la manière déjà prise pour
+/// `refuse_doublon`, `reglage_refuse` et `dossiers_d_envoi`.
+fn vignettes_du_disque(racine: &Path, cles: &[String]) -> BTreeMap<String, String> {
+    cles.iter()
+        .filter_map(|cle| {
+            // La vignette est l'aperçu de la planche : elle porte donc le nom de la
+            // couverture, comme le PDF qu'elle montre (`package::composer_planche`).
+            let png = racine
+                .join(cle)
+                .join(package::nom(cle, "couverture", "png"));
+            donnee_png(&png).ok().map(|d| (cle.clone(), d))
+        })
+        .collect()
+}
+
+/// Les vignettes de planche des livrables du livre, pour l'affichage de l'étape Livraison.
+///
+/// Aucun cache, et **hors de `vue`** : `vue` est rendue par toute commande qui écrit dans le
+/// projet, et encoder un PNG par livrable à chaque frappe qui touche le livre se paierait
+/// pour rien. L'interface ne demande cette table qu'à l'affichage de l'étape et après une
+/// génération — le même arbitrage qu'`envoi_vignettes`, pour la même raison.
+///
+/// Un projet jamais enregistré n'a pas de racine de sorties : la table est vide, et ce n'est
+/// pas une erreur — il n'a rien pu générer.
+#[tauri::command]
+pub fn livrable_vignettes(atelier: State<Atelier>) -> Result<BTreeMap<String, String>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let Ok(racine) = sorties_racine(o) else {
+        return Ok(BTreeMap::new());
+    };
+    let cles: Vec<String> = o
+        .projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .map(|l| l.cle())
+        .collect();
+    Ok(vignettes_du_disque(&racine, &cles))
+}
+
 /// Répertoire de configuration de l'application, s'il est atteignable.
 fn config(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok()
@@ -3145,6 +3193,45 @@ nom = "Pelliculage mat"
     /// La vue que le front lit : deux papiers du même gabarit **partagent** la mesure —
     /// c'est ce qui rend la comparaison de deux papiers gratuite — et n'en tirent pas le
     /// même dos, chacun ayant sa formule.
+    /// Une vignette écrite par une génération d'hier se retrouve à la réouverture : c'est
+    /// tout ce qui permet à une ligne de montrer sa planche sans recomposer.
+    ///
+    /// Un livrable dont le fichier n'est pas là est **absent** de la table, jamais présent
+    /// avec une valeur vide : l'écran distingue « pas encore généré » de « vignette
+    /// illisible », et une entrée creuse confondrait les deux.
+    ///
+    /// Les vingt-quatre octets sont un minimum, pas une coquetterie : `image::png` exige la
+    /// signature **et** le bloc `IHDR` pour reconnaître le type. Avec les huit octets de la
+    /// seule signature, `extension` rendrait `None` et `donnee_image` retomberait sur son
+    /// `image/png` par défaut — le test passerait sans que rien n'ait été reconnu.
+    #[test]
+    fn les_vignettes_se_relisent_du_disque_et_les_absentes_ne_mentent_pas() {
+        let tmp = tempfile::tempdir().unwrap();
+        let racine = tmp.path().join("sorties");
+        let cle = "lulu-108x175-broche-standard";
+        let dossier = racine.join(cle);
+        std::fs::create_dir_all(&dossier).unwrap();
+        let png: Vec<u8> = [
+            b"\x89PNG\r\n\x1a\n".as_slice(),
+            &[0, 0, 0, 13],
+            b"IHDR".as_slice(),
+            &[0, 0, 0, 1, 0, 0, 0, 1],
+        ]
+        .concat();
+        std::fs::write(dossier.join(package::nom(cle, "couverture", "png")), &png).unwrap();
+
+        let v = vignettes_du_disque(&racine, &[cle.to_string(), "absent-du-disque".to_string()]);
+
+        assert!(
+            v[cle].starts_with("data:image/png;base64,"),
+            "la vignette du disque voyage en clair"
+        );
+        assert!(
+            !v.contains_key("absent-du-disque"),
+            "un livrable sans fichier est absent, pas vide"
+        );
+    }
+
     /// La vue porte l'état de chaque livrable, sans quoi l'écran du lot 3 ne peut rien dire
     /// d'un package qu'il n'a pas lui-même composé dans la session courante.
     #[test]
