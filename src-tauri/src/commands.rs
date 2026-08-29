@@ -1555,6 +1555,63 @@ pub struct Generation {
     pub packages: Vec<Resultat>,
 }
 
+/// Ce qu'une génération laisse sur le livrable : la mesure de son gabarit d'abord, ses deux
+/// empreintes ensuite.
+///
+/// **L'ordre n'est pas négociable** (reconnaissance 3a) : `empreinte::couverture` lit la
+/// pagination que le projet retient, et prendre l'empreinte avant de retenir la mesure la
+/// daterait de la composition d'avant. Le package naîtrait périmé sur sa couverture — donc
+/// sur son dos — sans que rien à l'écran puisse l'expliquer.
+///
+/// Un livrable que la clé ne désigne plus n'a personne à renseigner : la fonction se tait,
+/// comme `retenir_mesure` le fait déjà pour un gabarit que plus aucun livrable ne porte.
+fn retenir(projet: &mut Projet, cle: &str, issue: Result<&package::Package, String>) {
+    let Some(l) = projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .find(|x| x.cle() == cle)
+        .cloned()
+    else {
+        return;
+    };
+    let generation = match issue {
+        Err(message) => crate::projet::Generation::Echec { message },
+        Ok(p) => {
+            // 1. La mesure, sous la clé du **gabarit** : c'est elle que l'empreinte de
+            // couverture va lire deux lignes plus bas. Un gabarit que le catalogue ne porte
+            // plus ne se mesure pas — le livrable paraîtra périmé, ce qui est vrai.
+            if let Ok(r) = catalogue::resout(&l.fabrication) {
+                projet.meta.livraison.retenir_mesure(
+                    &l.fabrication.cle_gabarit(),
+                    Mesure {
+                        pages: p.pages,
+                        gouttiere: p.gouttiere,
+                        blanche: p.blanche,
+                        empreinte: Some(r.empreinte()),
+                        polices_introuvables: p.polices_introuvables.clone(),
+                    },
+                );
+            }
+            // 2. Les empreintes, sur le projet que la mesure vient de mettre à jour.
+            crate::projet::Generation::Fait {
+                interieur: crate::empreinte::interieur(projet, &l),
+                couverture: crate::empreinte::couverture(projet, &l),
+            }
+        }
+    };
+    if let Some(place) = projet
+        .meta
+        .livraison
+        .livrables
+        .iter_mut()
+        .find(|x| x.cle() == cle)
+    {
+        place.generation = generation;
+    }
+}
+
 /// Génère le package de chaque livrable du livre, chacun dans son répertoire.
 ///
 /// Une seule maquette, N livrables, aucun réglage retouché entre eux : chacun
@@ -1642,29 +1699,18 @@ pub fn packager(atelier: State<Atelier>) -> Result<Generation, String> {
         .collect();
 
     // Ce que la génération vient de mesurer entre dans le projet, gabarit par gabarit,
-    // exactement comme la mesure de `composer` : c'est le même livre, composé par le
-    // même Typst, sous la même clé de rangement. Sans cela le pied restait sur « dos non
-    // composé » pendant que le compte rendu, deux centimètres plus haut, donnait le dos
-    // — deux mesures du même livre, une seule affichée, et c'était celle qui manquait.
+    // exactement comme la mesure de `composer` : c'est le même livre, composé par le même
+    // Typst, sous la même clé de rangement. Et ce qu'elle a produit entre sur le livrable :
+    // ses deux empreintes, ou le message qui dit pourquoi il n'y en a pas.
     //
-    // Le consentement ne s'y oppose pas : il gouverne le déclenchement d'une composition
-    // que personne n'a demandée, pas le droit de retenir celle qu'un clic vient de
-    // réclamer. `retenir_mesure` ignore de lui-même un gabarit que plus aucun livrable
-    // ne porte.
+    // Le consentement ne s'y oppose pas : il gouverne le déclenchement d'une composition que
+    // personne n'a demandée, pas le droit de retenir celle qu'un clic vient de réclamer.
     for (d, r) in livrables.iter().zip(&sorties) {
-        let (Some(p), Ok(resolu)) = (&r.package, catalogue::resout(&d.fabrication)) else {
-            continue;
+        let issue = match (&r.package, &r.erreur) {
+            (Some(p), _) => Ok(p),
+            (None, e) => Err(e.clone().unwrap_or_else(|| "composition échouée.".into())),
         };
-        o.projet.meta.livraison.retenir_mesure(
-            &d.fabrication.cle_gabarit(),
-            Mesure {
-                pages: p.pages,
-                gouttiere: p.gouttiere,
-                blanche: p.blanche,
-                empreinte: Some(resolu.empreinte()),
-                polices_introuvables: p.polices_introuvables.clone(),
-            },
-        );
+        retenir(&mut o.projet, &d.cle(), issue);
     }
 
     Ok(Generation {
@@ -3178,5 +3224,109 @@ dos = { forme = "multiplie", par = 0.0675, plus = 0.6 }
         assert!(p.meta.envois.liste.is_empty());
         assert_eq!(p.meta.envois.couleur, "");
         assert_eq!(p.meta.envois.paraphe, "");
+    }
+
+    /// Un package d'essai : seuls la pagination et les mesures comptent ici.
+    fn package_d_essai(cle: &str, pages: u32) -> package::Package {
+        package::Package {
+            cle: cle.into(),
+            libelle: "Essai".into(),
+            papier: "Crème".into(),
+            pages,
+            gouttiere: 14.0,
+            blanche: false,
+            dos: 16.0,
+            dos_requis: None,
+            fond_perdu: 3.0,
+            planche: (300.0, 200.0),
+            chemins: vec![],
+            vignette: String::new(),
+            polices_introuvables: vec![],
+            avertissements: vec![],
+            interieur_partage: false,
+        }
+    }
+
+    /// **L'ordre décide de la justesse.** L'empreinte de couverture lit la pagination retenue :
+    /// empreindre avant de retenir la mesure la daterait de la composition précédente, et le
+    /// package naîtrait périmé sur son dos à la seconde même. Le test le prouve en faisant bouger
+    /// la pagination — 98 avant, 120 après.
+    #[test]
+    fn la_mesure_est_retenue_avant_que_les_empreintes_ne_soient_prises() {
+        let mut o = ouvert_neuf();
+        let l = o.projet.meta.livraison.livrables[0].clone();
+        let gabarit = l.fabrication.cle_gabarit();
+        o.projet.meta.livraison.retenir_mesure(
+            &gabarit,
+            Mesure {
+                pages: 98,
+                gouttiere: 14.0,
+                blanche: false,
+                empreinte: None,
+                polices_introuvables: vec![],
+            },
+        );
+
+        retenir(&mut o.projet, &l.cle(), Ok(&package_d_essai(&l.cle(), 120)));
+
+        let pose = &o.projet.meta.livraison.livrables[0];
+        assert_eq!(
+            o.projet.meta.livraison.mesure(&gabarit).map(|m| m.pages),
+            Some(120),
+            "la mesure doit être celle que la composition vient de rendre"
+        );
+        assert_eq!(
+            crate::empreinte::etat(&o.projet, pose),
+            crate::empreinte::Etat::AJour,
+            "empreint avant que la mesure ne soit retenue : le package naît périmé"
+        );
+    }
+
+    /// Un échec retenu dit pourquoi, et **ne touche pas la mesure** : le pied « Vu pour » tient
+    /// d'une composition qui, elle, a eu lieu. L'effacer parce qu'une autre a échoué ferait
+    /// disparaître un dos juste devant un message d'erreur.
+    #[test]
+    fn un_echec_retient_son_message_et_laisse_la_mesure() {
+        let mut o = ouvert_neuf();
+        let l = o.projet.meta.livraison.livrables[0].clone();
+        let gabarit = l.fabrication.cle_gabarit();
+        o.projet.meta.livraison.retenir_mesure(
+            &gabarit,
+            Mesure {
+                pages: 98,
+                gouttiere: 14.0,
+                blanche: false,
+                empreinte: None,
+                polices_introuvables: vec![],
+            },
+        );
+
+        retenir(&mut o.projet, &l.cle(), Err("typst absent".into()));
+
+        assert_eq!(
+            o.projet.meta.livraison.livrables[0].generation,
+            crate::projet::Generation::Echec {
+                message: "typst absent".into()
+            }
+        );
+        assert_eq!(
+            o.projet.meta.livraison.mesure(&gabarit).map(|m| m.pages),
+            Some(98),
+            "un échec n'efface pas la mesure d'une composition qui avait réussi"
+        );
+    }
+
+    /// Une clé que le livre ne porte plus — un livrable retiré pendant la composition — n'a
+    /// personne à renseigner, et ne doit pas paniquer. C'est le même parti que `retenir_mesure`,
+    /// qui ignore de lui-même un gabarit que plus aucun livrable ne porte.
+    #[test]
+    fn retenir_sur_une_cle_absente_ne_fait_rien() {
+        let mut o = ouvert_neuf();
+        retenir(
+            &mut o.projet,
+            "pod-inconnu-broche-creme",
+            Ok(&package_d_essai("x", 100)),
+        );
+        assert!(o.projet.meta.livraison.livrables[0].generation.est_jamais());
     }
 }
