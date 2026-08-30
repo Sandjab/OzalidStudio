@@ -29,10 +29,7 @@ fn main() -> Result<(), String> {
     let typst =
         Typst::new("typst").avec_polices(Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts"));
 
-    for triplet in gabarits.chunks_exact(3) {
-        let [pod, format, reliure] = triplet else {
-            unreachable!("chunks_exact(3)")
-        };
+    for [pod, format, reliure] in gabarits.as_chunks::<3>().0 {
         let papier = catalogue::pod(pod)
             .and_then(|p| p.papiers.first())
             .ok_or_else(|| format!("POD inconnu : {pod}"))?
