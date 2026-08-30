@@ -68,6 +68,9 @@ const invoke = async (cmd) => {
   // Une entrée peut déclencher une commande que ce faux ignore : l'action échoue,
   // mais elle échoue *nommée* — ce n'est pas « entrée de menu inconnue », et c'est
   // tout ce que la garde vérifie.
+  // Les vignettes de planche, relues du disque à chaque affichage de la liste :
+  // un projet qui n'a rien généré en rend une table vide, et c'est le cas ici.
+  if (cmd === 'livrable_vignettes') return {};
   throw new Error(`commande inattendue : ${cmd}`);
 };
 

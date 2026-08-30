@@ -90,142 +90,268 @@ function majElagues(vue) {
 }
 
 /**
- * La liste des livrables du livre, et de quoi en ajouter un.
+ * Ce que la composition a vu, par clé de livrable, pour la durée de la session.
  *
- * Une ligne par livrable : ses trois réglages — reliure, finition, papier —, le format
- * de son gabarit, et les relevés que les imprimeurs à gabarit exigent — dos et fond
- * perdu, qu'eux seuls ne publient pas. Plus de cases à cocher : être dans la liste *est*
- * le fait d'être livrable, et rien ne le désigne deux fois.
+ * Le `.ozalid` retient la mesure et les deux empreintes, jamais le dos rogné, les
+ * avertissements ni le partage d'intérieur : ceux-là ne se reconstruisent pas sans
+ * composer. Ils vivent donc ici, et une ligne rouverte demain se tait là-dessus plutôt que
+ * d'inventer un silence rassurant sur un fichier qu'elle n'a pas vu naître.
+ */
+let packagesDeLaSession = {};
+
+/** Range les comptes rendus d'une composition, puis réaffiche les lignes qui les portent. */
+function retenirPackagesDeLaSession(resultats) {
+  for (const r of resultats ?? []) packagesDeLaSession[r.cle] = r;
+  afficherLivrables();
+}
+
+/**
+ * Les livrables du livre, groupés par imprimeur.
  *
- * Les trois réglages se construisent sur l'**arbre** du catalogue, seul à savoir ce que
- * ce POD offre ; la table plate ne sert plus qu'au format et au fond perdu, qu'elle
- * seule sait dire.
+ * Le groupe porte l'imprimeur, la ligne ne le répète plus : trois livrables du même POD ne
+ * diffèrent plus à l'écran que par ce qui les distingue vraiment. Les groupes se rangent
+ * dans l'ordre du premier ajout, les lignes dans leur groupe de même — un ordre stable,
+ * qui ne se réarrange pas sous la main, parce qu'un ordre qui bouge fait perdre la ligne
+ * qu'on visait entre deux clics.
  *
- * Chaque identifiant de DOM prend la clé du **livrable**, à quatre axes : deux
- * livrables du même gabarit coexistent, et les nommer par le gabarit leur donnerait le
- * même `id`. Toutes les clés du catalogue sont des noms, la clé en est donc un aussi.
+ * Les groupes ne se replient pas : un imprimeur porte deux ou trois livrables, pas trente,
+ * et un pli serait un état de plus à tenir pour un gain qu'on ne mesure pas.
  */
 function afficherLivrables() {
   const box = $('livrables');
   box.replaceChildren();
-  const declares = projet.livraison.livrables;
-  // Périmé, ou seulement pas encore mesuré : la nuance se tranche pour toutes les lignes
-  // à la fois, parce qu'une modification qui repagine efface **toutes** les mesures d'un
-  // coup (`Livraison::oublier_mesures`). Ligne à ligne, le test du pied — le livre a été
-  // composé et cette ligne n'a pas de mesure — dirait rouge sur un gabarit qu'on vient
-  // d'ajouter à un livre déjà composé, et sur tous ceux que la dernière composition n'a
-  // pas visés : composer ne mesure que le gabarit courant. Ceux-là n'ont rien perdu.
-  const perimees = projet.livraison.deja_compose && declares.every((x) => !x.compose);
-  for (const d of declares) {
-    const p = providers.find((pr) => pr.cle === d.gabarit);
-    const pod = pods.find((x) => x.cle === d.pod);
-    const ligne = h('div', undefined, 'livrable');
-    let releve;
-    let mesure;
-    ligne.append(h('span', libelleProvider(d.gabarit), 'nom'));
-
-    if (pod) {
-      // Les reliures du POD, la non outillée grisée : le Rust la refuse déjà en citant
-      // sa raison (`catalogue::resout`), et l'écran ne fait que rendre ce refus lisible
-      // avant le clic. Le fichier tranche — une reliure porte une géométrie **ou** une
-      // raison de ne pas en avoir, jamais les deux.
-      //
-      // Le grisé ne se glose pas. La raison du fichier disait pourquoi une option est
-      // inerte, mais elle s'écrivait sous le livrable, là où le CSS pose les
-      // caractéristiques de celui-ci, et pour une option qu'on ne voit qu'en ouvrant le
-      // menu : sous un livrable broché, on lisait une phrase sur la couverture rigide.
-      // La réserve est au README, « Limites connues » — c'est une limite de
-      // l'application, pas un fait du livrable.
-      const reliure = h('select');
-      reliure.id = `liv-reliure-${d.cle}`;
-      for (const r of pod.reliures) {
-        const o = new Option(r.nom, r.cle);
-        o.disabled = r.non_outille !== null;
-        reliure.append(o);
-      }
-      reliure.value = d.reliure;
-      // Éteint seulement quand le POD n'a **qu'une** reliure, toutes confondues : un
-      // select éteint ne s'ouvre pas, et l'éteindre dès qu'il n'y a qu'une composable
-      // cacherait justement le grisé que la spec § 6 demande de montrer — c'est le cas
-      // de BoD, le seul POD fourni qui en porte un.
-      reliure.disabled = pod.reliures.length < 2;
-      reliure.addEventListener('change', () => reglerLivrable(d));
-      ligne.append(reliure);
-
-      // La finition ne paraît que là où il y en a : un contrôle vide se lit comme un
-      // choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Le contrôle
-      // s'allume donc chez BoD, seul POD fourni à en déclarer — trois pelliculages —, et
-      // reste absent chez les cinq autres.
-      if (pod.finitions.length) {
-        const finition = h('select');
-        finition.id = `liv-finition-${d.cle}`;
-        // Le vide en tête : aucune finition est le cas courant, et il doit rester
-        // choisissable après en avoir pris une.
-        finition.append(new Option('—', ''));
-        for (const f of pod.finitions) finition.append(new Option(f.nom, f.cle));
-        finition.value = d.finition ?? '';
-        finition.addEventListener('change', () => reglerLivrable(d));
-        ligne.append(finition);
-      }
-
-      const papier = h('select');
-      papier.id = `liv-papier-${d.cle}`;
-      for (const pa of pod.papiers) papier.append(new Option(pa.libelle, pa.cle));
-      papier.value = d.papier;
-      papier.disabled = pod.papiers.length < 2;
-      papier.addEventListener('change', () => reglerLivrable(d));
-      ligne.append(papier);
-
-      // Fabriqué ici, avec le POD qui le motive, mais posé après le bouton : le relevé
-      // prend une ligne à lui, et l'insérer avant renverrait le format et le bouton
-      // « Retirer » au rang suivant, décalés de ceux des voisins. Ordre du balisage et
-      // ordre de lecture restent les mêmes — c'est le CSS qui met le relevé à la ligne.
-      // Le dos se réclame d'après **le papier retenu**, jamais d'après le POD : un POD
-      // peut publier une formule pour l'un de ses papiers et pas pour l'autre.
-      const dosPublie = pod.papiers.find((pa) => pa.cle === d.papier)?.dos_publie ?? false;
-      if (!dosPublie || p?.fond_perdu === null) {
-        releve = h('span', undefined, 'releve');
-        const champ = (quoi, libelle, valeur) =>
-          releve.append(champReleve(`liv-${quoi}-${d.cle}`, libelle, valeur, d));
-        if (!dosPublie) champ('dos', 'Dos relevé (mm)', d.dos_mm);
-        if (p?.fond_perdu === null) champ('fp', 'FP (mm)', d.fond_perdu_mm);
-      }
-      mesure = noteMesure(d, dosPublie, perimees);
-      if (p) ligne.append(h('span', noteFormat(p), 'note'));
-    }
-
-    const retirer = h('button', 'Retirer');
-    retirer.type = 'button';
-    // Ce qui défait, dans une ligne où le noir appartient à « Générer les packages ».
-    retirer.className = 'nu';
-    retirer.id = `liv-retirer-${d.cle}`;
-    // Le dernier ne se retire pas : le Rust refuse, mais un bouton qui ne peut
-    // qu'échouer vaut mieux éteint que refusé.
-    retirer.disabled = declares.length < 2;
-    // Retirer emporte la ligne et les relevés qu'on y a saisis, sans reprise, au milieu
-    // de trois listes qu'on manipule couramment : le premier clic arme, le second
-    // retire. Même dispositif que l'effacement d'une maquette, pour la même raison.
-    retirer.addEventListener('click', () => {
-      if (armeSur(retirer)) {
-        desarmerGeste();
-        return tente(async () =>
-          afficherProjet(await invoke('livrable_retirer', { cle: d.cle })));
-      }
-      armerGeste(retirer, () => {
-        retirer.textContent = 'Retirer';
-        retirer.className = 'nu';
-      });
-      retirer.textContent = 'Confirmer';
-      retirer.className = 'danger';
-      return undefined;
-    });
-    ligne.append(retirer);
-    if (releve) ligne.append(releve);
-    if (mesure) ligne.append(mesure);
-    box.append(ligne);
+  // L'ordre du premier ajout, sans tri : `Map` garde l'ordre d'insertion, et le premier
+  // livrable d'un POD est celui qui pose son groupe.
+  const groupes = new Map();
+  for (const d of projet.livraison.livrables) {
+    if (!groupes.has(d.pod)) groupes.set(d.pod, []);
+    groupes.get(d.pod).push(d);
+  }
+  for (const [pod, lignes] of groupes) {
+    const bloc = h('div', undefined, 'groupe');
+    bloc.id = `groupe-${pod}`;
+    bloc.append(h('h3', pods.find((p) => p.cle === pod)?.nom ?? pod));
+    for (const d of lignes) bloc.append(ligneLivrable(d));
+    box.append(bloc);
   }
 
   afficherFormulaire();
+  chargerVignettes();
+}
+
+/**
+ * Une ligne : ce qu'on sait de ce livrable, et les gestes qu'on peut lui faire.
+ *
+ * Deux niveaux de remplissage, et c'est voulu. Ce que le modèle retient — identité, pages,
+ * gouttière, dos, état — se lit toujours, y compris à la réouverture d'un projet fermé la
+ * veille. Ce que seule la composition a vu — dos rogné, avertissements, polices de repli —
+ * ne paraît que dans la session qui a généré.
+ */
+function ligneLivrable(d) {
+  const ligne = h('div', undefined, 'livrable');
+  ligne.id = `liv-${d.cle}`;
+  const p = providers.find((pr) => pr.cle === d.gabarit);
+  const pod = pods.find((x) => x.cle === d.pod);
+  const dosPublie = pod?.papiers.find((pa) => pa.cle === d.papier)?.dos_publie ?? false;
+
+  const infos = h('div', undefined, 'infos');
+  infos.append(h('span', libelleDansGroupe(d), 'nom'));
+  if (p) infos.append(h('p', noteFormat(p), 'note'));
+  infos.append(noteMesure(d, dosPublie), noteEtat(d));
+
+  const r = packagesDeLaSession[d.cle];
+  if (r?.package) {
+    const q = r.package;
+    const dl = h('dl');
+    for (const [k, v] of [
+      ['Pages', `${q.pages}${q.blanche ? ' (blanche de parité)' : ''}`],
+      ['Papier', q.papier],
+      // Après le papier — l'autre chose qu'on choisit sans qu'un octet du PDF change, et
+      // qui se commande quand même. Elle ne paraît que là où il y en a une.
+      ...(r.finition ? [['Finition', r.finition]] : []),
+      ['Gouttière', `${nb(q.gouttiere, 1)} mm`],
+      ['Dos', `${nb(q.dos)} mm`],
+      ['Planche', `${nb(q.planche[0])} × ${nb(q.planche[1])} mm, `
+        + `FP ${nb(q.fond_perdu, 3)} mm`],
+    ]) dl.append(h('dt', k), h('dd', v));
+    infos.append(dl);
+    // Le dos est composé sur une zone qui rogne ce qui dépasse, sans rien dire : un titre
+    // coupé au pli ne se verrait qu'à l'impression.
+    if (q.dos_requis !== null) {
+      infos.append(h('p', `Dos de ${nb(q.dos)} mm pour un texte qui en réclame `
+        + `${nb(q.dos_requis)} mm : il sera rogné au pli. Réduire le corps du dos, ou `
+        + 'y éteindre un élément.', 'note alerte'));
+    }
+    // Une police que Typst a remplacée sans échouer : ce PDF-là part chez l'imprimeur.
+    if (q.polices_introuvables.length) {
+      infos.append(h('p', 'Police introuvable, composé dans une écriture de repli : '
+        + `${q.polices_introuvables.join(', ')}. Le PDF ne suit pas la maquette.`,
+      'note alerte'));
+    }
+    // En gris et non en rouge, à la différence des deux alertes ci-dessus : celles-là
+    // disent qu'un PDF ne suit pas la maquette, celles-ci qu'un tirage juste ne plaira
+    // peut-être pas. C'est un jugement d'auteur, et le rouge perdrait son sens à couvrir
+    // les deux. Les phrases viennent du Rust telles quelles : la fiche de téléversement
+    // les recopie, et un dossier relu trois mois plus tard doit dire ce que l'écran disait.
+    for (const a of q.avertissements) infos.append(h('p', a, 'note'));
+    for (const c of cheminsGroupes(q.chemins)) infos.append(h('p', c, 'chemin'));
+  } else if (r?.erreur) {
+    infos.append(h('p', r.erreur, 'note alerte'));
+  }
+
+  // La planche telle qu'elle part à l'impression, avec le dos mesuré de ce livrable-là :
+  // c'est ici que « est-ce que ça tient » se vérifie, sur du vrai. La source arrive du
+  // compte rendu de la session ou, à la réouverture, de `chargerVignettes`.
+  const img = h('img', undefined, 'vignette');
+  img.id = `liv-vignette-${d.cle}`;
+  img.alt = `Planche composée pour ${libelleDansGroupe(d)}`;
+  if (r?.vignette) img.src = r.vignette;
+
+  ligne.append(infos, img, gestesLivrable(d));
+  return ligne;
+}
+
+/**
+ * Le livrable en cours de modification, ou `null` quand le formulaire ajoute.
+ *
+ * C'est ce qui donne au bouton son second verbe. Une modification abandonnée — on clique
+ * Modifier puis on change d'avis — se défait en cliquant Dupliquer, ou en modifiant une
+ * autre ligne : le formulaire n'a qu'un état, et il est toujours celui du dernier geste.
+ */
+let remplace = null;
+
+/**
+ * Les quatre verbes d'un livrable, dans l'ordre du geste : on modifie plus souvent qu'on ne
+ * duplique, on duplique plus souvent qu'on ne régénère, et on supprime en dernier. Ce qui
+ * défait est à droite, comme le retrait l'était.
+ */
+function gestesLivrable(d) {
+  const bouton = (quoi, texte, ecoute) => {
+    const b = h('button', texte);
+    b.type = 'button';
+    b.className = 'nu';
+    b.id = `liv-${quoi}-${d.cle}`;
+    b.addEventListener('click', ecoute);
+    return b;
+  };
+  const gestes = h('div', undefined, 'gestes');
+  // Supprimer emporte la ligne, son package et les relevés qu'on y a saisis, sans reprise,
+  // au milieu de trois gestes qu'on fait couramment : le premier clic arme, le second
+  // supprime. Même dispositif que le retrait d'avant le lot 3 et que l'effacement d'une
+  // maquette — et la raison s'est aggravée, puisque le geste emporte maintenant les
+  // fichiers avec la ligne.
+  const supprimer = bouton('supprimer', '⌫ Supprimer', () => {
+    if (armeSur(supprimer)) {
+      desarmerGeste();
+      return supprimerLivrable(d);
+    }
+    armerGeste(supprimer, () => {
+      supprimer.textContent = '⌫ Supprimer';
+      supprimer.className = 'nu';
+    });
+    supprimer.textContent = 'Confirmer';
+    supprimer.className = 'danger';
+    return undefined;
+  });
+  // Le dernier ne se supprime pas : c'est lui qui donne le format sous lequel on regarde
+  // la couverture. Le Rust refuse, mais un bouton qui ne peut qu'échouer vaut mieux éteint
+  // que refusé.
+  supprimer.disabled = projet.livraison.livrables.length < 2;
+  gestes.append(
+    bouton('modifier', '✎ Modifier', () => ouvrirModification(d)),
+    bouton('dupliquer', '⧉ Dupliquer', () => ouvrirDuplication(d)),
+    bouton('regenerer', '⟳ Régénérer', () => regenererLivrable(d)),
+    supprimer,
+  );
+  return gestes;
+}
+
+/** Modifier : le formulaire reprend cette ligne, et son verbe devient Remplacer. */
+function ouvrirModification(d) {
+  remplace = d.cle;
+  remplirFormulaire(d);
+  $('btLivrableGenerer').textContent = 'Remplacer';
+}
+
+/** Dupliquer : les mêmes axes, mais c'est un ajout — le geste qui compare deux papiers. */
+function ouvrirDuplication(d) {
+  remplace = null;
+  remplirFormulaire(d);
+  $('btLivrableGenerer').textContent = 'Générer';
+}
+
+/**
+ * Remplit le formulaire avec les axes d'un livrable existant.
+ *
+ * L'ordre n'est pas négociable : le POD d'abord, puis `afficherAxesDuPod`, **puis** les
+ * quatre autres valeurs — les listes de format, reliure, papier et pelliculage n'existent
+ * qu'après, et poser une valeur dans une liste vide la perd sans rien dire.
+ *
+ * Les deux relevés sont repris, et c'est la raison d'être de Modifier : depuis que la ligne
+ * ne porte plus de contrôle, c'est le seul chemin par lequel un dos relevé se corrige. Les
+ * oublier ferait de la correction d'un chiffre une ressaisie complète.
+ */
+function remplirFormulaire(d) {
+  $('inAjoutPod').value = d.pod;
+  afficherAxesDuPod();
+  $('inAjoutFormat').value = d.format;
+  $('inAjoutReliure').value = d.reliure;
+  $('inAjoutPapier').value = d.papier;
+  if ($('inAjoutFinition')) $('inAjoutFinition').value = d.finition ?? '';
+  // Les relevés dépendent du papier, qui vient d'être posé : les champs n'existent qu'une
+  // fois `afficherRelevesDuFormulaire` rappelée avec ce papier-là.
+  afficherRelevesDuFormulaire(pods.find((x) => x.cle === d.pod));
+  if ($('inAjoutDos')) $('inAjoutDos').value = d.dos_mm ?? '';
+  if ($('inAjoutFp')) $('inAjoutFp').value = d.fond_perdu_mm ?? '';
+}
+
+/**
+ * Où en est le package de cette ligne, en une phrase.
+ *
+ * La péremption dit **ce qui** a bougé : « périmé » tout court obligerait à régénérer pour
+ * apprendre si c'est le texte ou la maquette, et les deux ne coûtent pas la même chose à
+ * recomposer. L'échec dit sa raison, pour la même raison — l'apprendre autrement
+ * demanderait de refaire la composition qui a échoué.
+ *
+ * Jamais généré n'est pas une alerte : ce livrable n'a rien perdu, on ne lui a rien demandé.
+ */
+function noteEtat(d) {
+  const p = h('p', undefined, 'note');
+  p.id = `liv-etat-${d.cle}`;
+  const e = d.etat ?? { etat: 'jamais' };
+  if (e.etat === 'jamais') {
+    p.textContent = 'jamais généré';
+  } else if (e.etat === 'ajour') {
+    p.textContent = 'à jour';
+  } else if (e.etat === 'echec') {
+    p.className = 'note alerte';
+    p.textContent = `la dernière génération a échoué : ${e.message}`;
+  } else {
+    p.className = 'note alerte';
+    const quoi = [
+      ...(e.interieur ? ['le texte'] : []),
+      ...(e.couverture ? ['la couverture'] : []),
+    ].join(' et ');
+    p.textContent = `${quoi} a changé depuis cette génération`;
+  }
+  return p;
+}
+
+/**
+ * Les vignettes laissées sur le disque par les générations d'avant.
+ *
+ * Hors de la vue et après le montage des lignes : `livraison_vue` est rendue par toute
+ * commande qui écrit, et un base64 par livrable à chaque frappe se paierait pour rien. La
+ * ligne se monte sans, et la vignette s'y pose quand elle arrive.
+ */
+async function chargerVignettes() {
+  const table = await invoke('livrable_vignettes');
+  for (const [cle, donnee] of Object.entries(table)) {
+    const img = $(`liv-vignette-${cle}`);
+    // Seulement si la session n'en a pas de plus fraîche : celle qu'on vient de composer
+    // est celle du fichier qui vient d'être écrit.
+    if (img && !img.src) img.src = donnee;
+  }
 }
 
 /**
@@ -372,21 +498,87 @@ function lireFormulaire() {
  * L'attente garde le dispositif de `packager` — bouton éteint et ligne d'état — parce que
  * le temps de composition ne disparaît pas, il se répartit sur chaque ajout (spec § 8).
  */
-async function genererLivrable() {
-  const bt = $('btLivrableGenerer');
+async function pendantQueCaCompose(bt, mot, geste) {
   bt.disabled = true;
   $('etatLivraison').className = 'etat';
-  $('etatLivraison').textContent = 'composition du package…';
+  $('etatLivraison').textContent = mot;
   try {
-    const r = await invoke('livrable_generer', { livrable: lireFormulaire() });
+    const r = await geste();
     afficherProjet(r.projet);
+    retenirPackagesDeLaSession(r.packages);
     $('etatLivraison').textContent = '';
+    return r;
   } catch (e) {
     $('etatLivraison').textContent = String(e);
     $('etatLivraison').className = 'etat erreur';
+    return null;
   } finally {
     bt.disabled = false;
   }
+}
+
+/**
+ * Générer, ou Remplacer quand une ligne est en cours de modification.
+ *
+ * Un seul bouton pour les deux verbes, et son libellé dit lequel : le formulaire est le
+ * même, et en ouvrir un second pour la modification obligerait à tenir deux jeux de
+ * contrôles d'accord.
+ */
+async function genererLivrable() {
+  const cle = remplace;
+  const r = await pendantQueCaCompose(
+    $('btLivrableGenerer'),
+    'composition du package…',
+    () => (cle === null
+      ? invoke('livrable_generer', { livrable: lireFormulaire() })
+      : invoke('livrable_remplacer', { cle, livrable: lireFormulaire() }))
+  );
+  if (r === null) return;
+  remplace = null;
+  $('btLivrableGenerer').textContent = 'Générer';
+  // Ce que l'effacement de l'ancien répertoire n'a pas pu faire : la composition a réussi
+  // et le projet porte le livrable neuf, mais un répertoire est resté. Sans ce mot, il
+  // survit en silence — et l'on retrouve deux répertoires pour un livrable, sans savoir
+  // lequel est parti chez l'imprimeur.
+  if (r.nettoyage_echoue) {
+    $('etatLivraison').textContent = r.nettoyage_echoue;
+    $('etatLivraison').className = 'etat erreur';
+  }
+}
+
+/**
+ * Régénérer : recompose sans toucher aux axes.
+ *
+ * Peut légitimement **copier** l'intérieur d'un livrable du même gabarit déjà à jour au
+ * lieu de le recomposer : c'est ce qui rend la comparaison de deux papiers gratuite. Seul
+ * « Tout regénérer » recompose toujours.
+ */
+function regenererLivrable(d) {
+  return pendantQueCaCompose(
+    $(`liv-regenerer-${d.cle}`),
+    'recomposition du package…',
+    () => invoke('livrable_regenerer', { cle: d.cle })
+  );
+}
+
+/**
+ * Supprimer : efface les fichiers connus, retire le répertoire s'il est vide, retire le
+ * livrable.
+ *
+ * Ce qui restait et que l'application n'a pas écrit **survit et se nomme** : le répertoire
+ * reste pour lui. Le taire laisserait croire à un effacement complet, et l'on chercherait
+ * six mois plus tard pourquoi le répertoire d'un livrable disparu traîne encore.
+ */
+async function supprimerLivrable(d) {
+  await tente(async () => {
+    const r = await invoke('livrable_supprimer', { cle: d.cle });
+    afficherProjet(r.projet);
+    if (r.nettoyage.etrangers.length) {
+      $('etatLivraison').className = 'etat';
+      $('etatLivraison').textContent = 'Le répertoire survit pour ce que l\'application '
+        + `n'a pas écrit : ${r.nettoyage.etrangers.join(', ')}.`;
+    }
+  });
 }
 
 /**
@@ -401,14 +593,14 @@ async function genererLivrable() {
  * gouttière au dixième, dos au centième. Le pied fait l'inverse — un écart qui lui
  * appartient, et que ce lot ne corrige pas.
  */
-function noteMesure(d, dosPublie, perimees) {
+function noteMesure(d, dosPublie) {
   const ligne = h('p', undefined, 'note mesure');
   ligne.id = `liv-mesure-${d.cle}`;
   if (!d.compose) {
-    // Une mesure périmée réclame une recomposition, une mesure jamais faite ne réclame
-    // rien : c'est toute la différence, et c'est pour elle que l'une est rouge.
-    ligne.textContent = perimees ? 'mesure périmée' : 'non composé';
-    if (perimees) ligne.className = 'note alerte mesure';
+    // Plus de nuance à faire ici depuis le lot 3 : « périmé » se dit sur la ligne d'état,
+    // livrable par livrable et non pour toute la liste à la fois. Cette note-ci ne parle
+    // plus que de la mesure, qu'on a ou qu'on n'a pas.
+    ligne.textContent = 'non composé';
     return ligne;
   }
   // Le dos calculé là où le papier publie sa formule ; ailleurs le relevé fait sur le
@@ -443,7 +635,7 @@ function noteFormat(p) {
  * Vide au départ, jamais prérempli : un chiffre par défaut se lirait comme une mesure,
  * et une planche composée sur un dos inventé ne se voit qu'au massicot.
  */
-function champReleve(id, libelle, valeur, livrable) {
+function champReleve(id, libelle, valeur) {
   const l = h('label', undefined, 'petit');
   const i = h('input');
   i.type = 'number';
@@ -451,40 +643,10 @@ function champReleve(id, libelle, valeur, livrable) {
   i.min = 0;
   i.step = 0.1;
   i.value = valeur === null || valeur === undefined ? '' : String(valeur);
-  i.addEventListener('change', () => reglerLivrable(livrable));
+  // Aucun écouteur : le relevé part avec le reste du formulaire, au clic sur le verbe.
+  // Il n'y a plus de commande d'écriture directe à qui l'envoyer.
   l.append(h('span', libelle), i);
   return l;
-}
-
-/**
- * Relit la ligne d'un livrable et la renvoie au projet.
- *
- * Le livrable entier voyage, avec les trois axes de son gabarit : régler son papier
- * change son identité, et `cle` dit lequel il était pour que `courant` puisse suivre.
- */
-async function reglerLivrable(d) {
-  // Un champ vide est une absence de relevé, pas un zéro : composer sur un dos nul
-  // produirait une planche fausse au lieu d'un refus.
-  const lu = (id) => {
-    const v = $(id)?.value.trim();
-    return v ? Number(v) : null;
-  };
-  // Un contrôle absent laisse la valeur qu'il portait : la finition n'a pas de contrôle
-  // chez un POD qui n'en déclare aucune, et la ligne ne doit pas l'effacer pour autant.
-  const choix = (id, defaut) => $(id)?.value ?? defaut;
-  await tente(async () => afficherProjet(await invoke('livrable_regler', {
-    cle: d.cle,
-    livrable: {
-      pod: d.pod,
-      format: d.format,
-      reliure: choix(`liv-reliure-${d.cle}`, d.reliure),
-      papier: choix(`liv-papier-${d.cle}`, d.papier),
-      // La chaîne vide du choix « — » est une absence, pas une finition nommée.
-      finition: choix(`liv-finition-${d.cle}`, d.finition ?? '') || null,
-      dos_mm: lu(`liv-dos-${d.cle}`),
-      fond_perdu_mm: lu(`liv-fp-${d.cle}`),
-    },
-  })));
 }
 
 /**

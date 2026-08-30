@@ -598,6 +598,30 @@ function libelleProvider(cle) {
 }
 
 /**
+ * Le libellé d'un livrable **dans son groupe** : tout ce qui le distingue, sauf l'imprimeur.
+ *
+ * Le groupe porte l'imprimeur (spec § 5), la ligne ne le répète pas. C'est pourquoi ce
+ * libellé ne peut pas être `libelleLivrable` : celui-là part de `providers`, dont le
+ * `libelle` porte déjà « POD — format », et n'inclut la reliure que chez un POD qui en
+ * offre plusieurs de composables — une règle juste pour le pied, où rien ne dit
+ * l'imprimeur, et fausse ici, où le groupe le dit déjà.
+ *
+ * Deux libellés, deux contextes, chacun motivé : les fondre en un donnerait un libellé qui
+ * ment dans l'un des deux.
+ *
+ * Le format vient de l'arbre et non de la table plate : celle-ci ne sait dire que
+ * « POD — format », et il faudrait le recouper pour en retirer le nom de l'imprimeur.
+ */
+function libelleDansGroupe(d) {
+  const pod = pods.find((x) => x.cle === d.pod);
+  const format = pod?.formats.find((f) => f.cle === d.format)?.nom ?? d.format;
+  const reliure = pod?.reliures.find((r) => r.cle === d.reliure)?.nom ?? d.reliure;
+  const papier = pod?.papiers.find((x) => x.cle === d.papier)?.libelle ?? d.papier;
+  const finition = pod?.finitions.find((f) => f.cle === d.finition)?.nom;
+  return [format, reliure, ...(finition ? [finition] : []), papier].join(' — ');
+}
+
+/**
  * Le libellé d'un livrable : son gabarit, son papier, et sa reliure quand elle distingue.
  *
  * Le pied et les comptes rendus de package ne portent aucun contrôle : ce qui sépare deux

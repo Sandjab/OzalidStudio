@@ -154,6 +154,9 @@ function faux(providers, sur = {}) {
     // L'accès au modèle de diffusion se lit au démarrage : il appartient à la
     // machine, et l'écran le montre avant qu'aucun projet ne soit ouvert.
     if (cmd === 'diffusion_lire') return { url: '', modele: '', cle_posee: false };
+    // Les vignettes de planche, relues du disque à chaque affichage de la liste :
+    // un projet qui n'a rien généré en rend une table vide, et c'est le cas ici.
+    if (cmd === 'livrable_vignettes') return {};
     throw new Error(`commande inattendue : ${cmd}`);
   };
 }
@@ -208,14 +211,22 @@ async function ouvre(p, sur = {}) {
 }
 
 test('le choix du papier n\'est offert que quand il y en a plusieurs', async () => {
+  // Le papier se choisit dans le formulaire depuis le lot 3, la ligne ne porte plus de
+  // contrôle. La règle n'a pas bougé : un select éteint ne s'ouvre pas, et l'offrir pour
+  // une seule valeur donnerait à croire qu'il y a un choix à faire.
   const { els } = await ouvre(LULU);
-  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').disabled, true);
-  assert.strictEqual(els.get('liv-papier-lulu-108x175-broche-standard').children.length, 1);
+  assert.strictEqual(els.get('inAjoutPapier').disabled, true);
+  assert.strictEqual(els.get('inAjoutPapier').children.length, 1);
 
+  // Le formulaire se pose sur le premier POD du catalogue, pas sur le livrable du projet :
+  // il sert à en déclarer un neuf, chez n'importe quel imprimeur. Il faut donc choisir KDP
+  // pour voir ses deux papiers.
   const { els: chezKdp } = await ouvre(KDP);
-  assert.strictEqual(chezKdp.get('liv-papier-kdp-6x9-broche-creme').disabled, false);
+  chezKdp.get('inAjoutPod').value = 'kdp';
+  await chezKdp.get('inAjoutPod').declenche('change');
+  assert.strictEqual(chezKdp.get('inAjoutPapier').disabled, false);
   assert.deepStrictEqual(
-    [...chezKdp.get('liv-papier-kdp-6x9-broche-creme').children].map((o) => o.value),
+    [...chezKdp.get('inAjoutPapier').children].map((o) => o.value),
     ['creme', 'blanc']
   );
 });

@@ -1315,51 +1315,63 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 .livrables { margin-top: .8rem; }
 
-/* Le choix de ce qu'on ajoute est aussi large que son libellé, pas que la fenêtre :
-   étiré sur toute la ligne, il se lisait comme le sujet de l'étape au lieu du geste
-   d'ajout qu'il est. Les deux listes de la cascade suivent la même règle. */
-#inAjoutPod,
-#inAjoutFormat { width: auto; max-width: 24rem; }
+/* Le choix de ce qu'on déclare est aussi large que son libellé, pas que la fenêtre :
+   étiré sur toute la ligne, il se lirait comme le sujet de l'étape au lieu du geste
+   qu'il est. Les cinq listes du formulaire suivent la même règle, et se brident à 13 rem
+   comme les contrôles de ligne le faisaient : « Broché — dos carré collé » mangerait
+   sinon le tiers de la ligne à lui seul. */
+.formulaire select { width: auto; flex: 0 0 auto; max-width: 13rem; }
 
-/* Les relevés passent sous la ligne plutôt que de la pousser hors de l'écran : chez
-   un imprimeur à gabarit, la ligne réclame plus de mille pixels, et un ascenseur
-   horizontal cacherait justement les champs qu'il faut remplir. */
-.livrable {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .8rem;
-  padding: .4rem 0;
+/* Un groupe : l'imprimeur en tête, ses livrables dessous. Le nom du POD ne se répète
+   plus sur chaque ligne — c'est ce qui règle la répétition que trois livrables d'un même
+   imprimeur donnaient à lire. Les groupes ne se replient pas : un imprimeur en porte deux
+   ou trois, pas trente. */
+.groupe + .groupe { margin-top: 1.6rem; }
+.groupe h3 {
+  margin: 0 0 .4rem;
+  font-size: .95rem;
+  color: var(--gris);
   border-bottom: 1px solid var(--trait);
+  padding-bottom: .3rem;
+}
+
+/* Une ligne de livrable est un compte rendu depuis le lot 3, plus un formulaire : ses
+   chiffres et ses fichiers à gauche, sa planche à droite, ses quatre verbes dessous.
+   Même grille que l'ancien compte rendu de package, et pour la même raison — empilés,
+   les trois faisaient d'un seul livrable la hauteur entière de la bande.
+   La vignette est en `auto` et non en `1fr` : c'est elle qui a une largeur propre, et
+   les chiffres prennent ce qui reste. */
+.livrable {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .2rem 1.5rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--trait);
+  align-items: start;
 }
 .livrable:last-child { border-bottom: 0; }
-/* Le nom cède deux rems depuis que la ligne porte trois réglages : à 14 rem de plancher,
-   il poussait la note hors du rang à lui seul. « Amazon KDP — 6 × 9 po », le plus long
-   des quatorze, en réclame onze. */
-.livrable .nom { flex: 1 1 12rem; min-width: 12rem; }
-.livrable label { margin: 0; }
-/* Les listes ne se compriment pas : un select réduit à sa flèche ne se lit plus, et
-   c'est son libellé qui dit ce qu'on choisit. Bridées à 13 rem parce que « Broché —
-   dos carré collé » mangerait sinon le tiers de la ligne à lui seul. Ce qui ne tient
-   plus se prend sur la note, dont la base de 14 rem la fait passer au rang suivant
-   avant que quoi que ce soit d'autre ne se comprime. */
-.livrable select { width: auto; flex: 0 0 auto; max-width: 13rem; }
-/* Le format se réserve une base et non sa largeur pleine : un flex replie avant de
-   comprimer, et la note de l'imprimeur à gabarit — la plus longue des trois, elle
-   nomme le fond perdu au lieu de le chiffrer — emportait à elle seule le bouton
-   « Retirer » au rang suivant, où il ne finissait plus sa ligne comme celui des
-   voisins. Avec une base de 14 rem le rang tient, et le peu qui manque se prend sur la
-   note, qui passe à deux lignes plutôt que de casser la ligne du livrable.
-   Fer à droite pour la même raison qu'elle grandit : collée au bouton, la mesure se
-   lit en colonne d'un livrable à l'autre au lieu de flotter où le nom la laisse. */
-.livrable .note { margin: 0; flex: 1 1 14rem; min-width: 0; text-align: right; }
-/* Ce que la composition a mesuré prend un rang à soi, fer à gauche, pour la même raison
-   que la raison d'une reliure non outillée : sans le `flex-basis` entier, ses trois
-   chiffres iraient se serrer contre la note de format, à droite, où ils se liraient
-   comme une suite des caractéristiques du gabarit — alors qu'ils viennent d'une
-   composition, et qu'une modification peut les effacer. Après `.livrable .note` dans le
-   fichier, à spécificité égale : c'est cet ordre-là qui reprend l'alignement. */
-.livrable .mesure { flex-basis: 100%; text-align: left; }
+/* La vignette tient les deux rangs : les gestes passent sous les chiffres, à gauche,
+   et non sous la planche — c'est la ligne qu'on actionne, pas l'image. */
+.livrable .vignette { grid-row: 1 / 3; }
+.livrable .infos { min-width: 0; }
+.livrable .nom { font-weight: 600; }
+.livrable .note { margin: .1rem 0 0; }
+.livrable .chemin { margin: .1rem 0 0; }
+
+/* Les quatre verbes, groupés et discrets : le noir de l'étape appartient à « Générer »,
+   et quatre boutons noirs par ligne feraient de la liste un damier. */
+.livrable .gestes { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+
+/* Les chiffres d'un livrable, deux par ligne. La colonne de libellés est à la largeur du
+   plus long d'entre eux, pas aux 13 rem d'une colonne de formulaire : « Gouttière »
+   suivi de trois centimètres de blanc éloignerait chaque chiffre de ce qu'il mesure. */
+.livrable dl { grid-template-columns: auto 1fr auto 1fr; gap: .1rem .8rem; margin: .3rem 0 0; }
+/* La dernière paire — la planche et son fond perdu — court sur toute la largeur : c'est
+   la seule dont la valeur est une phrase, et la moitié d'une ligne la replierait. Son
+   libellé revient en première colonne avec elle : sans cette ligne, il restait en
+   troisième, orphelin, à côté d'une valeur qui commençait à la deuxième. */
+.livrable dl dt:last-of-type { grid-column: 1; }
+.livrable dl dd:last-child { grid-column: 2 / -1; }
 
 /* Relevés d'un imprimeur à gabarit : côte à côte, sur une ligne à eux. Le
    `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte
@@ -1396,6 +1408,7 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    La dernière paire — la planche et son fond perdu — court sur toute la largeur : c'est
    la seule dont la valeur est une phrase, et la moitié d'une ligne la repliait. */
 .package dl { grid-template-columns: auto 1fr auto 1fr; gap: .1rem .8rem; }
+.package dl dt:last-of-type { grid-column: 1; }
 .package dl dd:last-child { grid-column: 2 / -1; }
 
 /* La planche du package. Une vignette, pas un aperçu : de quoi voir qu'elle tient,

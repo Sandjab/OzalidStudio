@@ -269,13 +269,26 @@ function atelier({
         const f = args.livrable;
         const cle = `${f.pod}-${f.format}-${f.reliure}-${f.papier}`;
         const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
-        const neuf = { ...dest(p ?? providers[0]), ...f, cle, etat: { etat: 'ajour' } };
+        // La mesure de l'ancien survit au remplacement : elle vit sous le **gabarit**, et
+        // le papier n'en fait pas partie. C'est ce qui laisse deux papiers la partager, et
+        // c'est aussi pourquoi Remplacer ne rend pas un livrable « non composé ».
+        const ancien = livraison.livrables.find((d) => d.cle === args?.cle);
+        const neuf = {
+          ...dest(p ?? providers[0]), ...f, cle, etat: { etat: 'ajour' },
+          compose: cmd === 'livrable_remplacer' ? ancien?.compose ?? null : null,
+        };
         livraison = {
           ...livraison,
           livrables: cmd === 'livrable_generer'
             ? [...livraison.livrables, neuf]
             : livraison.livrables.map((d) => (d.cle === args.cle ? neuf : d)),
         };
+        // Le papier change l'identité du livrable : sans ce rattrapage, `courant`
+        // désignerait une clé que plus personne ne porte, et le pied sauterait sur le
+        // premier de la liste en silence.
+        if (cmd === 'livrable_remplacer' && livraison.courant === args.cle) {
+          livraison = { ...livraison, courant: cle };
+        }
         return { projet: vue(), packages: [] };
       }
       case 'livrable_regenerer':
@@ -887,8 +900,12 @@ test('changer de papier garde le dos et fait suivre le pointeur', async () => {
   await faireComposer(els);
   assert.equal(pied(els), 'kdp-6x9-broche-creme · dos 16,5 mm');
 
-  els.get('liv-papier-kdp-6x9-broche-creme').value = 'blanc';
-  await els.get('liv-papier-kdp-6x9-broche-creme').declenche('change');
+  // Le papier se change par Modifier, puis Remplacer : la ligne ne porte plus de
+  // contrôle depuis le lot 3. Le pointeur doit suivre la clé neuve, sans quoi le pied
+  // sauterait sur le premier livrable de la liste en silence.
+  await els.get('liv-modifier-kdp-6x9-broche-creme').declenche('click');
+  els.get('inAjoutPapier').value = 'blanc';
+  await els.get('btLivrableGenerer').declenche('click');
 
   assert.equal(pied(els), 'kdp-6x9-broche-blanc · dos 16,5 mm');
 });
@@ -1167,8 +1184,9 @@ test('changer de papier n\'allume pas le témoin du pied', async () => {
   await faireComposer(els);
   assert.equal(piedAlerte(els), false);
 
-  els.get('liv-papier-kdp-6x9-broche-creme').value = 'blanc';
-  await els.get('liv-papier-kdp-6x9-broche-creme').declenche('change');
+  await els.get('liv-modifier-kdp-6x9-broche-creme').declenche('click');
+  els.get('inAjoutPapier').value = 'blanc';
+  await els.get('btLivrableGenerer').declenche('click');
 
   assert.equal(piedAlerte(els), false);
 });

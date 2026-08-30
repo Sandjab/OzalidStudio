@@ -105,6 +105,9 @@ function faux(providers, sur = {}) {
     // L'accès au modèle de diffusion se lit au démarrage : il appartient à la
     // machine, et l'écran le montre avant qu'aucun projet ne soit ouvert.
     if (cmd === 'diffusion_lire') return { url: '', modele: '', cle_posee: false };
+    // Les vignettes de planche, relues du disque à chaque affichage de la liste :
+    // un projet qui n'a rien généré en rend une table vide, et c'est le cas ici.
+    if (cmd === 'livrable_vignettes') return {};
     throw new Error(`commande inattendue : ${cmd}`);
   };
 }
