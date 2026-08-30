@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::catalogue::Provider;
-use crate::gabarit::Contexte;
+use crate::gabarit::{Contexte, Marques};
 use crate::manuscrit::{echappe, echappe_chaine, inline, Bloc, Piece, Sorte, SCENE};
 use crate::projet::Livre;
 use crate::typst::MARQUEUR;
@@ -551,19 +551,27 @@ pub fn source_objet(t: &Trace, largeur_mm: f64) -> String {
 }
 
 /// Source Typst de l'intérieur du livre, tel qu'il part à l'impression.
+///
+/// `papier` est le **nom** du papier commandé, pas sa clé : il s'imprime — `%PAPIER%` —
+/// et ne se compare pas. Il vient en paramètre parce que le [`Provider`] ne le porte pas
+/// et ne le peut pas : il vaut pour un triplet POD × format × reliure, dont plusieurs
+/// papiers dépendent. C'est l'appelant qui sait lequel de ces papiers ce livrable-là
+/// commande.
 pub fn source(
     livre: &Livre,
     int: &Interieur,
     pr: &Provider,
+    papier: &str,
     r: &Reglage,
     pieces: &[Piece],
     envoi: Option<Trace>,
 ) -> String {
-    // Ce qui part à l'impression connaît son imprimeur : c'est le seul endroit où il
-    // entre dans le livre, et il ne vient pas du livre mais du gabarit visé.
+    // Ce qui part à l'impression connaît son imprimeur, son format et son papier : c'est
+    // le seul endroit où ils entrent dans le livre, et ils ne viennent pas du livre mais
+    // du livrable visé.
     let ctx = Contexte {
         livre,
-        imprimeur: Some(&pr.pod_nom),
+        marques: Marques::chez(pr).sur(papier),
     };
     assemble(&ctx, int, pr, r, pieces, envoi, None)
 }
@@ -587,10 +595,15 @@ pub fn source_ebook(
         gouttiere: pr.exterieur,
         blanche: false,
     };
-    // Aucun imprimeur : le format vient d'un gabarit, mais rien n'est imprimé.
+    // Aucun imprimeur ni papier : le format vient d'un gabarit, mais rien n'est imprimé
+    // — et ce qui n'est pas imprimé n'est sur aucun papier. Le format, lui, est nommé :
+    // il tient la page, qu'elle soit de papier ou d'écran.
     let ctx = Contexte {
         livre,
-        imprimeur: None,
+        marques: Marques {
+            format: Some(&pr.format_nom),
+            ..Marques::default()
+        },
     };
     assemble(&ctx, int, pr, &r, pieces, None, Some(couverture))
 }
@@ -621,7 +634,7 @@ fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
         int.page_titre_auteur,
         majuscules(&ctx.livre.auteur),
         int.page_titre_titre,
-        majuscules(&ctx.livre.titre_page(ctx.imprimeur).replace('\n', "\u{1}"))
+        majuscules(&ctx.livre.titre_page(ctx.marques).replace('\n', "\u{1}"))
             .replace('\u{1}', r" \ "),
         int.page_titre_genre,
         echappe(&ctx.livre.genre),
@@ -642,14 +655,14 @@ fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String {
 
 "#,
         int.copyright,
-        echappe(&ctx.livre.copyright(ctx.imprimeur)).replace('\n', r" \ ")
+        echappe(&ctx.livre.copyright(ctx.marques)).replace('\n', r" \ ")
     ));
 
     // La dédicace prend une belle page, son verso reste blanc — deux `#pagebreak()`
     // d'affilée, le dispositif de la blanche du faux-titre. Le corps s'ouvre donc en
     // page 7 au lieu de 5, et le dos en tient compte de lui-même puisqu'il découle de
     // la pagination mesurée, jamais d'une saisie.
-    if let Some(d) = ctx.livre.dedicace(ctx.imprimeur) {
+    if let Some(d) = ctx.livre.dedicace(ctx.marques) {
         s.push_str(&format!(
             r#"#v(48mm)
 #align(right, emph(text(size: {}pt)[{}]))
@@ -862,6 +875,10 @@ mod tests {
     use std::cell::RefCell;
     use std::path::Path;
 
+    /// Le papier de tous les tirages d'essai. Nommé et non vide : un papier sans nom
+    /// laisserait passer un `%PAPIER%` qui ne substitue rien.
+    const PAPIER_D_ESSAI: &str = "Crème 90 g";
+
     fn livre() -> Livre {
         Livre {
             isbn: String::new(),
@@ -937,6 +954,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &r,
             &pieces_avec_blanc(),
             None,
@@ -1046,7 +1064,15 @@ mod tests {
             gouttiere: 20.0,
             blanche: false,
         };
-        let s = source(&livre(), &Interieur::default(), pr, &r, &[], None);
+        let s = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &[],
+            None,
+        );
         assert!(s.contains("width: 135mm, height: 215mm"));
         assert!(s.contains("inside: 20mm"), "gouttière absente");
         assert!(s.contains("outside: 15mm"));
@@ -1066,13 +1092,70 @@ mod tests {
             gouttiere: 20.0,
             blanche: false,
         };
-        let s = source(&l, &Interieur::default(), pr, &r, &[], None);
+        let s = source(&l, &Interieur::default(), pr, PAPIER_D_ESSAI, &r, &[], None);
         assert!(!pr.pod_nom.is_empty());
         assert!(
             s.contains(&pr.pod_nom),
             "le nom de l'imprimeur manque à la page 4"
         );
         assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
+    }
+
+    /// **Le copyright marque l'exemplaire de son papier et de son format.** C'est ce qui
+    /// permet de savoir, en tenant le livre, lequel des essais on tient — le papier ne se
+    /// devine pas au toucher d'un tirage à l'autre.
+    ///
+    /// Le papier vient en paramètre et non du `Provider` : celui-ci vaut pour un triplet
+    /// POD × format × reliure, et plusieurs papiers s'y rattachent. Composer le papier par
+    /// défaut du POD écrirait sur tous les exemplaires le nom du premier.
+    #[test]
+    fn le_copyright_marque_le_papier_et_le_format_du_tirage() {
+        let mut l = livre();
+        l.copyright = "Sur %PAPIER%, au format %FORMAT%".into();
+        let pr = provider("bod").unwrap();
+        let r = Reglage {
+            gouttiere: 20.0,
+            blanche: false,
+        };
+        let s = source(
+            &l,
+            &Interieur::default(),
+            pr,
+            "Photo brillant 130 g",
+            &r,
+            &[],
+            None,
+        );
+        assert!(!pr.format_nom.is_empty());
+        assert!(
+            s.contains("Photo brillant 130 g"),
+            "le papier du tirage manque à la page 4"
+        );
+        assert!(
+            s.contains(&pr.format_nom),
+            "le format du tirage manque à la page 4 : {}",
+            pr.format_nom
+        );
+        assert!(
+            !s.contains("%PAPIER%") && !s.contains("%FORMAT%"),
+            "un jeton est resté littéral"
+        );
+    }
+
+    /// L'EPUB n'a pas de papier : le jeton s'y efface, comme `%IMPRIMEUR%`. Le format,
+    /// lui, reste nommé — il tient la page, qu'elle soit de papier ou d'écran.
+    #[test]
+    fn l_ebook_n_a_pas_de_papier_mais_garde_son_format() {
+        let mut l = livre();
+        l.copyright = "Sur %PAPIER%, au format %FORMAT%".into();
+        let pr = provider("bod").unwrap();
+        let s = source_ebook(&l, &Interieur::default(), pr, &[], "");
+        assert!(!s.contains("%PAPIER%"), "le jeton est resté littéral");
+        assert!(
+            s.contains(&pr.format_nom),
+            "le format manque à l'ebook : {}",
+            pr.format_nom
+        );
     }
 
     /// L'ebook n'est pas imprimé : le jeton s'y efface. Le même livre, la même page 4,
@@ -1099,7 +1182,15 @@ mod tests {
         };
         for cle in ["lulu", "kdp-6x9"] {
             let pr = provider(cle).unwrap();
-            let s = source(&livre(), &Interieur::default(), pr, &r, &[], None);
+            let s = source(
+                &livre(),
+                &Interieur::default(),
+                pr,
+                PAPIER_D_ESSAI,
+                &r,
+                &[],
+                None,
+            );
             assert!(s.contains(&format!("size: {CORPS_PT}pt")), "{cle} : {s}");
             assert!(
                 s.contains(&format!("leading: {}em", INTERLIGNE - 1.0)),
@@ -1122,6 +1213,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &[],
             None,
@@ -1172,6 +1264,7 @@ mod tests {
             &livre_complet(),
             int,
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &pieces_completes(),
             None,
@@ -1458,6 +1551,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("lulu").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &chapitres(),
             None,
@@ -1475,6 +1569,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1486,6 +1581,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: true,
@@ -1509,6 +1605,7 @@ mod tests {
             &l,
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1536,6 +1633,7 @@ mod tests {
             &l,
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1606,7 +1704,7 @@ mod tests {
             police: "Cardo".into(),
             ..Default::default()
         };
-        let s = source(&livre(), &int, pr, &r, &chapitres(), None);
+        let s = source(&livre(), &int, pr, PAPIER_D_ESSAI, &r, &chapitres(), None);
         assert_eq!(s.matches("font:").count(), 1);
         assert!(s.contains(r#"font: "Cardo""#), "police du projet ignorée");
     }
@@ -1642,9 +1740,9 @@ mod tests {
                 Bloc::Paragraphe("Après.".into()),
             ],
         }];
-        let s = source(&livre(), &int, pr, &r, &avec, None);
+        let s = source(&livre(), &int, pr, PAPIER_D_ESSAI, &r, &avec, None);
         assert_ne!(
-            source(&livre(), &int, pr, &r, &sans, None),
+            source(&livre(), &int, pr, PAPIER_D_ESSAI, &r, &sans, None),
             s,
             "la rupture de scène est encore perdue"
         );
@@ -1672,6 +1770,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1697,7 +1796,7 @@ mod tests {
         let sans = liminaires(
             &Contexte {
                 livre: &l0,
-                imprimeur: None,
+                marques: Marques::default(),
             },
             &Interieur::default(),
             &[],
@@ -1707,7 +1806,7 @@ mod tests {
         let avec = liminaires(
             &Contexte {
                 livre: &l,
-                imprimeur: None,
+                marques: Marques::default(),
             },
             &Interieur::default(),
             &[],
@@ -1733,7 +1832,7 @@ mod tests {
         let sans = liminaires(
             &Contexte {
                 livre: &l0,
-                imprimeur: None,
+                marques: Marques::default(),
             },
             &Interieur::default(),
             &[],
@@ -1745,7 +1844,7 @@ mod tests {
                 liminaires(
                     &Contexte {
                         livre: &l,
-                        imprimeur: None,
+                        marques: Marques::default(),
                     },
                     &Interieur::default(),
                     &[],
@@ -1766,7 +1865,7 @@ mod tests {
         let s = liminaires(
             &Contexte {
                 livre: &l,
-                imprimeur: None,
+                marques: Marques::default(),
             },
             &Interieur::default(),
             &[],
@@ -1793,6 +1892,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("lulu").unwrap(),
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1829,7 +1929,7 @@ mod tests {
         let s = liminaires(
             &Contexte {
                 livre: &l,
-                imprimeur: None,
+                marques: Marques::default(),
             },
             &Interieur::default(),
             &[piece("Préface"), piece("Avant-propos")],
@@ -1863,6 +1963,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("lulu").unwrap(),
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1907,8 +2008,24 @@ mod tests {
             gouttiere: 25.0,
             blanche: false,
         };
-        let avec = source(&livre(), &Interieur::default(), pr, &r, &pieces, None);
-        let sans = source(&livre(), &Interieur::default(), pr, &r, &chapitres(), None);
+        let avec = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &pieces,
+            None,
+        );
+        let sans = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &chapitres(),
+            None,
+        );
         assert_eq!(
             avec.matches("#page(footer: none)").count(),
             sans.matches("#page(footer: none)").count() + 2,
@@ -1951,6 +2068,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("lulu").unwrap(),
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -1983,6 +2101,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("lulu").unwrap(),
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: 25.0,
                 blanche: false,
@@ -2038,7 +2157,15 @@ mod tests {
             gouttiere: pr.gouttieres[0].2,
             blanche: false,
         };
-        source(&livre(), &Interieur::default(), pr, &r, &chapitres(), envoi)
+        source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &chapitres(),
+            envoi,
+        )
     }
 
     /// Le corps composé de l'envoi, en millimètres, relevé dans la source.
@@ -2250,7 +2377,15 @@ mod tests {
             gouttiere: 20.0,
             blanche: false,
         };
-        let src = source(&l, &Interieur::default(), pr, &r, &chapitres(), None);
+        let src = source(
+            &l,
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &chapitres(),
+            None,
+        );
 
         for jeton in ["%TITRE%", "%AUTEUR%", "%GENRE%"] {
             assert!(!src.contains(jeton), "{jeton} a traversé la composition");
@@ -2287,6 +2422,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &Reglage {
                 gouttiere: pr.gouttieres[0].2,
                 blanche: false,
@@ -2422,6 +2558,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &pieces_des_quatre_sortes(),
             None,
@@ -2529,6 +2666,7 @@ mod tests {
                 ..Interieur::default()
             },
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &pieces_des_quatre_sortes(),
             None,
@@ -2650,6 +2788,7 @@ mod tests {
                 ..Interieur::default()
             },
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &pieces_des_quatre_sortes(),
             None,
@@ -2717,6 +2856,7 @@ mod tests {
                 ..Interieur::default()
             },
             provider("bod").unwrap(),
+            PAPIER_D_ESSAI,
             &r,
             &chapitres(),
             None,
@@ -2820,7 +2960,7 @@ mod tests {
             &typst,
             dossier.path(),
             "sans",
-            &source(&livre, &int, pr, &r, &pieces, None),
+            &source(&livre, &int, pr, PAPIER_D_ESSAI, &r, &pieces, None),
         );
         assert!(
             sans > 30,
@@ -2856,6 +2996,7 @@ mod tests {
                     &livre,
                     &int,
                     pr,
+                    PAPIER_D_ESSAI,
                     &r,
                     &pieces,
                     Some(Trace {
@@ -2918,6 +3059,7 @@ mod tests {
             &livre(),
             &Interieur::default(),
             pr,
+            PAPIER_D_ESSAI,
             &r,
             &manuscrit_long(),
             None,
@@ -3004,7 +3146,15 @@ mod tests {
             blanche: false,
         };
         let pieces = pieces_des_quatre_sortes();
-        let mut s = source(&livre(), &Interieur::default(), pr, &r, &pieces, None);
+        let mut s = source(
+            &livre(),
+            &Interieur::default(),
+            pr,
+            PAPIER_D_ESSAI,
+            &r,
+            &pieces,
+            None,
+        );
         // Le folio de chaque repère, indexé par son rang d'apparition : `mesures` rend
         // un dictionnaire de nombres, c'est exactement ce qu'il faut.
         s.push_str(
@@ -3109,6 +3259,7 @@ mod tests {
                     ..Interieur::default()
                 },
                 pr,
+                PAPIER_D_ESSAI,
                 &r,
                 &pieces,
                 None,
@@ -3220,6 +3371,7 @@ mod tests {
                 ..Interieur::default()
             },
             pr,
+            PAPIER_D_ESSAI,
             &r,
             &pieces,
             None,

@@ -1,26 +1,66 @@
 //! Les jetons `%CLE%` des champs libres du livre.
 //!
 //! Un champ libre — le titre de la page de titre, la dédicace, le copyright — peut
-//! citer un champ clé ou l'imprimeur du livrable. La substitution se fait **à la
-//! composition**, jamais à la saisie : le `.ozalid` conserve le texte à jetons, qui
-//! doit suivre le livre si le titre change.
+//! citer un champ clé du livre, ou l'un des axes du livrable visé. La substitution se
+//! fait **à la composition**, jamais à la saisie : le `.ozalid` conserve le texte à
+//! jetons, qui doit suivre le livre si le titre change.
 
 use crate::projet::Livre;
 
-/// Ce contre quoi un champ libre se résout : le livre, et l'imprimeur quand la
+/// Les axes du livrable visé, tels que le catalogue les **nomme**.
+///
+/// À ne pas confondre avec [`crate::catalogue::Fabrication`], qui porte les mêmes axes
+/// en **clés** — `creme-90` là où celui-ci dit « Crème 90 g ». Les clés identifient et
+/// se comparent ; ces noms-là s'impriment, et c'est tout leur emploi : ils marquent
+/// l'exemplaire qu'on tient en main de l'imprimeur, du format et du papier qui l'ont
+/// fait. La reliure n'y est pas — le quatrième axe n'a encore trouvé aucun usage, et
+/// un jeton qu'on n'écrit nulle part est une table à tenir sans contrepartie.
+///
+/// Chaque axe est `Option` pour la même raison : il y a des compositions où il n'a pas
+/// de sens. L'ebook n'est imprimé nulle part et n'a pas de papier ; il a un format,
+/// puisqu'il vient d'un gabarit. Un axe absent rend la chaîne **vide**, jamais le jeton
+/// littéral — un `%PAPIER%` composé en toutes lettres serait la faute que ces jetons
+/// existent pour éviter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Marques<'a> {
+    pub imprimeur: Option<&'a str>,
+    pub format: Option<&'a str>,
+    pub papier: Option<&'a str>,
+}
+
+impl<'a> Marques<'a> {
+    /// Les marques d'un tirage chez un imprimeur, sans son papier.
+    ///
+    /// Le raccourci des appelants qui n'ont qu'un [`crate::catalogue::Provider`] sous la
+    /// main : il porte le nom du POD et celui du format, jamais celui du papier — un
+    /// provider vaut pour un triplet, et plusieurs papiers s'y rattachent. Qui connaît
+    /// le papier du livrable ajoute [`Marques::sur`] derrière.
+    pub fn chez(pr: &'a crate::catalogue::Provider) -> Self {
+        Self {
+            imprimeur: Some(&pr.pod_nom),
+            format: Some(&pr.format_nom),
+            papier: None,
+        }
+    }
+
+    /// Les mêmes marques, le papier nommé.
+    pub fn sur(self, papier: &'a str) -> Self {
+        Self {
+            papier: Some(papier),
+            ..self
+        }
+    }
+}
+
+/// Ce contre quoi un champ libre se résout : le livre, et les axes du livrable quand la
 /// composition en vise un.
 ///
 /// **Une seule porte.** Garder `substituer(&str, &Livre)` et ajouter une seconde fonction
-/// pour l'imprimeur aurait ouvert deux chemins de substitution, dont le second serait tôt
-/// ou tard oublié sur un champ libre — et l'oubli ne se verrait qu'imprimé.
+/// pour les axes du livrable aurait ouvert deux chemins de substitution, dont le second
+/// serait tôt ou tard oublié sur un champ libre — et l'oubli ne se verrait qu'imprimé.
 pub struct Contexte<'a> {
     pub livre: &'a Livre,
-    /// `None` là où le nom de l'imprimeur n'a pas de sens : l'ebook, qui n'est imprimé
-    /// nulle part. Tout ce qui part chez un imprimeur le nomme — l'intérieur comme la
-    /// couverture, qui sortent de la même commande. `%IMPRIMEUR%` rend alors la chaîne
-    /// vide, jamais le jeton littéral : un `%IMPRIMEUR%` composé en toutes lettres serait
-    /// la faute que ce jeton existe pour éviter.
-    pub imprimeur: Option<&'a str>,
+    pub marques: Marques<'a>,
 }
 
 /// Un jeton et ce qu'il désigne dans le contexte.
@@ -28,11 +68,16 @@ type Jeton = (&'static str, for<'a> fn(&'a Contexte<'a>) -> &'a str);
 
 /// Les jetons reconnus, et ce que chacun désigne.
 ///
-/// Les six premiers sont des clés du livre, littérales par définition : aucune n'est
+/// Les huit premiers sont des clés du livre, littérales par définition : aucune n'est
 /// elle-même substituée, et c'est ce qui rend toute référence cyclique impossible. Les
 /// trois derniers ne changent rien à cette propriété — l'ISBN et le dépôt légal sont des
-/// clés comme les autres, et l'imprimeur ne vient pas du livre du tout.
-const JETONS: [Jeton; 9] = [
+/// clés comme les autres, et les axes du livrable ne viennent pas du livre du tout.
+///
+/// **`%FORMAT%` et `%PAPIER%` entrent aussi dans l'empreinte de l'intérieur**, par la clé
+/// de fabrication que `empreinte::interieur` y met : sans elle, deux papiers du même
+/// gabarit — qui partagent une mesure par construction — partageraient une empreinte, et
+/// le second se dirait à jour sur le PDF du premier.
+const JETONS: [Jeton; 11] = [
     ("%TITRE%", |c| &c.livre.titre),
     ("%AUTEUR%", |c| &c.livre.auteur),
     ("%GENRE%", |c| &c.livre.genre),
@@ -41,7 +86,9 @@ const JETONS: [Jeton; 9] = [
     ("%MONOGRAMME%", |c| &c.livre.monogramme),
     ("%ISBN%", |c| &c.livre.isbn),
     ("%DEPOT_LEGAL%", |c| &c.livre.depot_legal),
-    ("%IMPRIMEUR%", |c| c.imprimeur.unwrap_or("")),
+    ("%IMPRIMEUR%", |c| c.marques.imprimeur.unwrap_or("")),
+    ("%FORMAT%", |c| c.marques.format.unwrap_or("")),
+    ("%PAPIER%", |c| c.marques.papier.unwrap_or("")),
 ];
 
 /// Les jetons reconnus, dans l'ordre où l'aide les présente.
@@ -99,6 +146,43 @@ mod tests {
             genre: "roman".into(),
             ..Livre::vide()
         }
+    }
+
+    /// Les trois axes du livrable se citent, et chacun rend **le sien**.
+    ///
+    /// Un par un et non tous ensemble dans une chaîne : trois champs voisins du même type
+    /// se recopient de travers sans qu'aucune assertion globale ne le voie — c'est
+    /// exactement le défaut qu'un `%PAPIER%` rendant le format produirait, et il ne se
+    /// verrait qu'imprimé.
+    #[test]
+    fn chaque_axe_du_livrable_rend_le_sien() {
+        let l = livre();
+        let m = Marques {
+            imprimeur: Some("BoD"),
+            format: Some("13,5 × 21,5 cm"),
+            papier: Some("Crème 90 g"),
+        };
+        assert_eq!(substituer("%IMPRIMEUR%", &ctx_tirage(&l, m)), "BoD");
+        assert_eq!(substituer("%FORMAT%", &ctx_tirage(&l, m)), "13,5 × 21,5 cm");
+        assert_eq!(substituer("%PAPIER%", &ctx_tirage(&l, m)), "Crème 90 g");
+    }
+
+    /// Un axe que la composition ne vise pas s'efface, et ne reste pas littéral.
+    ///
+    /// C'est la règle déjà tenue par `%IMPRIMEUR%`, étendue aux deux autres : un
+    /// `%PAPIER%` composé en toutes lettres sur une 4ème serait la faute que ces jetons
+    /// existent pour éviter. Le cas est réel — l'EPUB n'a ni imprimeur ni papier.
+    #[test]
+    fn un_axe_absent_s_efface_au_lieu_de_rester_litteral() {
+        let l = livre();
+        let m = Marques {
+            format: Some("13,5 × 21,5 cm"),
+            ..Marques::default()
+        };
+        assert_eq!(
+            substituer("[%IMPRIMEUR%][%PAPIER%][%FORMAT%]", &ctx_tirage(&l, m)),
+            "[][][13,5 × 21,5 cm]"
+        );
     }
 
     #[test]
@@ -202,8 +286,16 @@ mod tests {
     fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
         Contexte {
             livre: l,
-            imprimeur,
+            marques: Marques {
+                imprimeur,
+                ..Marques::default()
+            },
         }
+    }
+
+    /// Le contexte d'un tirage nommé de bout en bout : les trois axes renseignés.
+    fn ctx_tirage<'a>(l: &'a Livre, marques: Marques<'a>) -> Contexte<'a> {
+        Contexte { livre: l, marques }
     }
 
     #[test]

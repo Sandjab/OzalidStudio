@@ -233,11 +233,11 @@ fn taille(chemin: &Path) -> u64 {
 /// lui — et c'est exactement l'endroit où un oubli enverrait un `%AUTEUR%` dans le
 /// fichier du lecteur.
 fn libres(livre: &crate::projet::Livre) -> (String, String, Option<String>) {
-    (
-        livre.titre_page(None),
-        livre.copyright(None),
-        livre.dedicace(None),
-    )
+    // Aucune marque : un EPUB n'a ni imprimeur, ni papier, ni format de page — le
+    // lecteur choisit le sien. Les trois jetons du livrable s'y effacent donc, comme
+    // `%IMPRIMEUR%` le faisait déjà seul.
+    let m = crate::gabarit::Marques::default();
+    (livre.titre_page(m), livre.copyright(m), livre.dedicace(m))
 }
 
 #[cfg(test)]

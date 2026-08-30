@@ -55,7 +55,15 @@ fn main() -> Result<(), String> {
         gouttiere: pr.gouttieres[0].2,
         blanche: false,
     };
-    let fond = interieur::source(livre, int, pr, &r, &chapitres, None);
+    let fond = interieur::source(
+        livre,
+        int,
+        pr,
+        &pr.papier_defaut().nom,
+        &r,
+        &chapitres,
+        None,
+    );
     let src = dossier.join("fond.typ");
     std::fs::write(&src, &fond).map_err(|e| e.to_string())?;
 

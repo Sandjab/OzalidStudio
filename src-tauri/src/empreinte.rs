@@ -41,6 +41,14 @@ pub fn interieur(projet: &Projet, l: &Livrable) -> String {
             json(&projet.meta.manuscrit),
             json(&projet.meta.interieur),
             gabarit,
+            // La clé de fabrication en plus de la géométrie du gabarit, parce que
+            // `%PAPIER%` et `%FORMAT%` entrent dans le texte composé. `Resolu::empreinte`
+            // ne dit que des millimètres — dimensions, marges, gouttières — et deux
+            // papiers du même POD, format et reliure ont le **même** gabarit : c'est
+            // l'invariant qui leur fait partager une mesure. Sans cette clé, le second
+            // livrable se dirait à jour sur le PDF du premier, qui nomme l'autre papier,
+            // et le défaut ne se verrait qu'imprimé.
+            l.fabrication.cle(),
         ]
         .join("|")
         .as_bytes(),
@@ -223,6 +231,41 @@ mod tests {
             interieur(&q, &l),
             depart,
             "un envoi ne périme pas l'intérieur"
+        );
+    }
+
+    /// Deux papiers du même gabarit ne partagent pas une empreinte d'intérieur.
+    ///
+    /// C'est le bord qu'ouvrent `%PAPIER%` et `%FORMAT%` : les axes du livrable entrent
+    /// dans le texte composé — un copyright qui nomme son papier —, alors que l'empreinte
+    /// ne portait que la géométrie du gabarit. Or deux papiers du même POD, format et
+    /// reliure ont **par construction** le même gabarit : c'est l'invariant qui leur fait
+    /// partager une mesure. Sans la clé de fabrication ici, le second livrable se dirait
+    /// à jour en gardant le PDF du premier — et le défaut ne se verrait qu'imprimé, sur
+    /// l'exemplaire même que le jeton devait identifier.
+    #[test]
+    fn deux_papiers_du_meme_gabarit_ne_partagent_pas_une_empreinte() {
+        let p = projet_d_essai();
+        let l = p.meta.livraison.livrables[0].clone();
+
+        let mut autre = l.clone();
+        let pod = crate::catalogue::resout(&l.fabrication).expect("livrable d'essai résolu");
+        let papiers = &pod.provider().papiers;
+        assert!(
+            papiers.len() > 1,
+            "le livrable d'essai n'offre qu'un papier : le bord ne peut pas se tester"
+        );
+        autre.fabrication.papier = papiers[1].cle.clone();
+
+        assert_eq!(
+            l.fabrication.cle_gabarit(),
+            autre.fabrication.cle_gabarit(),
+            "les deux papiers doivent bien partager un gabarit, sinon le test ne dit rien"
+        );
+        assert_ne!(
+            interieur(&p, &l),
+            interieur(&p, &autre),
+            "deux papiers partagent une empreinte d'intérieur"
         );
     }
 

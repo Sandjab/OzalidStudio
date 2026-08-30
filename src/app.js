@@ -535,9 +535,12 @@ async function chargerProviders() {
     $('inPoliceInterieur').append(new Option(p, p));
   }
   mains = await invoke('mains_liste');
-  // La liste vient du Rust, seul à la connaître : `gabarit::JETONS` a grossi deux fois.
+  // La liste vient du Rust, seul à la connaître : `gabarit::JETONS` a grossi trois fois.
+  // La phrase, elle, est ici — et elle ne compte pas les jetons : « les axes du livrable »
+  // reste vrai qu'ils soient deux ou quatre, là où « l'imprimeur du livrable » a menti dès
+  // que le format et le papier l'ont rejoint.
   $('aideJetons').textContent =
-    `Ces champs peuvent citer les clés du livre, et l'imprimeur du livrable : ${(await invoke('jetons_liste')).join(' ')}`;
+    `Ces champs peuvent citer les clés du livre, et les axes du livrable visé — son imprimeur, son format, son papier : ${(await invoke('jetons_liste')).join(' ')}`;
   // L'accès au modèle appartient à la machine, pas au projet : il se lit une fois, au
   // démarrage, et il survit à tous les livres qu'on ouvrira ensuite.
   afficherDiffusion(await invoke('diffusion_lire'));

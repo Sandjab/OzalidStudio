@@ -386,6 +386,18 @@ input, select, textarea {
 textarea { resize: vertical; }
 select:disabled { color: var(--gris); background: var(--eteint); }
 
+/* Un champ multi-ligne prend la colonne, son libellé passe au-dessus. Les 13 rem que la
+   colonne de formulaire réserve au libellé — 10 dans le panneau de la couverture — ne
+   laissaient que 9 rem au champ dans une colonne de 23 : un copyright ou un texte de
+   4ème s'y relisait à cinq mots par ligne, sur une piste plus haute que large. La paire
+   coûte une ligne de hauteur et gagne les deux tiers de la largeur.
+   C'est l'idiome déjà employé partout où la bande est trop étroite pour deux colonnes
+   — `.envois .reglages`, `.releve .petit`. Ciblé sur `textarea` et non sur les blocs
+   entiers : dans la même colonne, un ISBN ou un corps en points se lisent mieux alignés
+   avec leurs voisins qu'étalés sur toute la largeur. */
+#etapeLivre label:has(textarea),
+.groupe label:has(textarea) { grid-template-columns: 1fr; gap: .2rem; }
+
 /* Ce qui ne tient pas dans la ligne passe dessous, entier. Sans `wrap`, le flex
    comprime ses boutons jusqu'à couper leur libellé en deux — « Ma police… » sur deux
    lignes dans une colonne de 23 rem — et un bouton coupé se lit comme deux boutons. */

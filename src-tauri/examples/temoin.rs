@@ -149,9 +149,10 @@ fn compose(
     })?;
     let pr = r.provider();
     // Sous la clé du **gabarit**, comme le package : deux témoins sur des formats
-    // différents ne se marchent pas dessus, deux papiers d'un même gabarit partageraient
-    // leur intérieur.
-    let int = package::composer_interieur(projet, &pr, &pr.cle, sortie, typst)?;
+    // différents ne se marchent pas dessus. Le papier ne change pas la pagination, qui
+    // est ce que le témoin mesure — mais il entre dans la source depuis `%PAPIER%`, et
+    // c'est à ce titre qu'il est nommé ici.
+    let int = package::composer_interieur(projet, &pr, &r.papier, &pr.cle, sortie, typst)?;
     let cible = package::Cible {
         papier: r.papier.clone(),
         // BoD publie son dos et son fond perdu : le relevé est ignoré.

@@ -53,10 +53,16 @@
   </section>
 
   <section id="etapeLivre" class="etape" role="tabpanel" hidden>
-    <!-- Deux groupes, et la frontière tient en une phrase : ce qui nomme, et ce qui en
-         dérive. Les clés sont littérales — un %TITRE% tapé dans le Titre ressort tel
-         quel —, les dérivés les citent. C'est la même frontière que celle du livre et de
-         la maquette : le livre dit ce qui est écrit, la maquette où ça se voit. -->
+    <!-- Deux groupes, et la frontière est celle du geste : ce qui identifie le livre au
+         catalogue, et les textes qu'on en compose. Le premier tient les huit clés
+         littérales — un %TITRE% tapé dans le Titre ressort tel quel —, que les textes du
+         second citent. C'est la même frontière que celle du livre et de la maquette : le
+         livre dit ce qui est écrit, la maquette où ça se voit.
+
+         Le Prix est la seule exception, et elle est assumée : il n'est pas un jeton et
+         passe par la substitution, donc techniquement un texte dérivé. Il est ici parce
+         qu'on le remplit dans le même mouvement que l'ISBN et le dépôt légal, et qu'un
+         champ de catalogue rangé loin des deux autres ne se retrouve pas. -->
     <div class="bloc">
       <h2>Livre</h2>
       <label><span>Titre</span><input type="text" id="inTitre"></label>
@@ -65,6 +71,14 @@
       <label><span>Éditeur</span><input type="text" id="inEditeur"></label>
       <label><span>Collection</span><input type="text" id="inCollection"></label>
       <label><span>Monogramme</span><input type="text" id="inMonogramme"></label>
+      <label><span>ISBN</span>
+        <input type="text" id="inIsbn"
+               placeholder="vide : pas de code-barres en 4ème"></label>
+      <label><span>Dépôt légal</span>
+        <input type="text" id="inDepotLegal"
+               placeholder="vide : pas de dépôt légal"></label>
+      <label><span>Prix</span>
+        <input type="text" id="inPrix" placeholder="vide : pas de prix"></label>
     </div>
 
     <div class="bloc">
@@ -75,16 +89,11 @@
       <label><span>Titre de la page de titre</span>
         <textarea id="inTitrePage" rows="2" placeholder="%TITRE%"></textarea></label>
       <label><span>Copyright</span><textarea id="inCopyright" rows="3"></textarea></label>
-      <label><span>Prix</span>
-        <input type="text" id="inPrix" placeholder="vide : pas de prix"></label>
-      <label><span>ISBN</span>
-        <input type="text" id="inIsbn"
-               placeholder="vide : pas de code-barres en 4ème"></label>
-      <label><span>Dépôt légal</span>
-        <input type="text" id="inDepotLegal"
-               placeholder="vide : pas de dépôt légal"></label>
+      <!-- Multi-ligne, et la sortie le respecte : chaque ligne saisie devient un bloc au
+           pied de la 4ème. Un `input` obligeait à écrire d'un trait une mention légale
+           qui s'imprime sur deux ou trois lignes. -->
       <label><span>Mention</span>
-        <input type="text" id="inMention" placeholder="vide : pas de mention"></label>
+        <textarea id="inMention" rows="2" placeholder="vide : pas de mention"></textarea></label>
       <label><span>Dédicace</span>
         <textarea id="inDedicace" rows="2"
                   placeholder="vide : pas de page de dédicace"></textarea></label>

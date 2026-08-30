@@ -1432,12 +1432,20 @@ pub fn corps_quatre(
     if q.pied_actif {
         // La collection est une clé, littérale ; la mention et le prix sont des champs
         // libres, donc substitués.
+        //
+        // `lines` avant tout le reste : la mention se saisit sur plusieurs lignes, et
+        // dans le markup Typst un saut de ligne simple vaut une **espace**. Sans ce
+        // découpage, deux lignes saisies se recomposeraient en une seule, repliée au
+        // hasard de la largeur du bloc. Chacune devient un bloc comme la collection et
+        // le prix en sont un, et l'écart qui les sépare est bien celui d'un interligne :
+        // `leading` et `spacing` valent ici la même chose.
         let lignes: Vec<String> = [
-            ctx.livre.mention(ctx.imprimeur),
+            ctx.livre.mention(ctx.marques),
             ctx.livre.collection.clone(),
-            ctx.livre.prix(ctx.imprimeur),
+            ctx.livre.prix(ctx.marques),
         ]
         .iter()
+        .flat_map(|v| v.lines())
         .map(|v| v.trim())
         .filter(|v| !v.is_empty())
         .map(|v| format!("#{}", q.style_pied.applique(fw, v)))
@@ -1751,7 +1759,10 @@ mod tests {
     fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
         Contexte {
             livre: l,
-            imprimeur,
+            marques: crate::gabarit::Marques {
+                imprimeur,
+                ..crate::gabarit::Marques::default()
+            },
         }
     }
 
@@ -2500,5 +2511,59 @@ mod tests {
 
         let s = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
         assert!(!s.contains("%IMPRIMEUR%"), "le jeton est resté littéral");
+    }
+
+    /// **La 4ème marque l'exemplaire de son papier.** L'autre face du même besoin que le
+    /// copyright sert : le dos et la 4ème se lisent sur l'étagère, sans ouvrir le livre.
+    ///
+    /// Le papier de la couverture est celui du livrable, pas celui du POD : `Marques::sur`
+    /// le pose par-dessus ce que le `Provider` porte, et l'oublier écrirait sur chaque
+    /// exemplaire le nom du premier papier du catalogue.
+    #[test]
+    fn la_quatrieme_marque_le_papier_du_tirage() {
+        let mut l = livre();
+        l.mention = "Sur %PAPIER%".into();
+        let mut cv = maquettes::fournie("filets");
+        cv.quatrieme.pied_actif = true;
+
+        let ctx = Contexte {
+            livre: &l,
+            marques: crate::gabarit::Marques {
+                papier: Some("Photo brillant 130 g"),
+                ..crate::gabarit::Marques::default()
+            },
+        };
+        let s = source_quatre(&ctx, &cv, FORMAT, None, None, None).unwrap();
+        assert!(
+            s.contains("Sur Photo brillant 130 g"),
+            "le papier manque au pied de la 4ème : {s}"
+        );
+        assert!(!s.contains("%PAPIER%"), "le jeton est resté littéral");
+    }
+
+    /// Un saut de ligne saisi dans la mention se voit à l'impression.
+    ///
+    /// Le champ est multi-ligne, et sans ce découpage la saisie mentirait : dans le
+    /// markup Typst un `\n` simple vaut une **espace**, et les deux lignes se seraient
+    /// recomposées en une seule, repliée au hasard de la largeur du bloc. Chacune
+    /// devient donc son propre bloc, comme le sont déjà la collection et le prix — et
+    /// l'écart qu'elles y prennent est bien celui d'un interligne : le pied pose
+    /// `leading` et `spacing` à la même valeur.
+    #[test]
+    fn la_mention_garde_ses_sauts_de_ligne() {
+        let mut l = livre();
+        // Seule la mention parle : les deux autres lignes du pied rendraient le compte
+        // des blocs ambigu.
+        l.collection = String::new();
+        l.prix = String::new();
+        l.mention = "Imprimé en France\npar un imprimeur".into();
+        let mut cv = maquettes::fournie("filets");
+        cv.quatrieme.pied_actif = true;
+
+        let s = source_quatre(&ctx(&l, None), &cv, FORMAT, None, None, None).unwrap();
+        assert!(
+            s.contains("Imprimé en France]") && s.contains("par un imprimeur]"),
+            "les deux lignes de la mention n'en font qu'une : {s}"
+        );
     }
 }

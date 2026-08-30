@@ -674,7 +674,10 @@ mod tests {
     fn ctx<'a>(l: &'a Livre, imprimeur: Option<&'a str>) -> Contexte<'a> {
         Contexte {
             livre: l,
-            imprimeur,
+            marques: crate::gabarit::Marques {
+                imprimeur,
+                ..crate::gabarit::Marques::default()
+            },
         }
     }
     use crate::catalogue::provider;

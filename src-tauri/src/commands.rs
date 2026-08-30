@@ -717,9 +717,8 @@ pub fn composer(atelier: State<Atelier>) -> Result<Composition, String> {
 
     let dossier = sorties_dossier(o, &pr.cle)?;
     let typst = typst()?;
-    // La même composition que celle du package : convergence, puis PDF, écrits sous la
-    // clé du **gabarit**. Deux papiers du même gabarit y composent le même intérieur.
-    let r = package::composer_interieur(&o.projet, &pr, &pr.cle, &dossier, &typst)?;
+    // La même composition que celle du package : convergence, puis PDF.
+    let r = package::composer_interieur(&o.projet, &pr, &papier, &pr.cle, &dossier, &typst)?;
     let polices_introuvables = r.polices_introuvables.clone();
 
     // Le compte rendu dit « Chapitres » : une préface ou une page de partie n'en est
@@ -1154,13 +1153,14 @@ pub fn couverture_apercu(
         .ok_or("aucune maquette : en choisir une.")?;
     // Le format vient du livrable visé, et le fond perdu de son relevé quand
     // l'imprimeur n'en publie pas : les deux sont dans le projet, plus dans un champ.
-    let (pr, _, d) = vise(o)?;
+    let (pr, papier, d) = vise(o)?;
     let fond_perdu_mm = d.fond_perdu_mm;
-    // La couverture part chez le même imprimeur que l'intérieur : elle le nomme donc
-    // comme lui, et l'aperçu montre ce que le PDF portera.
+    // La couverture part chez le même imprimeur, sur le même papier et au même format que
+    // l'intérieur : elle les nomme donc comme lui, et l'aperçu montre ce que le PDF
+    // portera.
     let ctx = crate::gabarit::Contexte {
         livre: &o.projet.meta.livre,
-        imprimeur: Some(&pr.pod_nom),
+        marques: crate::gabarit::Marques::chez(&pr).sur(&papier.nom),
     };
 
     // Répertoire de travail de l'aperçu : temporaire, jamais à côté du projet. Un
@@ -1289,11 +1289,11 @@ pub fn couverture_calques(
     let Some(cv) = o.projet.meta.couverture.maquette.as_ref() else {
         return Ok(None);
     };
-    let (pr, _, _) = vise(o)?;
+    let (pr, papier, _) = vise(o)?;
     let format = pr.format;
     let ctx = crate::gabarit::Contexte {
         livre: &o.projet.meta.livre,
-        imprimeur: Some(&pr.pod_nom),
+        marques: crate::gabarit::Marques::chez(&pr).sur(&papier.nom),
     };
     let b = couverture::Boite::rognee(format);
 
@@ -2241,7 +2241,7 @@ const OBJET_PPI: u32 = 300;
 /// seulement un nom à calculer. Ce qui reste dort dans le temporaire du système, qui
 /// est fait pour cela.
 fn source_de_fond(o: &Ouvert) -> Result<(PathBuf, PathBuf), String> {
-    let (pr, _, d) = vise(o)?;
+    let (pr, papier, d) = vise(o)?;
     let int = &o.projet.meta.interieur;
     int.verifie()?;
     let livre = &o.projet.meta.livre;
@@ -2258,7 +2258,7 @@ fn source_de_fond(o: &Ouvert) -> Result<(PathBuf, PathBuf), String> {
         gouttiere: mesure.gouttiere,
         blanche: mesure.blanche,
     };
-    let src = interieur::source(livre, int, &pr, &reglage, &chapitres, None);
+    let src = interieur::source(livre, int, &pr, &papier.nom, &reglage, &chapitres, None);
     let dossier = std::env::temp_dir()
         .join("ozalid-pages")
         .join(empreinte(&src));
@@ -2381,7 +2381,7 @@ pub fn envoi_objet(index: usize, atelier: State<Atelier>) -> Result<Objet, Strin
 pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, String> {
     let garde = atelier.ouvert.lock().unwrap();
     let o = garde.as_ref().ok_or_else(aucun_projet)?;
-    let (pr, _, d) = vise(o)?;
+    let (pr, papier, d) = vise(o)?;
     let envois = &o.projet.meta.envois;
     envois.verifie()?;
     let e = envois
@@ -2411,6 +2411,7 @@ pub fn envoi_apercu(index: usize, atelier: State<Atelier>) -> Result<String, Str
             livre,
             int,
             &pr,
+            &papier.nom,
             &Reglage {
                 gouttiere: mesure.gouttiere,
                 blanche: mesure.blanche,

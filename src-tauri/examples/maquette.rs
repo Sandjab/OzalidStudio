@@ -88,7 +88,8 @@ fn main() -> Result<(), String> {
                 couverture::source_quatre(
                     &ozalid_lib::gabarit::Contexte {
                         livre: &projet.meta.livre,
-                        imprimeur: Some(&pr.pod_nom),
+                        marques: ozalid_lib::gabarit::Marques::chez(pr)
+                            .sur(&pr.papier_defaut().nom),
                     },
                     cv,
                     pr.format,

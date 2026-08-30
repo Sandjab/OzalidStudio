@@ -80,6 +80,7 @@ pub struct InterieurCompose {
 pub fn composer_interieur(
     projet: &Projet,
     pr: &Provider,
+    papier: &Papier,
     cle: &str,
     dossier: &Path,
     typst: &Typst,
@@ -96,7 +97,7 @@ pub fn composer_interieur(
     let r = interieur::converge(pr, |reglage| {
         ecrire(
             &src,
-            &interieur::source(livre, int, pr, reglage, &chapitres, None),
+            &interieur::source(livre, int, pr, &papier.nom, reglage, &chapitres, None),
         )?;
         typst.pages(&src)
     })?;
@@ -106,7 +107,7 @@ pub fn composer_interieur(
     };
     ecrire(
         &src,
-        &interieur::source(livre, int, pr, &reglage, &chapitres, None),
+        &interieur::source(livre, int, pr, &papier.nom, &reglage, &chapitres, None),
     )?;
     let pdf = dossier.join(nom(cle, "interieur", "pdf"));
     let polices_introuvables = typst.compile(&src, &pdf)?;
@@ -447,7 +448,7 @@ pub fn assembler(
         &planche::source(
             &crate::gabarit::Contexte {
                 livre,
-                imprimeur: Some(&pr.pod_nom),
+                marques: crate::gabarit::Marques::chez(pr).sur(&papier.nom),
             },
             cv,
             &g,
@@ -554,6 +555,21 @@ pub struct Cible {
     pub cle: String,
 }
 
+impl Cible {
+    /// La fabrication de ce livrable : le triplet du provider, et **son** papier.
+    ///
+    /// `pr.fabrication` ne convient pas et ne le peut pas : son papier est celui par
+    /// défaut du POD — un `Provider` vaut pour un triplet, plusieurs papiers s'y
+    /// rattachent. La lui prendre, c'est ranger l'intérieur d'un papier sous la clé d'un
+    /// autre, exactement le défaut que ce type existe pour éviter (`commands::cible`).
+    fn fabrication(&self) -> crate::catalogue::Fabrication {
+        crate::catalogue::Fabrication {
+            papier: self.papier.cle.clone(),
+            ..self.pr.fabrication.clone()
+        }
+    }
+}
+
 /// Les deux `Provider` décrivent-ils le même gabarit d'intérieur ?
 ///
 /// Séparé de `lot` pour être éprouvé sans Typst, comme `dossiers_d_envoi` l'est du
@@ -588,12 +604,16 @@ fn meme_gabarit(a: &Provider, b: &Provider) -> bool {
 fn interieur_du_disque(
     projet: &Projet,
     racine: &Path,
-    gabarit: &str,
+    fabrication: &crate::catalogue::Fabrication,
     exclues: &[&str],
 ) -> Option<InterieurCompose> {
-    let m = projet.meta.livraison.mesure(gabarit)?;
+    let m = projet.meta.livraison.mesure(&fabrication.cle_gabarit())?;
     projet.meta.livraison.livrables.iter().find_map(|l| {
-        if l.fabrication.cle_gabarit() != gabarit {
+        // La fabrication entière et non le seul gabarit : depuis `%PAPIER%`, deux papiers
+        // du même gabarit ne composent plus le même intérieur, et le prêt écrirait le nom
+        // d'un papier dans le livrable de l'autre. La mesure, elle, reste rangée par
+        // gabarit — c'est la pagination, et le papier ne la change pas.
+        if l.fabrication.cle() != fabrication.cle() {
             return None;
         }
         let cle = l.cle();
@@ -623,11 +643,16 @@ fn interieur_du_disque(
     })
 }
 
-/// Packager un lot de livrables, l'intérieur composé **une fois par gabarit**.
+/// Packager un lot de livrables, l'intérieur composé **une fois par gabarit et par papier**.
 ///
-/// Le premier livrable d'un gabarit compose dans son répertoire ; les suivants copient.
-/// Un échec de composition ne condamne pas le gabarit : le suivant du même gabarit
-/// réessaie, faute d'entrée retenue.
+/// Le premier livrable d'une fabrication compose dans son répertoire ; les suivants
+/// copient. Un échec de composition ne la condamne pas : le suivant réessaie, faute
+/// d'entrée retenue.
+///
+/// Le papier est entré dans la clé avec `%PAPIER%` : deux papiers du même gabarit
+/// partagent une pagination — c'est l'invariant de la mesure — mais plus une source, dès
+/// qu'un champ libre nomme le papier. Ce que le lot cesse de partager, il ne le partageait
+/// qu'entre papiers d'un même gabarit : le reste est intact.
 pub fn lot(
     projet: &Projet,
     cibles: &[Cible],
@@ -641,14 +666,15 @@ pub fn lot(
         .iter()
         .map(|c| {
             let dossier = racine.join(&c.cle);
-            if !prets.contains_key(&c.pr.cle) {
-                let i = match interieur_du_disque(projet, racine, &c.pr.cle, &exclues) {
+            let partage = c.fabrication().cle();
+            if !prets.contains_key(&partage) {
+                let i = match interieur_du_disque(projet, racine, &c.fabrication(), &exclues) {
                     Some(i) => i,
-                    None => composer_interieur(projet, &c.pr, &c.cle, &dossier, typst)?,
+                    None => composer_interieur(projet, &c.pr, &c.papier, &c.cle, &dossier, typst)?,
                 };
-                prets.insert(c.pr.cle.clone(), (c.pr.clone(), i));
+                prets.insert(partage.clone(), (c.pr.clone(), i));
             }
-            let (pr, interieur) = prets.get(&c.pr.cle).expect("vient d'être inséré si absent");
+            let (pr, interieur) = prets.get(&partage).expect("vient d'être inséré si absent");
             debug_assert!(
                 meme_gabarit(pr, &c.pr),
                 "deux gabarits de même clé, providers différents"
@@ -770,7 +796,7 @@ pub fn assembler_envois(
     racine: &Path,
     typst: &Typst,
 ) -> Result<Vec<(String, Package)>, String> {
-    let (pr, cle, finition) = (&c.pr, c.cle.as_str(), c.finition.as_deref());
+    let (pr, papier, cle, finition) = (&c.pr, &c.papier, c.cle.as_str(), c.finition.as_deref());
     let envois = &projet.meta.envois;
     envois.verifie()?;
     if envois.liste.is_empty() {
@@ -780,7 +806,7 @@ pub fn assembler_envois(
     // Le package de référence, sans envoi : c'est lui qui converge, calcule le dos et
     // compose la planche. Les envois n'en reprennent que le réglage et les fichiers.
     let reference = racine.join(".reference");
-    let int = composer_interieur(projet, pr, cle, &reference, typst)?;
+    let int = composer_interieur(projet, pr, papier, cle, &reference, typst)?;
     let base = assembler(projet, c, &int, &reference, typst)?;
 
     // Le compte de pages n'existe qu'après la convergence : le contrôle ne peut pas
@@ -813,7 +839,15 @@ pub fn assembler_envois(
         let t = trace(projet, e, &dossier)?;
         ecrire(
             &src,
-            &interieur::source(livre, int_meta, pr, &reglage, &chapitres, Some(t)),
+            &interieur::source(
+                livre,
+                int_meta,
+                pr,
+                &papier.nom,
+                &reglage,
+                &chapitres,
+                Some(t),
+            ),
         )?;
         let pdf = dossier.join(nom(cle, "interieur", "pdf"));
         // L'envoi peut composer dans une main que la référence n'emploie pas : ses
@@ -2091,9 +2125,9 @@ mod tests {
     fn un_interieur_a_jour_sur_le_disque_se_prete() {
         let racine = tempfile::tempdir().unwrap();
         let (projet, cle) = projet_genere(racine.path(), 266);
-        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
 
-        let i = interieur_du_disque(&projet, racine.path(), &gabarit, &[])
+        let i = interieur_du_disque(&projet, racine.path(), &fab, &[])
             .expect("l'intérieur du livrable généré");
         assert_eq!(i.pages, 266);
         assert_eq!(
@@ -2110,11 +2144,87 @@ mod tests {
     fn une_cible_de_la_passe_ne_se_prete_pas_son_propre_interieur() {
         let racine = tempfile::tempdir().unwrap();
         let (projet, cle) = projet_genere(racine.path(), 266);
-        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
 
         assert!(
-            interieur_du_disque(&projet, racine.path(), &gabarit, &[&cle]).is_none(),
+            interieur_du_disque(&projet, racine.path(), &fab, &[&cle]).is_none(),
             "régénérer se serait prêté son propre intérieur : il n'aurait rien recomposé"
+        );
+    }
+
+    /// **La clé de partage d'un lot sépare deux papiers.** C'est elle qui décide qui
+    /// compose et qui copie dans `lot`, et elle sort de `Cible::fabrication` — le seul
+    /// endroit du fichier qui sache que le papier d'une cible n'est pas celui que son
+    /// `Provider` porte par défaut. Prendre `pr.fabrication` telle quelle rangerait les
+    /// deux papiers sous une même clé, et le second copierait le PDF du premier.
+    ///
+    /// Éprouvé ici et non dans `lot`, pour la même raison que `meme_gabarit` l'est :
+    /// `lot` compose, donc réclame Typst.
+    #[test]
+    fn la_cle_de_partage_separe_deux_papiers() {
+        let pr = provider_d_essai();
+        // Le second papier est bâti ici plutôt qu'ajouté au provider d'essai : ce dernier
+        // sert à une trentaine de tests que ce bord ne regarde pas.
+        let second = Papier {
+            cle: "photo".into(),
+            nom: "Photo d'essai".into(),
+            ..pr.papiers[0].clone()
+        };
+        let une = Cible {
+            papier: pr.papiers[0].clone(),
+            ..cible_d_essai(&pr, "essai")
+        };
+        let autre = Cible {
+            papier: second,
+            ..cible_d_essai(&pr, "essai")
+        };
+
+        assert_eq!(
+            une.fabrication().cle_gabarit(),
+            autre.fabrication().cle_gabarit(),
+            "les deux papiers doivent bien partager un gabarit, sinon le test ne dit rien"
+        );
+        assert_ne!(
+            une.fabrication().cle(),
+            autre.fabrication().cle(),
+            "deux papiers partagent une clé de partage : le second copierait le PDF du premier"
+        );
+    }
+
+    /// **Un papier ne prête pas son intérieur à un autre papier.** Le partage se faisait par
+    /// gabarit, et il était juste tant que rien du papier n'entrait dans l'intérieur. Depuis
+    /// `%PAPIER%`, il ne l'est plus : le second livrable recevrait le PDF du premier, qui
+    /// nomme l'autre papier. C'est le pendant, dans le chemin de génération, de ce que
+    /// `empreinte::deux_papiers_du_meme_gabarit_ne_partagent_pas_une_empreinte` protège dans
+    /// celui de la péremption — et l'empreinte seule ne l'attrape pas, ce prêt-ci ne
+    /// comparant que la fraîcheur du prêteur.
+    #[test]
+    fn un_papier_ne_prete_pas_son_interieur_a_un_autre_papier() {
+        let racine = tempfile::tempdir().unwrap();
+        let (projet, _) = projet_genere(racine.path(), 266);
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
+
+        let mut autre = fab.clone();
+        let pod = crate::catalogue::resout(&fab).expect("livrable d'essai résolu");
+        let papiers = &pod.provider().papiers;
+        assert!(
+            papiers.len() > 1,
+            "le livrable d'essai n'offre qu'un papier : le bord ne peut pas se tester"
+        );
+        autre.papier = papiers[1].cle.clone();
+        assert_eq!(
+            fab.cle_gabarit(),
+            autre.cle_gabarit(),
+            "les deux papiers doivent bien partager un gabarit, sinon le test ne dit rien"
+        );
+
+        assert!(
+            interieur_du_disque(&projet, racine.path(), &autre, &[]).is_none(),
+            "l'intérieur d'un papier s'est prêté à un autre : le second porterait le nom du premier"
+        );
+        assert!(
+            interieur_du_disque(&projet, racine.path(), &fab, &[]).is_some(),
+            "le même papier doit toujours se prêter, sinon ce n'est plus un prêt"
         );
     }
 
@@ -2124,12 +2234,12 @@ mod tests {
     fn un_interieur_perime_ne_se_prete_pas() {
         let racine = tempfile::tempdir().unwrap();
         let (mut projet, _) = projet_genere(racine.path(), 266);
-        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
         projet.remplacer_texte("## 01 - Un\n\nUn autre paragraphe.".into());
         // `remplacer_texte` oublie les mesures : on remet celle du gabarit pour prouver que c'est
         // bien l'empreinte, et non l'absence de mesure, qui refuse le prêt.
         projet.meta.livraison.retenir_mesure(
-            &gabarit,
+            &fab.cle_gabarit(),
             crate::projet::Mesure {
                 pages: 266,
                 gouttiere: 14.0,
@@ -2139,7 +2249,7 @@ mod tests {
             },
         );
 
-        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+        assert!(interieur_du_disque(&projet, racine.path(), &fab, &[]).is_none());
     }
 
     /// Un PDF effacé à la main ne se copie pas : la source seule laisserait dans le répertoire
@@ -2148,10 +2258,10 @@ mod tests {
     fn un_fichier_manquant_ne_se_prete_pas() {
         let racine = tempfile::tempdir().unwrap();
         let (projet, cle) = projet_genere(racine.path(), 266);
-        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
         std::fs::remove_file(racine.path().join(&cle).join(nom(&cle, "interieur", "pdf"))).unwrap();
 
-        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+        assert!(interieur_du_disque(&projet, racine.path(), &fab, &[]).is_none());
     }
 
     /// Sans mesure, pas de pagination à prêter — et rien à inventer : `InterieurCompose` la porte,
@@ -2160,10 +2270,10 @@ mod tests {
     fn sans_mesure_rien_ne_se_prete() {
         let racine = tempfile::tempdir().unwrap();
         let (mut projet, _) = projet_genere(racine.path(), 266);
-        let gabarit = projet.meta.livraison.livrables[0].fabrication.cle_gabarit();
+        let fab = projet.meta.livraison.livrables[0].fabrication.clone();
         projet.meta.livraison.oublier_mesures();
 
-        assert!(interieur_du_disque(&projet, racine.path(), &gabarit, &[]).is_none());
+        assert!(interieur_du_disque(&projet, racine.path(), &fab, &[]).is_none());
     }
 
     /// **Spec § 8 : la réutilisation vaut d'un appel à l'autre, pas seulement dans une passe.**

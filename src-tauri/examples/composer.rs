@@ -74,7 +74,15 @@ fn main() -> Result<(), String> {
         passes += 1;
         std::fs::write(
             &src,
-            interieur::source(livre, int, &pr, reglage, &chapitres, None),
+            interieur::source(
+                livre,
+                int,
+                &pr,
+                &pr.papier_defaut().nom,
+                reglage,
+                &chapitres,
+                None,
+            ),
         )
         .map_err(|e| e.to_string())?;
         typst.pages(&src)
@@ -86,7 +94,15 @@ fn main() -> Result<(), String> {
     };
     std::fs::write(
         &src,
-        interieur::source(livre, int, &pr, &reglage, &chapitres, None),
+        interieur::source(
+            livre,
+            int,
+            &pr,
+            &pr.papier_defaut().nom,
+            &reglage,
+            &chapitres,
+            None,
+        ),
     )
     .map_err(|e| e.to_string())?;
     let pdf = dossier.join(format!("interieur-{}.pdf", pr.cle));

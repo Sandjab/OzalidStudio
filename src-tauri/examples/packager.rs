@@ -61,7 +61,14 @@ fn main() -> Result<(), String> {
             cle: pr.cle.clone(),
             pr,
         };
-        let int = package::composer_interieur(&projet, &cible.pr, &cible.cle, &sortie, &typst)?;
+        let int = package::composer_interieur(
+            &projet,
+            &cible.pr,
+            &cible.papier,
+            &cible.cle,
+            &sortie,
+            &typst,
+        )?;
         let p = package::assembler(&projet, &cible, &int, &sortie, &typst)?;
         println!(
             "{} — {} pages, gouttière {:.1} mm, dos {:.2} mm, planche {:.2} × {:.2} mm{}",
