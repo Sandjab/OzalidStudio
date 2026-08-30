@@ -159,6 +159,22 @@ function paquet(sur = {}) {
 }
 
 /**
+ * Le compte rendu tel que les quatre verbes le rendent : le package et ce qui l'entoure —
+ * la finition retenue, la vignette, l'erreur. `paquet()` n'en est que le noyau.
+ */
+function compteRendu(sur = {}) {
+  return {
+    cle: 'lulu-108x175-broche-standard',
+    libelle: 'Lulu — poche 108 × 175',
+    finition: null,
+    package: paquet(),
+    vignette: null,
+    erreur: null,
+    ...sur,
+  };
+}
+
+/**
  * Un projet ouvert, avec un Rust de façade qui **tient réellement** la liste des
  * livrables.
  *
@@ -1012,7 +1028,7 @@ test('une ligne mesurée donne ses pages, sa gouttière et son dos', async () =>
   await faireComposer(els);
   assert.strictEqual(
     els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
-    '262 pages · gouttière 25,0 mm · dos 16,51 mm'
+    '262 pages (blanche de parité) · gouttière 25,0 mm · dos 16,51 mm'
   );
 });
 
@@ -1093,7 +1109,7 @@ test('un papier sans formule reprend le dos relevé, et le dit', async () => {
   const { els } = await ouvre([COOLLIBRI], {}, { livrables: [mesuree({ dos_mm: 16.6 })] });
   assert.strictEqual(
     els.get('liv-mesure-coollibri-148x210-broche-mesure').textContent,
-    '262 pages · gouttière 25,0 mm · dos 16,60 mm (relevé)'
+    '262 pages (blanche de parité) · gouttière 25,0 mm · dos 16,60 mm (relevé)'
   );
 
   // Rien de relevé, rien à dire : un dos absent ne devient pas zéro parce que la
@@ -1101,7 +1117,7 @@ test('un papier sans formule reprend le dos relevé, et le dit', async () => {
   const { els: vide } = await ouvre([COOLLIBRI], {}, { livrables: [mesuree()] });
   assert.strictEqual(
     vide.get('liv-mesure-coollibri-148x210-broche-mesure').textContent,
-    '262 pages · gouttière 25,0 mm'
+    '262 pages (blanche de parité) · gouttière 25,0 mm'
   );
 });
 
@@ -1287,58 +1303,133 @@ test('un dos qui tient n\'affiche aucune alerte', async () => {
   assert.doesNotMatch(els.get('livrables').textContent, /rogné/);
 });
 
-test('un package affiche le dos, la planche et les fichiers produits', async () => {
-  const { els } = await ouvre([LULU], {
-    packager: () => [{
-      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
+/**
+ * Un chiffre écrit deux fois dans une même ligne n'informe pas deux fois : il oblige à
+ * vérifier qu'il dit la même chose que son jumeau quatre lignes plus haut. La ligne porte
+ * déjà pages, gouttière, dos, papier et finition — et elle les porte à la réouverture,
+ * quand le compte rendu, lui, n'existe plus. Ne reste donc au compte rendu que ce que
+ * seule la composition a vu : la planche, ses fichiers, ses avertissements.
+ */
+test('le compte rendu ne redit pas les chiffres que la ligne porte déjà', async () => {
+  const { els } = await ouvre([LULU], { packages: [compteRendu()] });
+  await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
+
+  assert.deepStrictEqual(els.get('livrables').textes('dt'), ['Planche']);
+  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
+  assert.match(els.get('livrables').textContent, /couverture-lulu\.pdf/);
+
+  const t = els.get('livrables').textContent;
+  const combien = (quoi) => (t.match(new RegExp(quoi, 'g')) ?? []).length;
+  assert.equal(combien('262 pages'), 1, 'la pagination se lit une fois');
+  assert.equal(combien('25,0 mm'), 1, 'la gouttière se lit une fois');
+  assert.equal(combien('16,51 mm'), 1, 'le dos se lit une fois');
+  assert.equal(combien('3,175 mm'), 1, 'le fond perdu se lit une fois');
+  assert.equal(combien('Papier standard'), 1, 'le papier se lit une fois');
+});
+
+/**
+ * La blanche de parité vient de la mesure, que le projet retient : elle appartient donc au
+ * rang que la ligne écrit toujours, et non au compte rendu de la session. Le livrable
+ * ci-dessous n'en a aucun — c'est un projet rouvert —, et la page ajoutée pour tomber sur
+ * un compte pair doit s'y lire quand même. Elle ne se lisait pas avant ce chantier.
+ */
+test('la blanche de parité se lit sur la mesure, donc à la réouverture', async () => {
+  const { els } = await ouvre([LULU], {}, {
+    livrables: [{
+      ...chez(LULU),
+      compose: { pages: 262, gouttiere: 25, blanche: true, dos: 16.513 },
+      etat: { etat: 'ajour' },
     }],
   });
-  await els.get('btToutRegenerer').declenche('click');
+  assert.strictEqual(
+    els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
+    '262 pages (blanche de parité) · gouttière 25,0 mm · dos 16,51 mm'
+  );
+});
 
-  const dd = els.get('livrables').textes('dd');
-  assert.deepStrictEqual(dd, [
-    '262 (blanche de parité)',
-    'Papier standard',
-    '25,0 mm',
-    '16,51 mm',
-    '238,86 × 181,35 mm, FP 3,175 mm',
-  ]);
-  assert.match(els.get('livrables').textContent, /couverture-lulu\.pdf/);
+/**
+ * Le dos du compte rendu est celui qui a **réellement** servi à composer la planche, figé
+ * au moment de la génération ; celui de la ligne est recalculé à chaque vue depuis la
+ * formule du papier. Les redire tous les deux quand ils s'accordent était la redite la
+ * plus coûteuse des cinq — deux fois le même millimètre, à quatre lignes d'écart.
+ *
+ * Mais ils peuvent cesser de s'accorder : tout ce qui pagine efface la mesure du projet
+ * sans toucher au compte rendu de la session. La ligne dit alors « non composé » au-dessus
+ * d'un package qui, lui, a bien un dos — le seul chiffre qui reste à dire sur quoi ce
+ * PDF-là a été plié. Le taire ferait disparaître la mesure au moment précis où elle
+ * devient la seule.
+ */
+test('le dos du compte rendu se tait quand la ligne annonce le même', async () => {
+  const { els } = await ouvre([LULU], { packages: [compteRendu()] });
+  await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
+  assert.doesNotMatch(els.get('livrables').textContent, /Composé sur un dos/);
+});
+
+test('le dos du compte rendu reparaît quand la ligne ne le mesure plus', async () => {
+  const { els } = await ouvre([LULU], { packages: [compteRendu()] });
+  await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
+
+  // Changer la police de l'intérieur périme la mesure — le compte rendu de la session,
+  // lui, survit. C'est le seul des trois gestes qui paginent dans ce cas : modifier le
+  // livre et remplacer le manuscrit effacent l'écran avec la mesure.
+  els.get('inPoliceInterieur').value = 'Cardo';
+  await els.get('inPoliceInterieur').declenche('change');
+  await new Promise((r) => setImmediate(r));
+
+  const t = els.get('livrables').textContent;
+  assert.match(t, /non composé/, 'la mesure est bien partie');
+  assert.match(t, /Composé sur 262 pages · gouttière 25,0 mm · dos 16,51 mm\./,
+    'les chiffres figés du package sont les seuls qui restent, et ils doivent se lire');
+});
+
+/**
+ * Le fond perdu suit la même règle que les trois autres, avec une source de plus : le rang
+ * du format le tient du catalogue, sans rien composer. Le package, lui, porte celui qui a
+ * réellement été appliqué à la planche — et les deux ne sont pas forcément le même chiffre.
+ */
+test('le fond perdu de la planche ne se redit que s\'il contredit le catalogue', async () => {
+  const { els } = await ouvre([LULU], {
+    packages: [compteRendu({ package: paquet({ fond_perdu: 5 }) })],
+  });
+  await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
+  assert.deepStrictEqual(els.get('livrables').textes('dd'),
+    ['238,86 × 181,35 mm, FP 5,000 mm']);
+});
+
+/**
+ * Chez un imprimeur à gabarit, le catalogue ne publie aucun fond perdu — le rang du format
+ * dit « à relever ». Celui du package est alors le seul chiffre qu'on ait : le taire au
+ * motif qu'il ne contredit rien le ferait disparaître là où il est le plus utile.
+ */
+test('le fond perdu reparaît là où le catalogue n\'en publie aucun', async () => {
+  const { els } = await ouvre([COOLLIBRI], {
+    packages: [compteRendu({
+      cle: 'coollibri-148x210-broche-mesure',
+      package: paquet({ cle: 'coollibri-148x210-broche-mesure', fond_perdu: 3.175 }),
+    })],
+  }, { livrables: [{ ...chez(COOLLIBRI), dos_mm: 16.513 }] });
+  await els.get('liv-regenerer-coollibri-148x210-broche-mesure').declenche('click');
+  assert.match(els.get('livrables').textes('dd')[0], /FP 3,175 mm/);
 });
 
 /**
  * La finition ne change pas un octet du PDF — c'est bien pour ça qu'elle ne distingue
  * pas deux livrables, et qu'aucun nom de fichier ne la porte. Mais elle **se commande**,
- * et ce compte rendu est ce qu'on emporte chez l'imprimeur : muet, il fait commander un
+ * et cette ligne est ce qu'on emporte chez l'imprimeur : muette, elle fait commander un
  * livre sans le pelliculage qu'on venait de cocher.
  *
- * Elle se lit à côté du papier, l'autre chose qu'on choisit sans que le PDF change.
+ * Elle se lit dans le titre de la ligne, à côté du papier — l'autre chose qu'on choisit
+ * sans que le PDF change. Le compte rendu la redisait ; c'est ce titre-ci qui la porte, et
+ * qui la porte encore à la réouverture, quand aucun compte rendu ne survit. D'où cette
+ * garde : le retrait de la redite ne doit pas emporter la seule mention qui reste.
  */
-test('le compte rendu d\'un package porte la finition retenue', async () => {
-  const { els } = await ouvre([LULU], {
-    packager: () => [{
-      cle: 'lulu-108x175-broche-standard',
-      libelle: 'Lulu',
-      finition: 'Pelliculage mat',
-      package: paquet(),
-      vignette: null,
-      erreur: null,
-    }],
+test('la finition retenue se lit sur la ligne du livrable', async () => {
+  const { els } = await ouvre([KDP], {}, {
+    livrables: [{ ...chez(KDP), finition: 'mat' }],
   });
-  await els.get('btToutRegenerer').declenche('click');
-
-  assert.deepStrictEqual(
-    els.get('livrables').textes('dt'),
-    ['Pages', 'Papier', 'Finition', 'Gouttière', 'Dos', 'Planche'],
-  );
-  assert.deepStrictEqual(els.get('livrables').textes('dd'), [
-    '262 (blanche de parité)',
-    'Papier standard',
-    'Pelliculage mat',
-    '25,0 mm',
-    '16,51 mm',
-    '238,86 × 181,35 mm, FP 3,175 mm',
-  ]);
+  const nom = els.get('liv-kdp-6x9-broche-creme').textes('span')[0];
+  assert.match(nom, /Pelliculage mat/, 'la finition a disparu de la ligne');
+  assert.match(nom, /Crème/, 'le papier a disparu de la ligne');
 });
 
 /**

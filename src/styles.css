@@ -1374,16 +1374,12 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    et quatre boutons noirs par ligne feraient de la liste un damier. */
 .livrable .gestes { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
 
-/* Les chiffres d'un livrable, deux par ligne. La colonne de libellés est à la largeur du
-   plus long d'entre eux, pas aux 13 rem d'une colonne de formulaire : « Gouttière »
-   suivi de trois centimètres de blanc éloignerait chaque chiffre de ce qu'il mesure. */
-.livrable dl { grid-template-columns: auto 1fr auto 1fr; gap: .1rem .8rem; margin: .3rem 0 0; }
-/* La dernière paire — la planche et son fond perdu — court sur toute la largeur : c'est
-   la seule dont la valeur est une phrase, et la moitié d'une ligne la replierait. Son
-   libellé revient en première colonne avec elle : sans cette ligne, il restait en
-   troisième, orphelin, à côté d'une valeur qui commençait à la deuxième. */
-.livrable dl dt:last-of-type { grid-column: 1; }
-.livrable dl dd:last-child { grid-column: 2 / -1; }
+/* Le seul chiffre du compte rendu : la planche et son fond perdu. Deux colonnes, et non
+   les quatre qui appariaient cinq chiffres — la ligne porte elle-même pages, gouttière et
+   dos depuis qu'elle ne les redit plus ici, et il ne reste rien à apparier. La colonne de
+   libellés est à la largeur du sien, pas aux 13 rem d'une colonne de formulaire, et la
+   valeur, qui est une phrase, prend toute la largeur qui reste. */
+.livrable dl { grid-template-columns: auto 1fr; gap: .1rem .8rem; margin: .3rem 0 0; }
 
 /* Relevés d'un imprimeur à gabarit : côte à côte, sur une ligne à eux. Le
    `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte

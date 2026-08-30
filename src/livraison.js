@@ -156,8 +156,11 @@ function afficherLivrables() {
  *
  * Deux niveaux de remplissage, et c'est voulu. Ce que le modèle retient — identité, pages,
  * gouttière, dos, état — se lit toujours, y compris à la réouverture d'un projet fermé la
- * veille. Ce que seule la composition a vu — dos rogné, avertissements, polices de repli —
- * ne paraît que dans la session qui a généré.
+ * veille. Ce que seule la composition a vu — la planche, le dos rogné, les avertissements,
+ * les polices de repli — ne paraît que dans la session qui a généré.
+ *
+ * Le second niveau ne redit rien du premier : il ne parle que de ce dont le premier se tait,
+ * ou de ce sur quoi il dit autre chose. Voir `redit`.
  */
 function ligneLivrable(d) {
   const ligne = h('div', undefined, 'livrable');
@@ -174,19 +177,41 @@ function ligneLivrable(d) {
   const r = packagesDeLaSession[d.cle];
   if (r?.package) {
     const q = r.package;
+    // Ce que seule la composition a vu, et rien de ce que les quatre rangs ci-dessus
+    // portent déjà : pages, gouttière, dos, papier et finition s'y lisent, et ils s'y
+    // lisent encore à la réouverture, quand ce compte rendu-ci n'existe plus. Les redire
+    // n'ajoutait pas une information, cela obligeait à vérifier que les deux disaient la
+    // même chose. La planche reste : elle n'est le format d'aucun rang — c'est la
+    // couverture dépliée, deux largeurs, le dos et les fonds perdus.
+    //
+    // Le fond perdu suit la même règle, avec une source de plus : la ligne le tient du
+    // catalogue, le package porte celui qui a réellement été appliqué. Il ne reparaît donc
+    // que là où il contredit ce qu'on vient de lire — ou là où le catalogue n'en publie
+    // aucun, chez un imprimeur à gabarit, et où il est le seul chiffre qu'on ait.
+    const fp = p?.fond_perdu ?? null;
     const dl = h('dl');
-    for (const [k, v] of [
-      ['Pages', `${q.pages}${q.blanche ? ' (blanche de parité)' : ''}`],
-      ['Papier', q.papier],
-      // Après le papier — l'autre chose qu'on choisit sans qu'un octet du PDF change, et
-      // qui se commande quand même. Elle ne paraît que là où il y en a une.
-      ...(r.finition ? [['Finition', r.finition]] : []),
-      ['Gouttière', `${nb(q.gouttiere, 1)} mm`],
-      ['Dos', `${nb(q.dos)} mm`],
-      ['Planche', `${nb(q.planche[0])} × ${nb(q.planche[1])} mm, `
-        + `FP ${nb(q.fond_perdu, 3)} mm`],
-    ]) dl.append(h('dt', k), h('dd', v));
+    dl.append(h('dt', 'Planche'), h('dd', `${nb(q.planche[0])} × ${nb(q.planche[1])} mm`
+      + (redit(nb(q.fond_perdu, 3), fp === null ? null : nb(fp, 3))
+        ? `, FP ${nb(q.fond_perdu, 3)} mm` : '')));
     infos.append(dl);
+    // L'exception à la règle du dessus, et la raison pour laquelle ces trois chiffres-là
+    // n'ont pas simplement disparu : ce sont ceux sur lesquels le PDF a **réellement** été
+    // composé, figés à la génération, quand ceux de la ligne suivent le livre d'aujourd'hui.
+    // Tout ce qui pagine efface la mesure du projet sans toucher au compte rendu de la
+    // session : la ligne dit alors « non composé » au-dessus d'un package qui, lui, a bien
+    // une pagination, une gouttière et un dos. Les taire ferait disparaître la mesure au
+    // moment précis où elle devient la seule qu'on ait.
+    //
+    // Écrits comme le rang de mesure les écrit, séparateur compris : les deux se lisent
+    // l'un sous l'autre, et c'est l'écart qu'on veut voir sauter aux yeux.
+    const dosDeLaLigne = dosAnnonce(d, dosPublie);
+    const figes = [
+      [`${q.pages} pages`, String(q.pages), d.compose ? String(d.compose.pages) : null],
+      [`gouttière ${nb(q.gouttiere, 1)} mm`, nb(q.gouttiere, 1),
+        d.compose ? nb(d.compose.gouttiere, 1) : null],
+      [`dos ${nb(q.dos)} mm`, nb(q.dos), dosDeLaLigne === null ? null : nb(dosDeLaLigne)],
+    ].filter(([, fige, annonce]) => redit(fige, annonce)).map(([texte]) => texte);
+    if (figes.length) infos.append(h('p', `Composé sur ${figes.join(' · ')}.`, 'note'));
     // Le dos est composé sur une zone qui rogne ce qui dépasse, sans rien dire : un titre
     // coupé au pli ne se verrait qu'à l'impression.
     if (q.dos_requis !== null) {
@@ -604,6 +629,35 @@ async function supprimerLivrable(d) {
 }
 
 /**
+ * Le compte rendu doit-il redire ce chiffre-là ?
+ *
+ * Oui quand la ligne n'en annonce aucun — le figé est alors le seul qu'on ait —, et oui
+ * quand il ne dit pas la même chose. Non le reste du temps : deux fois le même millimètre
+ * à quatre lignes d'écart n'informe pas deux fois, il oblige à vérifier que les deux sont
+ * d'accord.
+ *
+ * Les deux arrivent **tels qu'ils s'écrivent**, et c'est le point : un écart qui ne se voit
+ * pas à l'écran n'est pas un écart à montrer.
+ */
+function redit(fige, annonce) {
+  return annonce === null || fige !== annonce;
+}
+
+/**
+ * Le dos que la ligne annonce : celui de la formule là où le papier la publie, le relevé
+ * fait sur le gabarit ailleurs, et `null` tant qu'on n'a ni l'un ni l'autre.
+ *
+ * Une seule fabrique pour ses deux lecteurs — la note de mesure qui l'écrit, et le compte
+ * rendu qui décide s'il doit redire le sien. Deux calculs d'un même chiffre finiraient par
+ * se contredire, et c'est justement une contradiction que le second cherche : il faut donc
+ * qu'ils cherchent la même.
+ */
+function dosAnnonce(d, dosPublie) {
+  const dos = dosPublie ? d.compose?.dos : d.dos_mm;
+  return dos === null || dos === undefined ? null : dos;
+}
+
+/**
  * Ce que la composition a mesuré pour ce livrable, ou pourquoi elle ne l'a pas mesuré.
  *
  * Un rang à soi sous la ligne, et non un ajout à la note du format : le format et le
@@ -611,9 +665,11 @@ async function supprimerLivrable(d) {
  * pages, gouttière et dos viennent d'une composition qui n'a pas forcément eu lieu. Les
  * coudre dans la même phrase donnerait à lire comme également su ce qui ne l'est pas.
  *
- * Les décimales sont celles du compte rendu de package, plus bas dans le même onglet :
- * gouttière au dixième, dos au centième. Le pied fait l'inverse — un écart qui lui
- * appartient, et que ce lot ne corrige pas.
+ * Gouttière au dixième, dos au centième : les décimales du compte rendu de package, qui
+ * les portait plus bas dans le même onglet avant de cesser de les redire. Elles ont
+ * survécu à la redite, et c'est ce qu'il faut — le compte rendu compare encore son dos à
+ * celui-ci pour décider s'il le redit, et il les compare tels qu'ils s'écrivent. Le pied
+ * fait l'inverse : un écart qui lui appartient, et que ce chantier ne corrige pas.
  */
 function noteMesure(d, dosPublie) {
   const ligne = h('p', undefined, 'note mesure');
@@ -629,13 +685,14 @@ function noteMesure(d, dosPublie) {
   // gabarit, nommé comme tel — sans quoi il se lirait comme un chiffre que l'application
   // aurait trouvé seule. Et rien du tout si rien n'a été relevé : un dos absent ne
   // devient pas zéro parce que la pagination, elle, est connue.
-  const dos = dosPublie ? d.compose.dos : d.dos_mm;
+  const dos = dosAnnonce(d, dosPublie);
   ligne.textContent = [
-    `${d.compose.pages} pages`,
+    // La blanche de parité tient à la pagination, que le projet retient : elle appartient
+    // donc à ce rang-ci, et se lit à la réouverture. Le compte rendu la portait, et la
+    // perdait avec lui à la fermeture — pour une page qui, elle, est bien dans le PDF.
+    `${d.compose.pages} pages${d.compose.blanche ? ' (blanche de parité)' : ''}`,
     `gouttière ${nb(d.compose.gouttiere, 1)} mm`,
-    ...(dos === null || dos === undefined
-      ? []
-      : [`dos ${nb(dos)} mm${dosPublie ? '' : ' (relevé)'}`]),
+    ...(dos === null ? [] : [`dos ${nb(dos)} mm${dosPublie ? '' : ' (relevé)'}`]),
   ].join(' · ');
   return ligne;
 }
