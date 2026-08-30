@@ -708,6 +708,31 @@ test('un livrable jamais généré n\'est ni périmé ni en échec', async () =>
 });
 
 /**
+ * La teinte double le mot, comme l'état d'enregistrement de l'entête : ce qui reste à
+ * générer et ce qui est composé se distinguent du coin de l'œil, sans lire la phrase.
+ * Les deux états calmes sont les seuls à s'y prêter — les deux autres sont des alertes,
+ * et le rouge franc leur appartient.
+ *
+ * La couleur est au CSS, mais elle n'a que cette classe pour cible : sans elle, la règle
+ * ne teindrait rien et rien d'autre ne le dirait, le faux DOM ne mettant pas en page.
+ * Le contrat `livraison.js → styles.css` garde l'autre moitié.
+ */
+test('les deux états calmes d\'un livrable portent chacun leur teinte', async () => {
+  const jamais = await ouvre([LULU]);
+  assert.match(
+    jamais.els.get('liv-etat-lulu-108x175-broche-standard').className, /\bjamais\b/,
+    'un livrable jamais généré n\'est pas teinté'
+  );
+
+  const ajour = await ouvre([LULU], {}, {
+    livrables: [{ ...chez(LULU), etat: { etat: 'ajour' } }],
+  });
+  const etat = ajour.els.get('liv-etat-lulu-108x175-broche-standard');
+  assert.strictEqual(etat.textContent, 'à jour');
+  assert.match(etat.className, /\bajour\b/, 'un livrable à jour n\'est pas teinté');
+});
+
+/**
  * La vignette d'une génération d'hier se retrouve à la réouverture : c'est ce qui permet à
  * la ligne de montrer sa planche sans recomposer, et tout l'intérêt de la commande dédiée.
  * Elle vient du disque, pas du compte rendu de la session.

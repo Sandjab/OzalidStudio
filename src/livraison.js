@@ -326,14 +326,20 @@ function remplirFormulaire(d) {
  * demanderait de refaire la composition qui a échoué.
  *
  * Jamais généré n'est pas une alerte : ce livrable n'a rien perdu, on ne lui a rien demandé.
+ * Les deux états calmes portent tout de même leur teinte, celle de l'état d'enregistrement
+ * de l'entête : le même code couleur pour la même question — est-ce que ce que je vois est
+ * sur le disque ? —, et il se lit du coin de l'œil sous une liste de six livrables. Ce sont
+ * les gris teintés et non le rouge franc, qui reste aux deux alertes ci-dessous.
  */
 function noteEtat(d) {
   const p = h('p', undefined, 'note');
   p.id = `liv-etat-${d.cle}`;
   const e = d.etat ?? { etat: 'jamais' };
   if (e.etat === 'jamais') {
+    p.className = 'note jamais';
     p.textContent = 'jamais généré';
   } else if (e.etat === 'ajour') {
+    p.className = 'note ajour';
     p.textContent = 'à jour';
   } else if (e.etat === 'echec') {
     p.className = 'note alerte';

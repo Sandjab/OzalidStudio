@@ -1362,6 +1362,12 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .livrable .infos { min-width: 0; }
 .livrable .nom { font-weight: 600; }
 .livrable .note { margin: .1rem 0 0; }
+/* La teinte double le mot, comme l'état d'enregistrement de l'entête, et ce sont les mêmes
+   deux gris : sous une liste de six livrables, ce qui reste à générer et ce qui est composé
+   se distinguent avant de se lire. Le rouge franc n'est pas repris — il appartient aux deux
+   autres états, qui sont des alertes, et un livrable jamais généré n'a rien perdu. */
+.livrable .note.jamais { color: var(--gris-modifie); }
+.livrable .note.ajour { color: var(--gris-enregistre); }
 .livrable .chemin { margin: .1rem 0 0; }
 
 /* Les quatre verbes, groupés et discrets : le noir de l'étape appartient à « Générer »,

@@ -705,3 +705,39 @@ test('chaque fichier refusé garde son chemin entier au survol', async () => {
     assert.ok(!nom.includes(path.dirname(chemin)), `répertoire dans le nom : ${nom}`);
   }
 });
+
+/* ---------- livraison.js → styles.css ---------- */
+
+/**
+ * Une classe qui ne teint rien ne se voit pas.
+ *
+ * `noteEtat` pose une classe par état calme — « jamais généré », « à jour » —, et c'est
+ * le CSS qui en fait une couleur. Le faux DOM ne met rien en page : il verrait la classe
+ * posée et ne dirait rien d'une règle disparue, si bien que la mention retomberait au gris
+ * de `.note` sans qu'aucun test ne bouge. D'où cette garde, qui confronte les deux
+ * fichiers — comme celle de l'image inerte plus haut.
+ *
+ * Les teintes sont celles de l'entête, et c'est le point : le même code couleur pour la
+ * même question — est-ce que ce que je vois est sur le disque ? — dit à l'œil qu'il n'a
+ * qu'un code à apprendre. En redéclarer d'autres ici les ferait diverger au premier
+ * réglage de l'une des deux.
+ */
+test('les états calmes d\'un livrable sont teints comme l\'état d\'enregistrement', () => {
+  const css = source('src', 'styles.css');
+  const js = source('src', 'livraison.js');
+
+  const classes = [...js.matchAll(/p\.className = 'note ([a-z]+)';/g)].map((m) => m[1]);
+  assert.deepStrictEqual(classes.filter((c) => c !== 'alerte').sort(), ['ajour', 'jamais'],
+    `deux états calmes attendus, vu : ${classes}`);
+
+  const teinte = (classe) => {
+    const regle = css.match(new RegExp(`\\.livrable \\.note\\.${classe} \\{[^}]*\\}`, 's'));
+    assert.ok(regle, `.livrable .note.${classe} ne teint plus rien : la mention retombe `
+      + 'au gris de `.note`, et l\'œil perd le code couleur de l\'entête');
+    const couleur = regle[0].match(/color: var\((--[a-z-]+)\)/);
+    assert.ok(couleur, `couleur illisible dans : ${regle[0]}`);
+    return couleur[1];
+  };
+  assert.strictEqual(teinte('jamais'), '--gris-modifie');
+  assert.strictEqual(teinte('ajour'), '--gris-enregistre');
+});
