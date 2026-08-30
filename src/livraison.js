@@ -170,20 +170,17 @@ function ligneLivrable(d) {
   const pod = pods.find((x) => x.cle === d.pod);
   const dosPublie = pod?.papiers.find((pa) => pa.cle === d.papier)?.dos_publie ?? false;
 
-  const infos = h('div', undefined, 'infos');
-  infos.append(h('span', libelleDansGroupe(d), 'nom'));
-  if (p) infos.append(h('p', noteFormat(p), 'note'));
-  infos.append(noteMesure(d, dosPublie), noteEtat(d));
+  // Le libellé à gauche, l'état à droite quand il tient en deux mots : « ce livrable, dans
+  // cet état » est ce qu'on lit en premier, et le rang qu'on retire à l'état ne portait rien
+  // d'autre. Les deux autres états gardent le leur — voir `noteEtat`.
+  const titre = h('div', undefined, 'titre');
+  titre.id = `liv-titre-${d.cle}`;
+  titre.append(h('span', libelleDansGroupe(d), 'nom'), ...[etatCourt(d)].filter(Boolean));
 
-  // La planche vient du modèle depuis que le Rust la recalcule à la vue : elle n'est qu'une
-  // addition du format, du dos et du fond perdu, et se lit donc à la réouverture. Le fond
-  // perdu n'y est pas répété — la note du format le donne, deux rangs plus haut.
-  if (d.compose?.planche) {
-    const dl = h('dl');
-    dl.append(h('dt', 'Planche'),
-      h('dd', `${nb(d.compose.planche[0])} × ${nb(d.compose.planche[1])} mm`));
-    infos.append(dl);
-  }
+  const infos = h('div', undefined, 'infos');
+  infos.append(titre);
+  if (p) infos.append(h('p', noteFormat(p), 'note'));
+  infos.append(noteMesure(d, dosPublie), ...[noteEtat(d)].filter(Boolean));
   // Les fichiers livrés, comme la vignette : relus du disque, hors de la vue, et posés ici
   // quand ils arrivent. Une seule source pour les deux moments — celui qui vient de générer
   // et celui qui rouvre —, là où le compte rendu de la session n'en servait qu'un.
@@ -356,34 +353,43 @@ function remplirFormulaire(d) {
 }
 
 /**
- * Où en est le package de cette ligne, en une phrase.
+ * Les deux états calmes d'un livrable, en deux mots, pour la ligne du titre — ou `null`
+ * quand l'état a une phrase à dire et prend le rang que `noteEtat` lui donne.
+ *
+ * Jamais généré n'est pas une alerte : ce livrable n'a rien perdu, on ne lui a rien demandé.
+ * Les deux portent tout de même leur teinte, celle de l'état d'enregistrement de l'entête :
+ * le même code couleur pour la même question — est-ce que ce que je vois est sur le
+ * disque ? —, et il se lit du coin de l'œil sous une liste de six livrables. Ce sont les
+ * gris teintés et non le rouge franc, qui reste aux deux alertes.
+ */
+function etatCourt(d) {
+  const e = d.etat ?? { etat: 'jamais' };
+  if (e.etat !== 'jamais' && e.etat !== 'ajour') return null;
+  const s = h('span', e.etat === 'jamais' ? 'jamais généré' : 'à jour',
+    `etat-livrable ${e.etat}`);
+  s.id = `liv-etat-${d.cle}`;
+  return s;
+}
+
+/**
+ * L'état d'un livrable **quand il a une phrase à dire**, ou `null` quand deux mots
+ * suffisent — ceux-là sont montés sur la ligne du titre, voir `etatCourt`.
  *
  * La péremption dit **ce qui** a bougé : « périmé » tout court obligerait à régénérer pour
  * apprendre si c'est le texte ou la maquette, et les deux ne coûtent pas la même chose à
  * recomposer. L'échec dit sa raison, pour la même raison — l'apprendre autrement
- * demanderait de refaire la composition qui a échoué.
- *
- * Jamais généré n'est pas une alerte : ce livrable n'a rien perdu, on ne lui a rien demandé.
- * Les deux états calmes portent tout de même leur teinte, celle de l'état d'enregistrement
- * de l'entête : le même code couleur pour la même question — est-ce que ce que je vois est
- * sur le disque ? —, et il se lit du coin de l'œil sous une liste de six livrables. Ce sont
- * les gris teintés et non le rouge franc, qui reste aux deux alertes ci-dessous.
+ * demanderait de refaire la composition qui a échoué. Ce sont ces deux phrases qui valent
+ * un rang : les réduire à une étiquette pour gagner une ligne rendrait la ligne muette là
+ * où elle a le plus à dire.
  */
 function noteEtat(d) {
-  const p = h('p', undefined, 'note');
-  p.id = `liv-etat-${d.cle}`;
   const e = d.etat ?? { etat: 'jamais' };
-  if (e.etat === 'jamais') {
-    p.className = 'note jamais';
-    p.textContent = 'jamais généré';
-  } else if (e.etat === 'ajour') {
-    p.className = 'note ajour';
-    p.textContent = 'à jour';
-  } else if (e.etat === 'echec') {
-    p.className = 'note alerte';
+  if (e.etat === 'jamais' || e.etat === 'ajour') return null;
+  const p = h('p', undefined, 'note alerte');
+  p.id = `liv-etat-${d.cle}`;
+  if (e.etat === 'echec') {
     p.textContent = `la dernière génération a échoué : ${e.message}`;
   } else {
-    p.className = 'note alerte';
     const parts = [
       ...(e.interieur ? ['le texte'] : []),
       ...(e.couverture ? ['la couverture'] : []),
@@ -429,7 +435,15 @@ async function chargerFichiers() {
   const table = await invoke('livrable_fichiers');
   for (const [cle, chemins] of Object.entries(table)) {
     const box = $(`liv-fichiers-${cle}`);
-    if (box) box.replaceChildren(...cheminsGroupes(chemins).map((c) => h('p', c, 'chemin')));
+    if (!box) continue;
+    // Tronqué à l'écran, entier au survol — le dispositif de la bande de l'entête, pour la
+    // même raison : un chemin qui se replie sur trois lignes coûte plus de hauteur qu'il
+    // n'apporte, mais raccourci pour de bon il ne se colle plus dans un Finder.
+    box.replaceChildren(...cheminsGroupes(chemins).map((c) => {
+      const l = h('p', c, 'chemin');
+      l.title = c;
+      return l;
+    }));
   }
 }
 
@@ -725,6 +739,12 @@ function noteMesure(d, dosPublie) {
     `${d.compose.pages} pages${d.compose.blanche ? ' (blanche de parité)' : ''}`,
     `gouttière ${nb(d.compose.gouttiere, 1)} mm`,
     ...(dos === null ? [] : [`dos ${nb(dos)} mm${dosPublie ? '' : ' (relevé)'}`]),
+    // La planche au bout du même rang : elle se tire de ces trois chiffres-là — le format,
+    // le dos et le fond perdu —, et n'a donc pas de raison d'occuper une hauteur à elle.
+    // Elle vient en dernier parce qu'elle est ce qu'ils produisent.
+    ...(d.compose.planche
+      ? [`planche ${nb(d.compose.planche[0])} × ${nb(d.compose.planche[1])} mm`]
+      : []),
   ].join(' · ');
   return ligne;
 }

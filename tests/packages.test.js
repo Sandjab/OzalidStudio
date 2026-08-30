@@ -754,6 +754,48 @@ test('les deux états calmes d\'un livrable portent chacun leur teinte', async (
 });
 
 /**
+ * Un état qui tient en deux mots ne mérite pas un rang à lui : il monte sur la ligne du
+ * titre, à droite, et la ligne du livrable perd une hauteur de texte sur six. C'est la
+ * moitié courante — un livrable est à jour ou n'a jamais été généré la plupart du temps.
+ *
+ * Le titre est le bon porteur parce qu'il est déjà ce qu'on lit en premier : « ce livrable,
+ * dans cet état ». Le rang qu'on lui retire ne portait rien d'autre que ces deux mots.
+ */
+test('un état calme se lit sur la ligne du titre, et ne prend plus de rang', async () => {
+  const { els } = await ouvre([LULU], {}, {
+    livrables: [{ ...chez(LULU), etat: { etat: 'ajour' } }],
+  });
+  const titre = els.get('liv-titre-lulu-108x175-broche-standard');
+  assert.match(titre.textContent, /à jour/, 'l\'état n\'est pas monté au titre');
+  assert.match(titre.textContent, /poche 108 × 175/, 'le titre a perdu son libellé');
+});
+
+/**
+ * Les deux autres états gardent leur rang, et c'est le point : leur valeur est la phrase,
+ * pas l'étiquette. « le texte a changé depuis cette génération » dit **ce qui** a bougé —
+ * la nuance que `noteEtat` défend depuis le lot 3 —, et « échec » tait la raison de
+ * l'échec. Les réduire à un mot pour gagner une ligne rendrait la ligne muette là où elle
+ * a le plus à dire ; les afficher aux deux endroits recréerait la redite qu'on vient de
+ * retirer partout ailleurs.
+ */
+test('un état qui a une phrase à dire garde son rang', async () => {
+  const { els } = await ouvre([LULU], {}, {
+    livrables: [{
+      ...chez(LULU),
+      etat: { etat: 'perime', interieur: true, couverture: false },
+    }],
+  });
+  assert.strictEqual(
+    els.get('liv-etat-lulu-108x175-broche-standard').textContent,
+    'le texte a changé depuis cette génération'
+  );
+  assert.doesNotMatch(
+    els.get('liv-titre-lulu-108x175-broche-standard').textContent, /changé/,
+    'la phrase de péremption s\'est glissée dans le titre'
+  );
+});
+
+/**
  * La vignette d'une génération d'hier se retrouve à la réouverture : c'est ce qui permet à
  * la ligne de montrer sa planche sans recomposer, et tout l'intérêt de la commande dédiée.
  * Elle vient du disque, pas du compte rendu de la session.
@@ -1322,8 +1364,8 @@ test('le compte rendu ne redit pas les chiffres que la ligne porte déjà', asyn
   });
   await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
 
-  assert.deepStrictEqual(els.get('livrables').textes('dt'), ['Planche']);
-  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
+  assert.match(els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
+    /· planche 238,86 × 181,35 mm$/);
   assert.match(els.get('livrables').textContent, /couverture-lulu\.pdf/);
 
   const t = els.get('livrables').textContent;
@@ -1404,7 +1446,6 @@ test('le fond perdu de la planche ne se redit que s\'il contredit le catalogue',
   });
   await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
   assert.match(els.get('livrables').textContent, /FP 5,000 mm/);
-  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
 });
 
 /**
@@ -1470,6 +1511,30 @@ test('les fichiers d\'un package nomment leur répertoire une seule fois', async
  * facteur : chacun reprend le sien, en entier. Un chemin long se lit ; un chemin
  * raccourci de travers se suit jusqu'à un fichier qui n'existe pas.
  */
+/**
+ * Un chemin tronqué à l'écran doit rester copiable : la ligne le porte en entier dans son
+ * `title`, comme la bande de l'entête le fait du chemin du projet depuis toujours. Sans ce
+ * doublage, la troncature ne cacherait pas une redite mais une information — et c'est le
+ * chemin qu'on ouvre pour téléverser chez l'imprimeur.
+ */
+test('un chemin tronqué reste entier au survol', async () => {
+  const long = '/Users/x/Documents/Dev/OzalidStudio/build/projects/LHC/lulu-108x175/'
+    + 'interieur-lulu-108x175-broche-standard.pdf';
+  const { els } = await ouvre([LULU], {
+    fichiers: { 'lulu-108x175-broche-standard': [long] },
+  });
+  // Chaque ligne porte le sien : `cheminsGroupes` met le répertoire en facteur, et c'est
+  // donc deux textes qu'on tronque, pas un.
+  const lignes = [...els.get('liv-fichiers-lulu-108x175-broche-standard').children];
+  assert.ok(lignes.length > 0, 'aucun chemin affiché, test sans objet');
+  for (const l of lignes) {
+    assert.strictEqual(l.title, l.textContent,
+      'une ligne de chemin est tronquable sans porter son texte entier');
+  }
+  assert.ok(lignes.map((l) => l.textContent).join('').includes('interieur-lulu'),
+    `le nom du fichier a disparu, vu : ${lignes.map((l) => l.textContent)}`);
+});
+
 test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
   const { els } = await ouvre([LULU], {
     fichiers: {
@@ -1522,8 +1587,11 @@ test('les dimensions de la planche se lisent à la réouverture', async () => {
       etat: { etat: 'ajour' },
     }],
   });
-  assert.deepStrictEqual(els.get('livrables').textes('dt'), ['Planche']);
-  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
+  assert.strictEqual(
+    els.get('liv-mesure-lulu-108x175-broche-standard').textContent,
+    '262 pages (blanche de parité) · gouttière 25,0 mm · dos 16,51 mm'
+      + ' · planche 238,86 × 181,35 mm'
+  );
 });
 
 /**

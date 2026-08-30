@@ -1360,26 +1360,38 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .livrable .vignette { grid-column: 2; grid-row: 1 / 3; }
 .livrable .infos { grid-column: 1; }
 .livrable .infos { min-width: 0; }
-.livrable .nom { font-weight: 600; }
-.livrable .note { margin: .1rem 0 0; }
+/* Le libellé et l'état aux deux bouts d'une même ligne. `baseline` et non `center` : le
+   libellé se replie sur deux lignes chez les imprimeurs aux noms longs, et l'état doit
+   rester à hauteur de la première — centré, il descendrait au milieu du repli. Le libellé
+   prend ce qui reste (`min-width: 0`, sans quoi il refuserait de se replier dans un flex),
+   l'état ne se replie jamais : deux mots coupés en deux ne se lisent plus du coin de l'œil. */
+.livrable .titre { display: flex; align-items: baseline; gap: .8rem; }
+.livrable .nom { font-weight: 600; min-width: 0; }
+.livrable .etat-livrable { margin-left: auto; flex: none; font-size: .85rem; }
 /* La teinte double le mot, comme l'état d'enregistrement de l'entête, et ce sont les mêmes
    deux gris : sous une liste de six livrables, ce qui reste à générer et ce qui est composé
    se distinguent avant de se lire. Le rouge franc n'est pas repris — il appartient aux deux
-   autres états, qui sont des alertes, et un livrable jamais généré n'a rien perdu. */
-.livrable .note.jamais { color: var(--gris-modifie); }
-.livrable .note.ajour { color: var(--gris-enregistre); }
-.livrable .chemin { margin: .1rem 0 0; }
+   autres états, qui gardent un rang à eux parce qu'ils ont une phrase à dire, et un
+   livrable jamais généré n'a rien perdu. */
+.livrable .etat-livrable.jamais { color: var(--gris-modifie); }
+.livrable .etat-livrable.ajour { color: var(--gris-enregistre); }
+.livrable .note { margin: .1rem 0 0; }
+/* Une ligne par chemin, tronquée plutôt que repliée : le `break-all` des autres chemins
+   étalait un répertoire absolu sur trois lignes, et une liste de livrables se lit en
+   colonnes. Le texte entier reste dans le `title` — c'est le dispositif de la bande de
+   l'entête, et c'est ce qui autorise la coupe : un chemin raccourci pour de bon ne se colle
+   plus dans un Finder. */
+.livrable .chemin {
+  margin: .1rem 0 0;
+  white-space: nowrap;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Les quatre verbes, groupés et discrets : le noir de l'étape appartient à « Générer »,
    et quatre boutons noirs par ligne feraient de la liste un damier. */
 .livrable .gestes { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
-
-/* Le seul chiffre du compte rendu : la planche et son fond perdu. Deux colonnes, et non
-   les quatre qui appariaient cinq chiffres — la ligne porte elle-même pages, gouttière et
-   dos depuis qu'elle ne les redit plus ici, et il ne reste rien à apparier. La colonne de
-   libellés est à la largeur du sien, pas aux 13 rem d'une colonne de formulaire, et la
-   valeur, qui est une phrase, prend toute la largeur qui reste. */
-.livrable dl { grid-template-columns: auto 1fr; gap: .1rem .8rem; margin: .3rem 0 0; }
 
 /* Relevés d'un imprimeur à gabarit : côte à côte, sur une ligne à eux. Le
    `flex-basis` entier et non le repli naturel du `wrap` : sans lui, le relevé remonte

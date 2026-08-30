@@ -712,33 +712,63 @@ test('chaque fichier refusé garde son chemin entier au survol', async () => {
 /**
  * Une classe qui ne teint rien ne se voit pas.
  *
- * `noteEtat` pose une classe par état calme — « jamais généré », « à jour » —, et c'est
- * le CSS qui en fait une couleur. Le faux DOM ne met rien en page : il verrait la classe
- * posée et ne dirait rien d'une règle disparue, si bien que la mention retomberait au gris
- * de `.note` sans qu'aucun test ne bouge. D'où cette garde, qui confronte les deux
- * fichiers — comme celle de l'image inerte plus haut.
+ * `etatCourt` pose une classe par état calme — « jamais généré », « à jour » —, et c'est le
+ * CSS qui en fait une couleur. Le faux DOM ne met rien en page : il verrait la classe posée
+ * et ne dirait rien d'une règle disparue, si bien que la mention retomberait à la couleur du
+ * titre sans qu'aucun test ne bouge. D'où cette garde, qui confronte les deux fichiers —
+ * comme celle de l'image inerte plus haut.
  *
- * Les teintes sont celles de l'entête, et c'est le point : le même code couleur pour la
- * même question — est-ce que ce que je vois est sur le disque ? — dit à l'œil qu'il n'a
- * qu'un code à apprendre. En redéclarer d'autres ici les ferait diverger au premier
- * réglage de l'une des deux.
+ * Les teintes sont celles de l'entête, et c'est le point : le même code couleur pour la même
+ * question — est-ce que ce que je vois est sur le disque ? — dit à l'œil qu'il n'a qu'un code
+ * à apprendre. En redéclarer d'autres ici les ferait diverger au premier réglage de l'une des
+ * deux.
  */
 test('les états calmes d\'un livrable sont teints comme l\'état d\'enregistrement', () => {
   const css = source('src', 'styles.css');
   const js = source('src', 'livraison.js');
 
-  const classes = [...js.matchAll(/p\.className = 'note ([a-z]+)';/g)].map((m) => m[1]);
-  assert.deepStrictEqual(classes.filter((c) => c !== 'alerte').sort(), ['ajour', 'jamais'],
-    `deux états calmes attendus, vu : ${classes}`);
+  const pose = js.match(/`etat-livrable \$\{([a-z.]+)\}`/);
+  assert.ok(pose, 'la classe de l\'état court a changé de forme');
+  const etats = [...js.matchAll(/e\.etat === '([a-z]+)'/g)].map((m) => m[1]);
+  assert.deepStrictEqual([...new Set(etats)].sort(), ['ajour', 'echec', 'jamais'],
+    `deux états calmes et un échec attendus, vu : ${etats}`);
 
   const teinte = (classe) => {
-    const regle = css.match(new RegExp(`\\.livrable \\.note\\.${classe} \\{[^}]*\\}`, 's'));
-    assert.ok(regle, `.livrable .note.${classe} ne teint plus rien : la mention retombe `
-      + 'au gris de `.note`, et l\'œil perd le code couleur de l\'entête');
+    const regle = css.match(
+      new RegExp(`\\.livrable \\.etat-livrable\\.${classe} \\{[^}]*\\}`, 's')
+    );
+    assert.ok(regle, `.livrable .etat-livrable.${classe} ne teint plus rien : la mention `
+      + 'retombe à la couleur du titre, et l\'œil perd le code couleur de l\'entête');
     const couleur = regle[0].match(/color: var\((--[a-z-]+)\)/);
     assert.ok(couleur, `couleur illisible dans : ${regle[0]}`);
     return couleur[1];
   };
   assert.strictEqual(teinte('jamais'), '--gris-modifie');
   assert.strictEqual(teinte('ajour'), '--gris-enregistre');
+});
+
+/**
+ * Ce que le CSS tronque, le JS doit le porter en entier ailleurs.
+ *
+ * Les chemins d'un livrable tiennent sur une ligne parce que le CSS les coupe — un
+ * répertoire absolu s'étalait sinon sur trois. La coupe n'est tolérable que doublée du
+ * `title` que `chargerFichiers` pose : c'est le chemin qu'on ouvre pour téléverser chez
+ * l'imprimeur, et un chemin raccourci pour de bon ne se colle plus dans un Finder. Le faux
+ * DOM ne met rien en page et ne verrait pas la troncature ; il verrait le `title` disparaître
+ * sans savoir qu'il est devenu la seule copie entière. D'où cette garde, qui tient les deux
+ * moitiés ensemble.
+ */
+test('un chemin de livrable n\'est tronqué que parce qu\'il reste entier au survol', () => {
+  const css = source('src', 'styles.css');
+  const js = source('src', 'livraison.js');
+
+  const regle = css.match(/\.livrable \.chemin \{[^}]*\}/s);
+  assert.ok(regle, 'la règle des chemins d\'un livrable a changé de forme');
+  const tronque = /text-overflow:\s*ellipsis/.test(regle[0]);
+  const double = /l\.title = c;/.test(js);
+  assert.strictEqual(tronque, double,
+    tronque
+      ? 'le CSS tronque les chemins et le JS ne les porte plus en entier dans un `title` : '
+        + 'la coupe cache une information au lieu d\'une redite'
+      : 'le `title` double un chemin que le CSS ne tronque plus : l\'un des deux est de trop');
 });
