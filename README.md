@@ -167,8 +167,9 @@ Quatre faces à régler : **1ère**, **4ème**, **Dos**, **Planche**.
 C'est ici, et nulle part ailleurs, qu'on déclare **ce qu'on fabrique**.
 
 Un **livrable** tient en quatre choix : l'imprimeur, son format, sa reliure, son papier —
-plus une finition quand l'imprimeur en offre une. Chaque choix est limité à ce que cet
-imprimeur propose réellement.
+plus un pelliculage quand l'imprimeur en offre un. Chaque choix est limité à ce que cet
+imprimeur propose réellement, et les cinq listes se lisent de gauche à droite : l'imprimeur
+commande tout le reste.
 
 Une reliure que l'application ne sait pas encore composer apparaît **grisée** : elle reste
 visible, parce que l'imprimeur la propose, mais elle ne se choisit pas. Ce qui manque à
@@ -178,16 +179,61 @@ répète pas sous chaque livrable.
 Chez les imprimeurs qui ne publient ni formule de dos ni fond perdu, un champ vous demande
 ce que vous avez **relevé sur leur gabarit**. Ces champs naissent vides, jamais préremplis :
 un chiffre par défaut se lirait comme une mesure. Si vous générez sans l'avoir rempli,
-l'application refuse en disant précisément quoi mesurer et à quelle pagination.
+l'application refuse en disant précisément quoi mesurer et à quelle pagination. Aucun des
+six imprimeurs fournis n'en réclame : ces champs ne paraissent que pour un catalogue que
+vous auriez déposé vous-même.
 
-Puis **Générer les packages**. Chaque livrable reçoit son répertoire :
+**Générer** pose le livrable et compose son package d'un seul geste. Chaque livrable reçoit
+son répertoire :
 
 ```
-intérieur PDF   ·   planche PDF   ·   vignette PNG
+intérieur PDF   ·   planche PDF   ·   vignette PNG   ·   fiche de téléversement
 ```
 
 La vignette est là pour répondre à « est-ce que ça tient ? » — sur du vrai, avec le dos
 mesuré. C'est le PDF qui part à l'impression.
+
+#### Ce que chaque ligne dit d'elle-même
+
+Les livrables se rangent **par imprimeur** : le groupe porte son nom, la ligne ne le répète
+pas. Trois livrables chez le même imprimeur ne diffèrent alors que par ce qui les distingue
+vraiment. L'ordre est celui du premier ajout, et il ne bouge pas sous la main.
+
+Sous le nom du livrable, une ligne dit **où en est son package** :
+
+- *jamais généré* — on ne lui a rien demandé ; il n'a rien perdu.
+- *à jour* — les fichiers sur le disque correspondent au livre tel qu'il est maintenant.
+- *le texte et la couverture ont changé depuis cette génération* — en rouge, et il nomme
+  **ce qui** a bougé. La nuance compte : recomposer un intérieur prend des secondes,
+  recomposer une planche est immédiat.
+- *la dernière génération a échoué : …* — avec sa raison. La relancer pour l'apprendre
+  serait refaire ce qui a échoué.
+
+Ce que seule une composition peut voir — un dos trop mince pour son texte, une police
+remplacée, une image trop pauvre — s'affiche sur la ligne au moment où elle compose. À la
+réouverture du projet, la ligne retrouve ses chiffres, ses chemins et sa vignette, mais pas
+ces alertes-là : le `.ozalid` ne les retient pas, et les réinventer serait pire que de se
+taire.
+
+#### Les quatre gestes d'une ligne
+
+- **Modifier** reprend le livrable dans le formulaire, relevés compris, et le bouton devient
+  *Remplacer*. Le package est recomposé avant que l'ancien ne soit effacé : une composition
+  qui échoue laisse le package d'avant intact.
+- **Dupliquer** remplit le formulaire avec les mêmes axes, sans rien remplacer. C'est le
+  geste qui sert à comparer deux papiers d'un même livre.
+- **Régénérer** recompose sans toucher aux axes. Il peut légitimement **copier** l'intérieur
+  d'un livrable du même gabarit déjà à jour au lieu de le recomposer : deux papiers d'un
+  même format partagent leur intérieur, et c'est ce qui rend la comparaison gratuite.
+- **Supprimer** efface les fichiers que l'application a écrits, retire le répertoire s'il
+  ne reste rien, puis retire le livrable. Un fichier que vous y auriez déposé **survit**, et
+  la ligne d'état le nomme. Le premier clic arme, le second supprime — le geste emporte le
+  package avec la ligne. Le dernier livrable ne se supprime pas : c'est lui qui donne le
+  format sous lequel on regarde la couverture.
+
+**Tout regénérer**, en tête de liste, recompose tous les livrables. À la différence de
+« Régénérer », il ne copie jamais : c'est le geste de rattrapage quand on ne sait plus ce
+qui est à jour.
 
 **Les ebooks se génèrent depuis la même étape.** Le livre entier pour un écran : la
 couverture, les liminaires et tous les chapitres, en PDF et en EPUB. Le PDF est le livre

@@ -739,7 +739,7 @@ raison).
 test('le formulaire offre les cinq axes du POD choisi', async () => {
   const { els } = await ouvre([LULU, KDP]);
   els.get('inAjoutPod').value = 'kdp';
-  els.get('inAjoutPod').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPod').declenche('change');
   assert.deepStrictEqual(
     [...els.get('inAjoutFormat').options].map((o) => o.value), ['6x9', '5x8']
   );
@@ -755,10 +755,10 @@ test('le formulaire offre les cinq axes du POD choisi', async () => {
 test('le pelliculage ne paraît que chez un POD qui en déclare', async () => {
   const { els } = await ouvre([LULU, BOD]);
   els.get('inAjoutPod').value = 'lulu';
-  els.get('inAjoutPod').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPod').declenche('change');
   assert.strictEqual(els.get('inAjoutFinition'), undefined, 'Lulu n\'en déclare aucun');
   els.get('inAjoutPod').value = 'bod';
-  els.get('inAjoutPod').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPod').declenche('change');
   assert.ok(els.get('inAjoutFinition'), 'BoD en déclare trois');
 });
 
@@ -768,12 +768,12 @@ test('le pelliculage ne paraît que chez un POD qui en déclare', async () => {
  * (`livraison.js:174-180`) et que le formulaire reprend.
  */
 test('le relevé de dos suit le papier choisi, pas l\'imprimeur', async () => {
-  const { els } = await ouvre([POSTE]);
+  const { els } = await ouvre([COOLLIBRI]);
   els.get('inAjoutPapier').value = 'sans-formule';
-  els.get('inAjoutPapier').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPapier').declenche('change');
   assert.ok(els.get('inAjoutDos'), 'ce papier ne publie pas son dos');
   els.get('inAjoutPapier').value = 'avec-formule';
-  els.get('inAjoutPapier').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPapier').declenche('change');
   assert.strictEqual(els.get('inAjoutDos'), undefined, 'celui-ci le publie');
 });
 
@@ -783,12 +783,12 @@ test('le relevé de dos suit le papier choisi, pas l\'imprimeur', async () => {
  * composer sur un dos nul produirait une planche fausse au lieu d'un refus.
  */
 test('générer envoie le livrable entier, et un relevé vide reste une absence', async () => {
-  const { els, appels } = await ouvre([POSTE]);
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  const { els, appels } = await ouvre([COOLLIBRI]);
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   const [, args] = dernier(appels, 'livrable_generer');
   assert.deepStrictEqual(args.livrable, {
-    pod: 'poste', format: '110x170', reliure: 'broche', papier: 'sans-formule',
+    pod: 'coollibri', format: '148x210', reliure: 'broche', papier: 'sans-formule',
     finition: null, dos_mm: null, fond_perdu_mm: null,
   });
 });
@@ -802,27 +802,33 @@ test('générer envoie le livrable entier, et un relevé vide reste une absence'
 test('le formulaire garde son imprimeur et son format d\'un ajout au suivant', async () => {
   const { els } = await ouvre([LULU, KDP]);
   els.get('inAjoutPod').value = 'kdp';
-  els.get('inAjoutPod').dispatchEvent(new Evenement('change'));
+  await els.get('inAjoutPod').declenche('change');
   els.get('inAjoutFormat').value = '5x8';
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   assert.strictEqual(els.get('inAjoutPod').value, 'kdp');
   assert.strictEqual(els.get('inAjoutFormat').value, '5x8');
 });
 ```
 
-`Evenement`, `pause`, `dernier` et `BOD` : reprendre les helpers et les fixtures du haut de
-`packages.test.js` — **les chercher avant d'en écrire**.
+`pause`, `dernier` et `BOD` : reprendre les helpers et les fixtures du haut de
+`packages.test.js` — **les chercher avant d'en écrire**. Il n'y a pas de constructeur
+`Evenement` : le shim expose `async declenche(type)` sur l'élément (`dom_shim.js:236`), et il
+s'attend, comme le navigateur — l'écouteur est asynchrone.
 
-`POSTE` est à monter, et son nom dit ce qu'il est : **aucun des six POD fournis n'exige de
-relevé**. Vérifié dans `src-tauri/pods/` — les six déclarent un `fond_perdu` et une formule de
-dos par papier ; c'est ce que dit la spec § 5 (« c'est un fichier déposé sur le poste qui les
-fait paraître »). La fixture modélise donc un catalogue du poste, pas TheBookEdition : le
-nommer `TBE` ferait croire qu'un imprimeur fourni réclame un dos relevé, ce qui est faux et
-enverrait le prochain lecteur chercher un bug dans `thebookedition.toml`. La monter sur le
-patron de `LULU` (`packages.test.js:14-19` pour la table plate, `coquille.test.js:30-45` pour
-l'arbre) avec **deux** papiers, l'un `dos_publie: true`, l'autre `false` : c'est ce couple qui
-rend le test du relevé capable d'échouer.
+**Il n'y a rien à inventer : les deux fixtures existent.** `COOLLIBRI`
+(`packages.test.js:28-32`) porte `fond_perdu: null` et un papier `dos_publie: false` — c'est
+le POD qui réclame les deux relevés. Et le POD `mixte` du test « le relevé de dos suit le
+papier, pas le POD » (`packages.test.js:740-753`) porte **deux** papiers, l'un à formule et
+l'autre à relever : c'est ce couple, et lui seul, qui rend le test du relevé capable
+d'échouer. Le redéclarer localement comme ce test le fait, plutôt que de le hisser en
+constante — c'est le style du fichier, et hisser toucherait un test qui n'a rien demandé.
+
+À ne pas confondre avec le vrai catalogue : **aucun des six POD fournis n'exige de relevé**.
+Vérifié dans `src-tauri/pods/`, les six déclarent un `fond_perdu` et une formule de dos par
+papier, exactement comme le dit la spec § 5 (« c'est un fichier déposé sur le poste qui les
+fait paraître »). Nommer une fixture `TBE` ferait croire qu'un imprimeur fourni réclame un dos
+relevé et enverrait le prochain lecteur chercher un bug dans `thebookedition.toml`.
 
 - [ ] **Étape 2 : voir les tests échouer**
 
@@ -1179,7 +1185,7 @@ test('une ligne retrouve la vignette laissée par une génération d\'avant', as
  */
 test('un dos rogné se lit sur la ligne qui vient de le composer', async () => {
   const { els } = await ouvre([LULU], { packages: [PAQUET_DOS_ROGNE] });
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   assert.match(
     els.get('liv-lulu-108x175-broche-standard').textContent, /rogné au pli/
@@ -1187,8 +1193,11 @@ test('un dos rogné se lit sur la ligne qui vient de le composer', async () => {
 });
 ```
 
-`els.tous` : si le shim n'offre pas de sélecteur multiple, l'ajouter dans `dom_shim.js` —
-c'est le seul moyen de vérifier un **ordre**, et l'ordre est une garantie du § 5.
+`els.tous` n'existe pas et **ne doit pas être ajouté** : le shim expose une `Map`
+d'identifiants (`dom_shim.js:373`), pas un `querySelectorAll`. L'ordre se vérifie sur les
+enfants du conteneur — `els.get('livrables').children.map((g) => g.id)` — ou, si le shim ne
+donne pas les enfants, en relevant l'ordre d'insertion par un identifiant de groupe. Vérifier
+ce que le shim offre **avant** d'écrire ce test-là.
 `LULU_GRAND` et `PAQUET_DOS_ROGNE` : monter les fixtures sur celles qui existent — `LULU` pour
 le provider, le package du test `packages.test.js:951` pour le dos rogné.
 
@@ -1468,11 +1477,10 @@ part ailleurs : c'est un fait de la réponse à Remplacer, pas un état du livra
  * disparu, c'est le seul chemin qui reste (décision 2).
  */
 test('Modifier reprend les axes et les relevés de la ligne', async () => {
-  const { els } = await ouvre([POSTE], {}, {
-    livrables: [{ ...chez(POSTE), papier: 'sans-formule', dos_mm: 17.4, fond_perdu_mm: 3 }],
+  const { els } = await ouvre([COOLLIBRI], {}, {
+    livrables: [{ ...chez(COOLLIBRI), papier: 'sans-formule', dos_mm: 17.4, fond_perdu_mm: 3 }],
   });
-  els.get('liv-modifier-poste-110x170-broche-sans-formule')
-    .dispatchEvent(new Evenement('click'));
+  await els.get('liv-modifier-coollibri-148x210-broche-mesure').declenche('click');
   assert.strictEqual(els.get('inAjoutPapier').value, 'sans-formule');
   assert.strictEqual(els.get('inAjoutDos').value, '17.4');
   assert.strictEqual(els.get('inAjoutFp').value, '3');
@@ -1485,10 +1493,9 @@ test('Modifier reprend les axes et les relevés de la ligne', async () => {
  */
 test('en modification, le formulaire remplace au lieu de générer', async () => {
   const { els, appels } = await ouvre([LULU]);
-  els.get('liv-modifier-lulu-108x175-broche-standard')
-    .dispatchEvent(new Evenement('click'));
+  await els.get('liv-modifier-lulu-108x175-broche-standard').declenche('click');
   assert.match(els.get('btLivrableGenerer').textContent, /Remplacer/);
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   const [, args] = dernier(appels, 'livrable_remplacer');
   assert.strictEqual(args.cle, 'lulu-108x175-broche-standard');
@@ -1501,10 +1508,9 @@ test('en modification, le formulaire remplace au lieu de générer', async () =>
  */
 test('Dupliquer prépare un ajout, pas un remplacement', async () => {
   const { els, appels } = await ouvre([LULU]);
-  els.get('liv-dupliquer-lulu-108x175-broche-standard')
-    .dispatchEvent(new Evenement('click'));
+  await els.get('liv-dupliquer-lulu-108x175-broche-standard').declenche('click');
   assert.match(els.get('btLivrableGenerer').textContent, /Générer/);
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   assert.ok(dernier(appels, 'livrable_generer'), 'c\'est un ajout');
 });
@@ -1519,10 +1525,10 @@ test('Supprimer demande confirmation avant d\'emporter le package', async () => 
     livrables: [chez(LULU), chez(KDP)],
   });
   const bt = els.get('liv-supprimer-lulu-108x175-broche-standard');
-  bt.dispatchEvent(new Evenement('click'));
+  await bt.declenche('click');
   assert.strictEqual(dernier(appels, 'livrable_supprimer'), undefined, 'le premier clic arme');
   assert.match(bt.textContent, /Confirmer/);
-  bt.dispatchEvent(new Evenement('click'));
+  await bt.declenche('click');
   await pause();
   assert.strictEqual(dernier(appels, 'livrable_supprimer')[1].cle, 'lulu-108x175-broche-standard');
 });
@@ -1546,9 +1552,8 @@ test('un remplacement qui n\'a pas su nettoyer le dit', async () => {
   const { els } = await ouvre([LULU], {
     nettoyage_echoue: 'ancien répertoire non effacé : fichier verrouillé',
   });
-  els.get('liv-modifier-lulu-108x175-broche-standard')
-    .dispatchEvent(new Evenement('click'));
-  els.get('btLivrableGenerer').dispatchEvent(new Evenement('click'));
+  await els.get('liv-modifier-lulu-108x175-broche-standard').declenche('click');
+  await els.get('btLivrableGenerer').declenche('click');
   await pause();
   assert.match(els.get('etatLivraison').textContent, /non effacé/);
   assert.match(els.get('etatLivraison').className, /erreur|alerte/);
@@ -1802,7 +1807,7 @@ Un bouton par groupe serait un troisième verbe à expliquer : « Tout regénér
  */
 test('Tout regénérer verse ses comptes rendus dans les lignes', async () => {
   const { els } = await ouvre([LULU], { packager: [PAQUET] });
-  els.get('btToutRegenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btToutRegenerer').declenche('click');
   await pause();
   assert.strictEqual(els.get('packages'), undefined, 'plus de zone intermédiaire');
   assert.match(
@@ -1820,7 +1825,7 @@ test('Tout regénérer éteint son bouton et dit qu\'il travaille', async () => 
   const { els } = await ouvre([LULU], {
     packager: () => new Promise((r) => { relache = () => r([PAQUET]); }),
   });
-  els.get('btToutRegenerer').dispatchEvent(new Evenement('click'));
+  await els.get('btToutRegenerer').declenche('click');
   await pause();
   assert.strictEqual(els.get('btToutRegenerer').disabled, true);
   assert.match(els.get('etatLivraison').textContent, /composition/);

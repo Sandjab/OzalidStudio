@@ -1322,6 +1322,11 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
    sinon le tiers de la ligne à lui seul. */
 .formulaire select { width: auto; flex: 0 0 auto; max-width: 13rem; }
 
+/* « Tout regénérer » sous le verbe du formulaire et fer à droite, comme la maquette le
+   pose : à gauche il ouvrait un troisième rang qui poussait la liste hors de l'écran, et
+   se lisait comme le premier geste de l'étape alors qu'il est celui du rattrapage. */
+.ligne.rattrapage { justify-content: flex-end; }
+
 /* Un groupe : l'imprimeur en tête, ses livrables dessous. Le nom du POD ne se répète
    plus sur chaque ligne — c'est ce qui règle la répétition que trois livrables d'un même
    imprimeur donnaient à lire. Les groupes ne se replient pas : un imprimeur en porte deux
@@ -1352,7 +1357,8 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
 .livrable:last-child { border-bottom: 0; }
 /* La vignette tient les deux rangs : les gestes passent sous les chiffres, à gauche,
    et non sous la planche — c'est la ligne qu'on actionne, pas l'image. */
-.livrable .vignette { grid-row: 1 / 3; }
+.livrable .vignette { grid-column: 2; grid-row: 1 / 3; }
+.livrable .infos { grid-column: 1; }
 .livrable .infos { min-width: 0; }
 .livrable .nom { font-weight: 600; }
 .livrable .note { margin: .1rem 0 0; }

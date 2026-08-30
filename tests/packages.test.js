@@ -662,6 +662,24 @@ test('une couverture périmée le dit, et ne parle pas du texte', async () => {
 });
 
 /**
+ * Deux moitiés périmées s'accordent au pluriel. Vu à l'écran : « le texte et la couverture
+ * a changé » se lisait sous chaque livrable qu'une modification du livre venait de périmer,
+ * c'est-à-dire dans le cas le plus courant des trois.
+ */
+test('une péremption des deux moitiés s\'accorde au pluriel', async () => {
+  const { els } = await ouvre([LULU], {}, {
+    livrables: [{
+      ...chez(LULU),
+      etat: { etat: 'perime', interieur: true, couverture: true },
+    }],
+  });
+  assert.strictEqual(
+    els.get('liv-etat-lulu-108x175-broche-standard').textContent,
+    'le texte et la couverture ont changé depuis cette génération'
+  );
+});
+
+/**
  * Un échec montre sa raison. Sans elle, la seule façon d'apprendre pourquoi la génération
  * a échoué serait de la relancer — c'est-à-dire de refaire la chose qui a échoué.
  */

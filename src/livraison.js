@@ -340,11 +340,15 @@ function noteEtat(d) {
     p.textContent = `la dernière génération a échoué : ${e.message}`;
   } else {
     p.className = 'note alerte';
-    const quoi = [
+    const parts = [
       ...(e.interieur ? ['le texte'] : []),
       ...(e.couverture ? ['la couverture'] : []),
-    ].join(' et ');
-    p.textContent = `${quoi} a changé depuis cette génération`;
+    ];
+    // L'accord suit le nombre de moitiés périmées : une modification du livre les périme
+    // toutes les deux — c'est le cas le plus courant des trois —, et « le texte et la
+    // couverture a changé » se lisait alors sous chaque livrable.
+    p.textContent = `${parts.join(' et ')} ${parts.length > 1 ? 'ont' : 'a'} changé `
+      + 'depuis cette génération';
   }
   return p;
 }
