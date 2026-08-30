@@ -399,15 +399,16 @@
            dépendent du papier retenu, pas du POD. Aucun des six catalogues fournis n'en
            demande — c'est un fichier déposé sur le poste qui les fait paraître. -->
       <div id="ajoutReleves" class="releve"></div>
-      <div id="livrables" class="livrables"></div>
+      <!-- En tête de liste et non en pied : c'est un geste de rattrapage, pas la
+           conclusion de l'étape. Global, et sans bouton par groupe — ce serait un
+           troisième verbe à expliquer, entre le « Régénérer » d'une ligne et celui-ci.
+           Plus « primaire » depuis le lot 3 : le noir de l'étape appartient à
+           « Générer », qui est le geste courant, et deux actions primaires dans une même
+           section n'en désignent aucune. -->
       <div class="ligne">
-        <!-- Plus « primaire » depuis le lot 3 : le noir de l'étape appartient à
-             « Générer », qui est le geste courant. Celui-ci est le geste de rattrapage,
-             et deux actions primaires dans une même section n'en désignent aucune. -->
-        <button id="btPackager" type="button">Générer les packages</button>
-        <span id="etatPackages" class="etat"></span>
+        <button id="btToutRegenerer" type="button">Tout regénérer</button>
       </div>
-      <div id="packages" class="resultat" hidden></div>
+      <div id="livrables" class="livrables"></div>
     </div>
 
     <div class="bloc">

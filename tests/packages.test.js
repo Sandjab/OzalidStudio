@@ -389,6 +389,20 @@ const attendreApercu = () => new Promise((r) => setTimeout(r, 300));
 const attendreComposition = () => new Promise((r) => setTimeout(r, 700));
 const combien = (appels, cmd) => appels.filter(([c]) => c === cmd).length;
 const dernier = (appels, cmd) => appels.filter(([c]) => c === cmd).pop();
+/**
+ * Les chemins affichés, relevés par leur classe et non par leur forme : une ligne de
+ * livrable porte aussi sa note de format, sa mesure et son état, qui sont des `p` comme
+ * les autres — et deviner au contenu casserait au premier nom de fichier sans barre.
+ */
+const chemins = (racine) => {
+  const trouves = [];
+  const visite = (e) => {
+    if (e.className === 'chemin') trouves.push(e.textContent);
+    e.enfants.forEach(visite);
+  };
+  racine.enfants.forEach(visite);
+  return trouves;
+};
 
 /* ---------- le harnais des quatre verbes ---------- */
 
@@ -418,6 +432,51 @@ test('le faux backend sert les quatre verbes et l\'état de chaque livrable', as
   const s = await invoke('livrable_supprimer', { cle: 'lulu-108x175-broche-standard' });
   assert.deepStrictEqual(s.nettoyage.etrangers, [], 'la suppression rend son nettoyage');
   assert.ok(await invoke('livrable_vignettes'), 'les vignettes répondent, fût-ce à vide');
+});
+
+/* ---------- Tout regénérer ---------- */
+
+/**
+ * « Tout regénérer » recompose tout et rend ses comptes rendus **aux lignes** : il n'y a
+ * plus de zone intermédiaire où les lire. C'est ce qui fait qu'une ligne dit la même chose
+ * qu'on vienne de la générer seule ou avec les autres.
+ */
+test('Tout regénérer verse ses comptes rendus dans les lignes', async () => {
+  const { els } = await ouvre([LULU], {
+    packager: () => [{
+      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', finition: null,
+      vignette: null, erreur: null, package: paquet(),
+    }],
+  });
+  await els.get('btToutRegenerer').declenche('click');
+  assert.ok(!els.get('packages'), 'la zone intermédiaire a survécu');
+  assert.match(els.get('liv-lulu-108x175-broche-standard').textContent, /16,51 mm/);
+});
+
+/**
+ * L'attente garde son dispositif : bouton éteint et ligne d'état. Le temps de composition
+ * ne disparaît pas, il se répartit — et un bouton qui reste cliquable pendant qu'il
+ * compose invite à lancer deux compositions concurrentes.
+ */
+test('Tout regénérer éteint son bouton et dit qu\'il travaille', async () => {
+  let relache;
+  const { els } = await ouvre([LULU], {
+    packager: () => new Promise((r) => {
+      relache = () => r([{
+        cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', finition: null,
+        vignette: null, erreur: null, package: paquet(),
+      }]);
+    }),
+  });
+  const clic = els.get('btToutRegenerer').declenche('click');
+  await Promise.resolve();
+  assert.strictEqual(els.get('btToutRegenerer').disabled, true);
+  assert.match(els.get('etatLivraison').textContent, /composition/);
+
+  relache();
+  await clic;
+  assert.strictEqual(els.get('btToutRegenerer').disabled, false);
+  assert.strictEqual(els.get('etatLivraison').textContent, '');
 });
 
 /* ---------- le formulaire d'un livrable ---------- */
@@ -1062,9 +1121,9 @@ test('générer ne transmet aucune liste : elle est dans le projet', async () =>
     packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   }, { livrables: [chez(LULU), chez(KDP)] });
 
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
   assert.deepStrictEqual(dernier(appels, 'packager')[1], undefined);
-  assert.match(els.get('packages').textContent, /16,51 mm/);
+  assert.match(els.get('livrables').textContent, /16,51 mm/);
 });
 
 /**
@@ -1084,9 +1143,9 @@ test('un livrable en échec est signalé sans masquer ceux qui ont abouti', asyn
       },
     ],
   }, { livrables: [chez(LULU), chez(KDP)] });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const box = els.get('packages');
+  const box = els.get('livrables');
   assert.strictEqual(box.hidden, false);
   assert.deepStrictEqual(box.textes('h3'), ['Lulu', 'Amazon KDP']);
   assert.match(box.textContent, /16,51 mm/, 'dos du package abouti absent');
@@ -1105,9 +1164,9 @@ test('un package composé par repli porte l\'alerte de police', async () => {
       package: paquet({ polices_introuvables: ['plume ivan'] }),
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const t = els.get('packages').textContent;
+  const t = els.get('livrables').textContent;
   assert.match(t, /plume ivan/);
   assert.match(t, /repli/);
 });
@@ -1116,8 +1175,8 @@ test('un package sans substitution n\'affiche aucune alerte de police', async ()
   const { els } = await ouvre([LULU], {
     packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   });
-  await els.get('btPackager').declenche('click');
-  assert.doesNotMatch(els.get('packages').textContent, /repli/);
+  await els.get('btToutRegenerer').declenche('click');
+  assert.doesNotMatch(els.get('livrables').textContent, /repli/);
 });
 
 /**
@@ -1141,9 +1200,9 @@ test('un package porte les avertissements relevés à la composition', async () 
       }),
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const t = els.get('packages').textContent;
+  const t = els.get('livrables').textContent;
   assert.match(t, /168 ppp/, 'la résolution relevée doit se lire');
   assert.match(t, /à partir de 81/, 'le seuil de dos doit se lire');
 });
@@ -1152,8 +1211,8 @@ test('un package sans rien à signaler n\'affiche aucun avertissement', async ()
   const { els } = await ouvre([LULU], {
     packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   });
-  await els.get('btPackager').declenche('click');
-  assert.doesNotMatch(els.get('packages').textContent, /ppp/);
+  await els.get('btToutRegenerer').declenche('click');
+  assert.doesNotMatch(els.get('livrables').textContent, /ppp/);
 });
 
 /**
@@ -1169,9 +1228,9 @@ test('un dos trop mince pour son texte porte l\'alerte sur son package', async (
       package: paquet({ dos: 4.2, dos_requis: 6.31 }),
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const t = els.get('packages').textContent;
+  const t = els.get('livrables').textContent;
   assert.match(t, /4,20 mm/, 'le dos réel doit se lire');
   assert.match(t, /6,31 mm/, 'le dos réclamé doit se lire');
   assert.match(t, /rogné/);
@@ -1181,8 +1240,8 @@ test('un dos qui tient n\'affiche aucune alerte', async () => {
   const { els } = await ouvre([LULU], {
     packager: () => [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), erreur: null }],
   });
-  await els.get('btPackager').declenche('click');
-  assert.doesNotMatch(els.get('packages').textContent, /rogné/);
+  await els.get('btToutRegenerer').declenche('click');
+  assert.doesNotMatch(els.get('livrables').textContent, /rogné/);
 });
 
 test('un package affiche le dos, la planche et les fichiers produits', async () => {
@@ -1191,9 +1250,9 @@ test('un package affiche le dos, la planche et les fichiers produits', async () 
       cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const dd = els.get('packages').textes('dd');
+  const dd = els.get('livrables').textes('dd');
   assert.deepStrictEqual(dd, [
     '262 (blanche de parité)',
     'Papier standard',
@@ -1201,7 +1260,7 @@ test('un package affiche le dos, la planche et les fichiers produits', async () 
     '16,51 mm',
     '238,86 × 181,35 mm, FP 3,175 mm',
   ]);
-  assert.match(els.get('packages').textContent, /couverture-lulu\.pdf/);
+  assert.match(els.get('livrables').textContent, /couverture-lulu\.pdf/);
 });
 
 /**
@@ -1223,13 +1282,13 @@ test('le compte rendu d\'un package porte la finition retenue', async () => {
       erreur: null,
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
   assert.deepStrictEqual(
-    els.get('packages').textes('dt'),
+    els.get('livrables').textes('dt'),
     ['Pages', 'Papier', 'Finition', 'Gouttière', 'Dos', 'Planche'],
   );
-  assert.deepStrictEqual(els.get('packages').textes('dd'), [
+  assert.deepStrictEqual(els.get('livrables').textes('dd'), [
     '262 (blanche de parité)',
     'Papier standard',
     'Pelliculage mat',
@@ -1251,9 +1310,9 @@ test('les fichiers d\'un package nomment leur répertoire une seule fois', async
       cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  const lignes = els.get('packages').textes('p');
+  const lignes = chemins(els.get('livrables'));
   assert.deepStrictEqual(lignes, [
     '/livres/LHC/lulu/',
     'interieur-lulu.pdf   couverture-lulu.pdf',
@@ -1272,9 +1331,9 @@ test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
       cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: disperses, vignette: null, erreur: null,
     }],
   });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
-  assert.deepStrictEqual(els.get('packages').textes('p'),
+  assert.deepStrictEqual(chemins(els.get('livrables')),
     ['/a/interieur.pdf', '/b/couverture.pdf']);
 });
 
@@ -1298,16 +1357,19 @@ test('chaque package abouti montre sa planche en vignette', async () => {
       },
     ],
   }, { livrables: [chez(LULU), chez(KDP)] });
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
   const images = [];
   const visite = (e) => {
     if (e.tagName === 'IMG') images.push(e);
     e.enfants.forEach(visite);
   };
-  els.get('packages').enfants.forEach(visite);
-  assert.strictEqual(images.length, 1, 'une vignette pour un package en échec');
-  assert.strictEqual(images[0].src, 'data:image/png;base64,QUJD');
+  els.get('livrables').enfants.forEach(visite);
+  // Une image par ligne — la balise est toujours là, c'est sa source qui manque quand
+  // rien n'a été composé : la ligne se monte sans attendre le disque.
+  const posees = images.filter((i) => i.src);
+  assert.strictEqual(posees.length, 1, 'une vignette pour un package en échec');
+  assert.strictEqual(posees[0].src, 'data:image/png;base64,QUJD');
 });
 
 /* ---------- aperçu de la planche ---------- */
@@ -1597,7 +1659,7 @@ test('générer les packages met le pied d\'accord avec ce qu\'il vient de mesur
     'fixture : le livre ne doit pas être mesuré avant la génération',
   );
 
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
 
   assert.strictEqual(els.get('piedDos').textContent, '· dos 16,5 mm');
   assert.match(els.get('piedMesure').textContent, /262 pages/);
@@ -1780,20 +1842,25 @@ test('réimporter le manuscrit efface ce que l\'ancien texte avait fait afficher
   }, { couverture: {} });
 
   await faireComposer(els);
-  await els.get('btPackager').declenche('click');
+  await els.get('btToutRegenerer').declenche('click');
   await els.get('btEpreuve').declenche('click');
   // Un envoi porte lui aussi un compte de pages et un dos ; le composer demanderait une
   // liste de dédicataires que ce projet-là n'a pas, et c'est ce qu'il laisse qui compte.
   els.get('resultatEnvois').textContent = 'Rex — envois/rex/ — 262 pages, dos 16,51 mm';
   els.get('resultatEnvois').hidden = false;
-  assert.strictEqual(els.get('packages').hidden, false, 'rien à effacer, test sans objet');
+  assert.ok(chemins(els.get('livrables')).length > 0, 'rien à effacer, test sans objet');
 
   await els.get('btReimporter').declenche('click');
 
   // La pagination, elle, n'est plus à l'écran mais dans le projet : c'est le Rust qui
   // l'efface au geste qui l'a rendue fausse, et le pied dit alors « dos périmé ». Ce
   // test ne garde que les canaux qui appartiennent en propre à l'écran.
-  assert.strictEqual(els.get('packages').hidden, true,
+  // Le compte rendu vit dans la ligne depuis le lot 3 : ce qu'on vérifie est qu'elle ne
+  // le porte plus. Les chemins des fichiers écrits, et non le dos : celui-là vient de la
+  // mesure que le projet retient, pas du compte rendu, et il est légitime qu'il reste
+  // tant que le Rust ne l'a pas périmé. La ligne, elle, reste — le livrable n'a pas
+  // disparu, seul ce qu'une composition avait vu s'efface.
+  assert.deepStrictEqual(chemins(els.get('livrables')), [],
     'les packages de l\'ancien texte restent à lire');
   assert.strictEqual(els.get('resultatEnvois').hidden, true,
     'les envois de l\'ancien texte restent à lire');

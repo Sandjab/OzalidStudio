@@ -323,7 +323,7 @@ function majEtapes() {
  * Tout ne monte pas ici, et c'est voulu : ce qui refuse une saisie monte, parce que le
  * geste est fini avant qu'on ait bougé et que le message doit survivre au changement
  * d'étape. Ce qui rend compte d'un travail long — composer, tirer une épreuve, générer
- * les packages ou les ebooks — reste dans `#etat`, `#etatEpreuve`, `#etatPackages`,
+ * les packages ou les ebooks — reste dans `#etat`, `#etatEpreuve`, `#etatLivraison`,
  * `#etatEbooks`, à côté du bouton qui l'a lancé : on attend là où l'on a cliqué, et un
  * compte rendu qui migre en haut de l'écran se lit comme une panne. Faire remonter le
  * reste ici par symétrie ferait perdre cette différence.
@@ -893,7 +893,12 @@ function oublierLaComposition() {
   // Le dos n'est plus effacé ici : il vit dans le projet, et c'est le Rust qui le périme
   // au moment du geste qui l'a rendu faux. Ce qui reste ici est ce qui n'appartient
   // qu'à l'écran — des chiffres affichés, des chemins de fichiers, des messages.
-  for (const id of ['packages', 'ebooks', 'resultatEnvois']) {
+  // Les comptes rendus vivent dans les lignes depuis le lot 3, et la liste des livrables
+  // se refait entière à chaque projet — mais ce que la session a vu composer est rangé par
+  // clé, et deux livres du même imprimeur, format et papier portent la même. Sans cet
+  // oubli, la ligne d'un livre neuf montrerait le package de celui qu'on vient de fermer.
+  oublierPackagesDeLaSession();
+  for (const id of ['ebooks', 'resultatEnvois']) {
     $(id).replaceChildren();
     $(id).hidden = true;
   }
@@ -902,7 +907,7 @@ function oublierLaComposition() {
   // un message rouge appartient au texte qui l'a provoqué autant que le chiffre qu'il
   // commente. Effacer le chemin de l'épreuve en laissant l'erreur qui disait pourquoi
   // elle avait échoué donnerait à lire l'échec de l'ancien texte sous le nouveau.
-  for (const id of ['etatEpreuve', 'etatLivraison', 'etatPackages', 'etatEbooks',
+  for (const id of ['etatEpreuve', 'etatLivraison', 'etatEbooks',
     'etatEnvois', 'etatMaquettes']) {
     $(id).textContent = '';
     $(id).className = 'etat';
@@ -1465,7 +1470,7 @@ $('btReperes').addEventListener('click', basculerReperes);
 // décodée qui donne au cadre sa taille, et elle ne l'est qu'après avoir été posée.
 $('apercu').addEventListener('load', poserRatio);
 $('fondPage').addEventListener('load', poserRatioPage);
-$('btPackager').addEventListener('click', packager);
+$('btToutRegenerer').addEventListener('click', packager);
 $('btEbooks').addEventListener('click', ebooks);
 $('btEpreuve').addEventListener('click', epreuve);
 $('inPoliceInterieur').addEventListener('change', majInterieur);

@@ -410,7 +410,11 @@ test('ouvrir un autre projet oublie les sorties du précédent', async () => {
     assert.equal(els.get(id).textContent, '',
       `« ${id} » raconte encore le livre qu'on vient de quitter`);
   }
-  assert.equal(els.get('packages').hidden, true);
+  // La liste se refait sur le projet neuf : ce qu'on vérifie est qu'elle ne porte plus le
+  // compte rendu du précédent — rangé par clé, et deux livres du même imprimeur, format et
+  // papier en partagent une.
+  assert.ok(!els.get('livrables').textContent.includes('16,51'),
+    'la liste porte encore le dos du livre qu\'on vient de quitter');
   assert.equal(els.get('cheminEpreuve').textContent, '');
   assert.equal(els.get('apercu').src, undefined,
     'la couverture du livre précédent reste affichée');
@@ -433,15 +437,14 @@ test('un projet illisible ne détruit pas les sorties de celui qui est ouvert', 
   });
   await els.get('btNouveau').declenche('click');
 
-  els.get('packages').textContent = 'package Lulu écrit';
-  els.get('packages').hidden = false;
   els.get('cheminEpreuve').textContent = '/livres/A/epreuve.pdf';
 
   await menu('fichier.ouvrir');
 
   assert.equal(els.get('etapeLivre').hidden, false, 'le projet ouvert le reste');
-  assert.equal(els.get('packages').hidden, false, 'ses sorties aussi');
-  assert.equal(els.get('packages').textContent, 'package Lulu écrit');
+  // La liste du projet ouvert est intacte : un projet qu'on n'a pas pu ouvrir ne doit
+  // rien coûter à celui qui l'est déjà.
+  assert.ok(els.get('groupe-lulu'), 'ses sorties aussi');
   assert.equal(els.get('cheminEpreuve').textContent, '/livres/A/epreuve.pdf');
   assert.match(els.get('alerte').textContent, /illisible/);
 });

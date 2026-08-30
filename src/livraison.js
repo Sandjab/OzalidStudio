@@ -106,6 +106,18 @@ function retenirPackagesDeLaSession(resultats) {
 }
 
 /**
+ * Oublie ce que la session avait vu composer.
+ *
+ * Indispensable au changement de projet : ces comptes rendus sont rangés **par clé de
+ * livrable**, et deux livres tirés chez le même imprimeur, au même format et sur le même
+ * papier portent la même clé. Sans cet oubli, la ligne d'un livre neuf afficherait le dos,
+ * les chemins et les alertes du livre qu'on vient de fermer.
+ */
+function oublierPackagesDeLaSession() {
+  packagesDeLaSession = {};
+}
+
+/**
  * Les livrables du livre, groupés par imprimeur.
  *
  * Le groupe porte l'imprimeur, la ligne ne le répète plus : trois livrables du même POD ne
@@ -669,101 +681,17 @@ function cheminsGroupes(chemins) {
   return [commun, chemins.map((c) => c.slice(commun.length)).join('   ')];
 }
 
-function afficherPackages(resultats) {
-  const box = $('packages');
-  box.replaceChildren();
-  for (const r of resultats) {
-    const bloc = h('div', undefined, 'package');
-    bloc.append(h('h3', r.libelle));
-    if (r.erreur) {
-      bloc.append(h('p', r.erreur, 'note alerte'));
-    } else {
-      const p = r.package;
-      const dl = h('dl');
-      for (const [k, v] of [
-        ['Pages', `${p.pages}${p.blanche ? ' (blanche de parité)' : ''}`],
-        ['Papier', p.papier],
-        // Après le papier — l'autre chose qu'on choisit sans qu'un octet du PDF change,
-        // et qui se commande quand même. La grille alterne les colonnes, les deux ne
-        // sont donc pas voisines à l'écran : c'est l'ordre de lecture qui les tient
-        // ensemble. Elle ne paraît que là où il y en a une, comme le contrôle de la
-        // ligne du livrable, où « aucune » est le cas courant et où une entrée vide se
-        // lirait comme un réglage manqué.
-        ...(r.finition ? [['Finition', r.finition]] : []),
-        ['Gouttière', `${nb(p.gouttiere, 1)} mm`],
-        ['Dos', `${nb(p.dos)} mm`],
-        ['Planche', `${nb(p.planche[0])} × ${nb(p.planche[1])} mm, `
-          + `FP ${nb(p.fond_perdu, 3)} mm`],
-      ]) dl.append(h('dt', k), h('dd', v));
-      // Les chiffres et les chemins d'un côté, la vignette de l'autre : ce qui
-      // s'empilait tient désormais côte à côte, et la hauteur d'un compte rendu est
-      // celle de sa planche au lieu d'en être la somme.
-      const infos = h('div', undefined, 'infos');
-      infos.append(dl);
-      // Une police que Typst a remplacée sans échouer : ce PDF-là part chez
-      // l'imprimeur, l'alerte se lit donc sur le package qu'elle a traversé.
-      // Le dos est composé sur une zone qui rogne ce qui dépasse, sans rien dire : un
-      // titre coupé au pli ne se verrait qu'à l'impression. La maquette est unique, les
-      // formats ne le sont pas — c'est le seul endroit où ça produit un fichier faux.
-      if (p.dos_requis !== null) {
-        infos.append(h('p', `Dos de ${nb(p.dos)} mm pour un texte qui en réclame `
-          + `${nb(p.dos_requis)} mm : il sera rogné au pli. Réduire le corps du dos, ou `
-          + 'y éteindre un élément.', 'note alerte'));
-      }
-      if (p.polices_introuvables.length) {
-        infos.append(h('p', 'Police introuvable, composé dans une écriture de repli : '
-          + `${p.polices_introuvables.join(', ')}. Le PDF ne suit pas la maquette.`,
-        'note alerte'));
-      }
-      // Ce que la composition a relevé sans que le fichier soit faux : une image trop
-      // pauvre pour l'impression, un texte au dos sous le seuil de l'imprimeur. En gris
-      // et non en rouge, à la différence des deux alertes ci-dessus : celles-là disent
-      // qu'un PDF ne suit pas la maquette, celles-ci qu'un tirage juste ne plaira
-      // peut-être pas. C'est un jugement d'auteur, et le rouge des deux autres perdrait
-      // son sens à couvrir les deux.
-      //
-      // Les phrases viennent du Rust telles quelles : la fiche de téléversement les
-      // recopiera, et un dossier relu trois mois plus tard doit dire ce que l'écran
-      // disait.
-      for (const a of p.avertissements) infos.append(h('p', a, 'note'));
-      for (const c of cheminsGroupes(p.chemins)) infos.append(h('p', c, 'chemin'));
-      bloc.append(infos);
-      // La planche telle qu'elle part à l'impression, avec le dos mesuré de ce
-      // livrable-là : c'est ici que « est-ce que ça tient » se vérifie, sur du vrai
-      // et non sur une approximation qu'on espère fidèle.
-      if (r.vignette) {
-        const img = h('img', undefined, 'vignette');
-        img.src = r.vignette;
-        img.alt = `Planche composée pour ${r.libelle}`;
-        bloc.append(img);
-      }
-    }
-    box.append(bloc);
-  }
-  box.hidden = false;
-}
-
 async function packager() {
   const combien = projet.livraison.livrables.length;
-  const bt = $('btPackager');
-  bt.disabled = true;
-  $('packages').hidden = true;
-  $('etatPackages').className = 'etat';
-  $('etatPackages').textContent = `composition de ${combien} package(s)…`;
-  try {
-    // Générer compose : le projet revient mesuré, et le pied le relit là où il est
-    // enregistré — sans quoi il dirait « dos non composé » sous un compte rendu qui
-    // vient de donner le dos.
-    const r = await invoke('packager');
-    afficherProjet(r.projet);
-    afficherPackages(r.packages);
-    $('etatPackages').textContent = '';
-  } catch (e) {
-    $('etatPackages').textContent = String(e);
-    $('etatPackages').className = 'etat erreur';
-  } finally {
-    bt.disabled = false;
-  }
+  // Générer compose : le projet revient mesuré, et le pied le relit là où il est
+  // enregistré — sans quoi il dirait « dos non composé » sous une ligne qui vient de
+  // donner le dos. Les comptes rendus entrent dans les lignes, il n'y a plus de zone
+  // intermédiaire où les lire.
+  await pendantQueCaCompose(
+    $('btToutRegenerer'),
+    `composition de ${combien} package(s)…`,
+    () => invoke('packager')
+  );
 }
 
 /** Une taille de fichier, en unités qu'on lit d'un coup d'œil. */
