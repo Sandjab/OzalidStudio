@@ -253,6 +253,25 @@ test('chaque événement émis par le Rust est écouté par le front', async () 
  * Dans ce sens-là seulement : une commande déclarée que le front n'appelle pas n'est
  * pas une faute — les exemples en appellent, et une commande peut précéder son écran.
  */
+/**
+ * Les trois commandes dont les gestes n'existent plus ne sont appelées de nulle part.
+ *
+ * Le garde ci-dessous vérifie l'autre sens — qu'une commande appelée soit déclarée — et
+ * ne verrait rien si le front continuait d'appeler une commande que le Rust expose encore
+ * par inadvertance. Celui-ci ferme la porte dans ce sens-là : le geste en deux temps
+ * — déclarer un livrable, puis régler sa ligne, puis le retirer — a disparu avec l'écran
+ * qui le portait, et le rappeler serait revenir en arrière sans s'en apercevoir.
+ */
+test('le front n\'appelle plus les commandes du geste en deux temps', () => {
+  const fichiers = fs
+    .readdirSync(path.join(__dirname, '..', 'src'))
+    .filter((f) => f.endsWith('.js'));
+  const source_entiere = fichiers.map((f) => source('src', f)).join('\n');
+  for (const cmd of ['livrable_ajouter', 'livrable_regler', 'livrable_retirer']) {
+    assert.doesNotMatch(source_entiere, new RegExp(cmd), `${cmd} est encore appelée`);
+  }
+});
+
 test('chaque commande appelée par le front est déclarée au Rust', () => {
   const fichiers = fs
     .readdirSync(path.join(__dirname, '..', 'src'))

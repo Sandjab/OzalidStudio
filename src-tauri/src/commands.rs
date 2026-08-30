@@ -634,8 +634,8 @@ fn refuse_doublon(livrables: &[Livrable], cle: &str) -> bool {
 ///
 /// Une fonction et non deux `if` recopiés : Générer et Remplacer posent la même cinquième
 /// liste, et deux messages qui divergeraient diraient deux règles là où il n'y en a qu'une.
-/// `reglage_refuse` en porte encore une troisième copie — elle s'en va au lot 3 avec
-/// `livrable_regler`, et l'y toucher aujourd'hui serait remuer un code condamné.
+/// C'est le seul membre de l'ancien `reglage_refuse` qui ait survécu au lot 3 : le POD et le
+/// format se changent désormais, puisque Remplacer recompose.
 fn finition_refuse(neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
     match &neuf.finition {
         Some(f) if !pod.finitions.iter().any(|x| &x.cle == f) => {
@@ -643,131 +643,6 @@ fn finition_refuse(neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
         }
         _ => None,
     }
-}
-
-/// Ce qui interdit de régler cette ligne, s'il y a lieu.
-///
-/// Hors de la commande pour la même raison que `refuse_doublon` : une commande réclame
-/// un `State` qu'aucun test ne fabrique, et ces deux refus-là seraient alors les seuls
-/// du chantier que rien ne protège.
-///
-/// Le POD et le format ne se règlent pas : ils se choisissent à l'ajout, en cascade, et
-/// les changer sur place laisserait le livrable sous une pagination qui n'est plus la
-/// sienne — retirer puis ajouter le dit, et le fait. La reliure, elle, se règle (spec
-/// § 6) : elle emporte le gabarit avec elle, le livrable retombe sur un gabarit sans
-/// mesure, et la recomposition est précisément ce qu'elle exige. La finition doit
-/// exister chez le POD : elle nomme une option de commande, et une option inventée ne se
-/// commande nulle part.
-fn reglage_refuse(place: &Livrable, neuf: &Livrable, pod: &catalogue::Pod) -> Option<String> {
-    if place.fabrication.pod != neuf.fabrication.pod
-        || place.fabrication.format != neuf.fabrication.format
-    {
-        return Some(
-            "le POD et le format d'un livrable ne se règlent pas : retirer, puis ajouter.".into(),
-        );
-    }
-    match &neuf.finition {
-        Some(f) if !pod.finitions.iter().any(|x| &x.cle == f) => {
-            Some(format!("finition inconnue chez {} : {f}.", pod.nom))
-        }
-        _ => None,
-    }
-}
-
-/// Ajoute un livrable au livre.
-///
-/// Le refus du doublon porte sur les **quatre axes de fabrication** : deux livrables qui
-/// ne différeraient que par la finition produiraient les mêmes octets dans deux
-/// répertoires (spec § 4) — la finition est une donnée de commande, pas de fabrication.
-#[tauri::command]
-pub fn livrable_ajouter(
-    fabrication: catalogue::Fabrication,
-    atelier: State<Atelier>,
-) -> Result<ProjetVue, String> {
-    let r = catalogue::resout(&fabrication)?;
-    let mut garde = atelier.ouvert.lock().unwrap();
-    let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let l = &mut o.projet.meta.livraison;
-    if refuse_doublon(&l.livrables, &fabrication.cle()) {
-        return Err(format!(
-            "{} en {} est déjà un livrable de ce livre — la finition seule n'en fait \
-             pas un autre : le fichier produit serait le même.",
-            r.pod.nom, r.papier.nom
-        ));
-    }
-    l.livrables.push(Livrable::pour(fabrication));
-    vue_modifiee(o)
-}
-
-/// Retire un livrable — sauf le dernier : c'est lui qui donne son format à
-/// l'aperçu, et une liste vide rendrait la Couverture inutilisable.
-#[tauri::command]
-pub fn livrable_retirer(cle: String, atelier: State<Atelier>) -> Result<ProjetVue, String> {
-    let mut garde = atelier.ouvert.lock().unwrap();
-    let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let l = &mut o.projet.meta.livraison;
-    if l.livrables.len() < 2 {
-        return Err(
-            "un livre garde au moins un livrable : c'est lui qui donne le format \
-             sous lequel on regarde la couverture."
-                .into(),
-        );
-    }
-    let avant = l.livrables.len();
-    l.livrables.retain(|d| d.cle() != cle);
-    if l.livrables.len() == avant {
-        return Err(format!("{cle} n'est pas un livrable de ce livre."));
-    }
-    // Retirer celui qu'on visait laisse le pointeur en l'air : il retombe sur le
-    // premier, plutôt que de désigner un absent jusqu'au prochain geste.
-    if l.courant().is_none() {
-        l.courant = l.livrables[0].cle();
-    }
-    vue_modifiee(o)
-}
-
-/// La reliure, le papier, la finition et les relevés d'un livrable. `cle` désigne le
-/// livrable tel qu'il était : changer sa reliure ou son papier change son identité, et
-/// `courant` suit.
-#[tauri::command]
-pub fn livrable_regler(
-    cle: String,
-    livrable: Livrable,
-    atelier: State<Atelier>,
-) -> Result<ProjetVue, String> {
-    // Le candidat est résolu **avant** d'être posé : un axe ou un papier inconnu doit
-    // laisser le livrable tel qu'il était, et non l'abandonner à moitié réglé.
-    let r = catalogue::resout(&livrable.fabrication)?;
-    let mut garde = atelier.ouvert.lock().unwrap();
-    let o = garde.as_mut().ok_or_else(aucun_projet)?;
-    let l = &mut o.projet.meta.livraison;
-    let neuve = livrable.cle();
-    // La ligne visée se trouve **avant** qu'on regarde le doublon : une `cle` que le
-    // livre ne porte pas n'est pas un doublon, et répondre « déjà un livrable » se
-    // lirait comme un refus de ce qu'on croyait régler. Le rang sert dans la foulée,
-    // sans que rien ne bouge entre-temps : ce n'est pas un pointeur retenu.
-    let rang = l
-        .livrables
-        .iter()
-        .position(|x| x.cle() == cle)
-        .ok_or_else(|| format!("{cle} n'est pas un livrable de ce livre."))?;
-    if neuve != cle && refuse_doublon(&l.livrables, &neuve) {
-        return Err(format!("{neuve} est déjà un livrable de ce livre."));
-    }
-    let place = &mut l.livrables[rang];
-    // Refusé avant toute écriture : le POD et le format ne se règlent pas sur une ligne,
-    // ils se choisissent à l'ajout. La reliure, elle, emporte le gabarit avec elle — le
-    // livrable retombe alors sur un gabarit sans mesure, et recompose, ce qui est
-    // précisément ce qu'une reliure exige. Le papier ne touche à rien : deux papiers
-    // partagent la mesure de leur gabarit, et chacun en tire son dos à la vue.
-    if let Some(e) = reglage_refuse(place, &livrable, r.pod) {
-        return Err(e);
-    }
-    *place = livrable;
-    if l.courant == cle {
-        l.courant = neuve;
-    }
-    vue_modifiee(o)
 }
 
 /// Déplace le pointeur : pour qui l'on compose, et sous quel format on regarde.
@@ -2634,7 +2509,7 @@ fn interieur_pdf(dossier: &Path, cle: &str) -> PathBuf {
 /// confondrait les deux.
 ///
 /// Fonction libre, éprouvable sans `State` ni Typst — la manière déjà prise pour
-/// `refuse_doublon`, `reglage_refuse` et `dossiers_d_envoi`.
+/// `refuse_doublon`, `finition_refuse` et `dossiers_d_envoi`.
 fn vignettes_du_disque(racine: &Path, cles: &[String]) -> BTreeMap<String, String> {
     cles.iter()
         .filter_map(|cle| {
@@ -3069,12 +2944,12 @@ mod tests {
 
     /// Un POD qui publie une finition. Synthétique **par choix** et non par nécessité :
     /// depuis le lot 4, BoD en déclare trois et le cas « finition connue » pourrait
-    /// s'ancrer sur le catalogue réel. Mais `reglage_refuse` est une règle d'application,
+    /// s'ancrer sur le catalogue réel. Mais `finition_refuse` est une règle d'application,
     /// pas un fait d'imprimeur — l'ancrer sur `bod.toml` ferait tomber ce test le jour où
     /// BoD gagne ou perd un pelliculage, pour une raison qui ne le regarde pas. Le nom
     /// « Essai » sert d'ailleurs l'assertion : c'est lui que le refus doit nommer.
     ///
-    /// Sans format, reliure ni papier : `Pod::verifie` le refuserait, mais `reglage_refuse`
+    /// Sans format, reliure ni papier : `Pod::verifie` le refuserait, mais `finition_refuse`
     /// ne lit que `nom` et `finitions`, et la fixture passe par `toml::from_str` seul.
     fn pod_a_finition() -> catalogue::Pod {
         toml::from_str(
@@ -3090,42 +2965,6 @@ nom = "Pelliculage mat"
         .unwrap()
     }
 
-    /// Le POD et le format se choisissent à l'ajout, en cascade, et ne se règlent plus : les
-    /// changer sur place laisserait le livrable sous une pagination qui n'est plus la
-    /// sienne, et le refus dit le geste qui, lui, marche. La reliure, elle, **se règle**
-    /// (spec § 6) : elle change le gabarit, le livrable retombe sur un gabarit sans mesure,
-    /// et c'est exactement ce qu'une reliure exige — sa pagination admise, sa parité et sa
-    /// géométrie ne sont pas celles de la précédente.
-    #[test]
-    fn le_pod_et_le_format_ne_se_reglent_pas_la_reliure_si() {
-        let place = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
-
-        let autre_format = Livrable::pour(fabrication("kdp", "5x8", "broche", "creme"));
-        let refus = reglage_refuse(&place, &autre_format, &pod_a_finition())
-            .expect("un format changé doit être refusé");
-        assert!(refus.contains("retirer"), "{refus}");
-
-        let autre_pod = Livrable::pour(fabrication("bod", "6x9", "broche", "creme"));
-        let refus = reglage_refuse(&place, &autre_pod, &pod_a_finition())
-            .expect("un POD changé doit être refusé");
-        assert!(refus.contains("retirer"), "{refus}");
-
-        // La reliure se règle : c'est le geste que la spec § 6 pose sur la ligne.
-        let autre_reliure = Livrable::pour(fabrication("kdp", "6x9", "rigide", "creme"));
-        assert_eq!(
-            reglage_refuse(&place, &autre_reliure, &pod_a_finition()),
-            None,
-            "la reliure doit se régler sur la ligne"
-        );
-
-        // Le papier aussi, comme depuis le lot 2.
-        let autre_papier = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
-        assert_eq!(
-            reglage_refuse(&place, &autre_papier, &pod_a_finition()),
-            None
-        );
-    }
-
     /// La finition nomme une option de commande, pas un fichier : celle que le POD ne
     /// publie pas ne se commande nulle part, et la laisser passer la ferait paraître au
     /// récapitulatif comme si elle avait été retenue.
@@ -3137,21 +2976,21 @@ nom = "Pelliculage mat"
         let mut connue = place.clone();
         connue.finition = Some("mat".into());
         assert_eq!(
-            reglage_refuse(&place, &connue, &pod),
+            finition_refuse(&connue, &pod),
             None,
             "une finition que le POD publie doit passer"
         );
 
         let mut inventee = place.clone();
         inventee.finition = Some("velours".into());
-        let refus = reglage_refuse(&place, &inventee, &pod).expect("finition inconnue");
+        let refus = finition_refuse(&inventee, &pod).expect("finition inconnue");
         assert!(
             refus.contains("velours") && refus.contains("Essai"),
             "{refus}"
         );
 
         // Aucune finition n'est le cas courant : rien à vérifier, rien à refuser.
-        assert_eq!(reglage_refuse(&place, &place, &pod), None);
+        assert_eq!(finition_refuse(&place, &pod), None);
     }
 
     /// La finition ne fabrique rien : elle ne change pas un octet du PDF, aucun nom de
