@@ -110,8 +110,8 @@ function retenirPackagesDeLaSession(resultats) {
  *
  * Indispensable au changement de projet : ces comptes rendus sont rangés **par clé de
  * livrable**, et deux livres tirés chez le même imprimeur, au même format et sur le même
- * papier portent la même clé. Sans cet oubli, la ligne d'un livre neuf afficherait le dos,
- * les chemins et les alertes du livre qu'on vient de fermer.
+ * papier portent la même clé. Sans cet oubli, la ligne d'un livre neuf afficherait les
+ * chiffres figés et les alertes du livre qu'on vient de fermer.
  */
 function oublierPackagesDeLaSession() {
   packagesDeLaSession = {};
@@ -149,6 +149,7 @@ function afficherLivrables() {
 
   afficherFormulaire();
   chargerVignettes();
+  chargerFichiers();
 }
 
 /**
@@ -174,6 +175,22 @@ function ligneLivrable(d) {
   if (p) infos.append(h('p', noteFormat(p), 'note'));
   infos.append(noteMesure(d, dosPublie), noteEtat(d));
 
+  // La planche vient du modèle depuis que le Rust la recalcule à la vue : elle n'est qu'une
+  // addition du format, du dos et du fond perdu, et se lit donc à la réouverture. Le fond
+  // perdu n'y est pas répété — la note du format le donne, deux rangs plus haut.
+  if (d.compose?.planche) {
+    const dl = h('dl');
+    dl.append(h('dt', 'Planche'),
+      h('dd', `${nb(d.compose.planche[0])} × ${nb(d.compose.planche[1])} mm`));
+    infos.append(dl);
+  }
+  // Les fichiers livrés, comme la vignette : relus du disque, hors de la vue, et posés ici
+  // quand ils arrivent. Une seule source pour les deux moments — celui qui vient de générer
+  // et celui qui rouvre —, là où le compte rendu de la session n'en servait qu'un.
+  const fichiers = h('div', undefined, 'fichiers');
+  fichiers.id = `liv-fichiers-${d.cle}`;
+  infos.append(fichiers);
+
   const r = packagesDeLaSession[d.cle];
   if (r?.package) {
     const q = r.package;
@@ -184,16 +201,6 @@ function ligneLivrable(d) {
     // même chose. La planche reste : elle n'est le format d'aucun rang — c'est la
     // couverture dépliée, deux largeurs, le dos et les fonds perdus.
     //
-    // Le fond perdu suit la même règle, avec une source de plus : la ligne le tient du
-    // catalogue, le package porte celui qui a réellement été appliqué. Il ne reparaît donc
-    // que là où il contredit ce qu'on vient de lire — ou là où le catalogue n'en publie
-    // aucun, chez un imprimeur à gabarit, et où il est le seul chiffre qu'on ait.
-    const fp = p?.fond_perdu ?? null;
-    const dl = h('dl');
-    dl.append(h('dt', 'Planche'), h('dd', `${nb(q.planche[0])} × ${nb(q.planche[1])} mm`
-      + (redit(nb(q.fond_perdu, 3), fp === null ? null : nb(fp, 3))
-        ? `, FP ${nb(q.fond_perdu, 3)} mm` : '')));
-    infos.append(dl);
     // L'exception à la règle du dessus, et la raison pour laquelle ces trois chiffres-là
     // n'ont pas simplement disparu : ce sont ceux sur lesquels le PDF a **réellement** été
     // composé, figés à la génération, quand ceux de la ligne suivent le livre d'aujourd'hui.
@@ -205,11 +212,18 @@ function ligneLivrable(d) {
     // Écrits comme le rang de mesure les écrit, séparateur compris : les deux se lisent
     // l'un sous l'autre, et c'est l'écart qu'on veut voir sauter aux yeux.
     const dosDeLaLigne = dosAnnonce(d, dosPublie);
+    const planche = (v) => (v ? `${nb(v[0])} × ${nb(v[1])} mm` : null);
+    // Le fond perdu a une source de plus que les quatre autres : la ligne le tient du
+    // catalogue, le package porte celui qui a réellement été appliqué. Là où le catalogue
+    // n'en publie aucun — chez un imprimeur à gabarit —, celui-ci est le seul qu'on ait.
+    const fp = p?.fond_perdu ?? null;
     const figes = [
       [`${q.pages} pages`, String(q.pages), d.compose ? String(d.compose.pages) : null],
       [`gouttière ${nb(q.gouttiere, 1)} mm`, nb(q.gouttiere, 1),
         d.compose ? nb(d.compose.gouttiere, 1) : null],
       [`dos ${nb(q.dos)} mm`, nb(q.dos), dosDeLaLigne === null ? null : nb(dosDeLaLigne)],
+      [`planche ${planche(q.planche)}`, planche(q.planche), planche(d.compose?.planche)],
+      [`FP ${nb(q.fond_perdu, 3)} mm`, nb(q.fond_perdu, 3), fp === null ? null : nb(fp, 3)],
     ].filter(([, fige, annonce]) => redit(fige, annonce)).map(([texte]) => texte);
     if (figes.length) infos.append(h('p', `Composé sur ${figes.join(' · ')}.`, 'note'));
     // Le dos est composé sur une zone qui rogne ce qui dépasse, sans rien dire : un titre
@@ -231,7 +245,6 @@ function ligneLivrable(d) {
     // les deux. Les phrases viennent du Rust telles quelles : la fiche de téléversement
     // les recopie, et un dossier relu trois mois plus tard doit dire ce que l'écran disait.
     for (const a of q.avertissements) infos.append(h('p', a, 'note'));
-    for (const c of cheminsGroupes(q.chemins)) infos.append(h('p', c, 'chemin'));
   } else if (r?.erreur) {
     infos.append(h('p', r.erreur, 'note alerte'));
   }
@@ -398,6 +411,25 @@ async function chargerVignettes() {
     // Seulement si la session n'en a pas de plus fraîche : celle qu'on vient de composer
     // est celle du fichier qui vient d'être écrit.
     if (img && !img.src) img.src = donnee;
+  }
+}
+
+/**
+ * Les fichiers livrés de chaque ligne, relus du disque.
+ *
+ * Même arbitrage que les vignettes, et pour les mêmes raisons : hors de la vue, après le
+ * montage des lignes, et sans condition — un package composé dans la session vient d'écrire
+ * ses fichiers, la relecture les ramène. C'est ce qui donne **une seule** source aux deux
+ * moments où l'on cherche ses PDF : celui qui vient de générer, et celui qui rouvre.
+ *
+ * Ce que le Rust ne rend pas n'est pas affiché : un fichier effacé à la main entre deux
+ * ouvertures disparaît de la ligne, au lieu d'y laisser un chemin qui ne mène nulle part.
+ */
+async function chargerFichiers() {
+  const table = await invoke('livrable_fichiers');
+  for (const [cle, chemins] of Object.entries(table)) {
+    const box = $(`liv-fichiers-${cle}`);
+    if (box) box.replaceChildren(...cheminsGroupes(chemins).map((c) => h('p', c, 'chemin')));
   }
 }
 

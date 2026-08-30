@@ -71,6 +71,7 @@ const invoke = async (cmd) => {
   // Les vignettes de planche, relues du disque à chaque affichage de la liste :
   // un projet qui n'a rien généré en rend une table vide, et c'est le cas ici.
   if (cmd === 'livrable_vignettes') return {};
+  if (cmd === 'livrable_fichiers') return {};
   throw new Error(`commande inattendue : ${cmd}`);
 };
 

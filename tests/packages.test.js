@@ -248,6 +248,7 @@ async function ouvre(
               gouttiere: r.package.gouttiere,
               blanche: r.package.blanche,
               dos: r.package.dos,
+              planche: r.package.planche,
             },
           }
           : d)),
@@ -381,6 +382,9 @@ async function ouvre(
     // Relues du disque, hors de la vue : un test qui n'en pose pas en voit une table vide,
     // ce qui est exactement ce qu'un projet jamais généré rend.
     if (cmd === 'livrable_vignettes') return sur.vignettes ?? {};
+    // Les fichiers livrés, relus du disque à chaque affichage : même nature que les
+    // vignettes — ils sont là ou ils n'y sont pas, et le projet n'en retient rien.
+    if (cmd === 'livrable_fichiers') return sur.fichiers ?? {};
     if (cmd === 'manuscrit_reimporter' || cmd === 'manuscrit_choisir') return oublier();
     // Le démarrage et la garde envoient ces trois commandes sans qu'aucun test ne les
     // demande : sans réponse ici, elles lèveraient avant que rien ne soit vérifié.
@@ -448,6 +452,7 @@ test('le faux backend sert les quatre verbes et l\'état de chaque livrable', as
   const s = await invoke('livrable_supprimer', { cle: 'lulu-108x175-broche-standard' });
   assert.deepStrictEqual(s.nettoyage.etrangers, [], 'la suppression rend son nettoyage');
   assert.ok(await invoke('livrable_vignettes'), 'les vignettes répondent, fût-ce à vide');
+  assert.ok(await invoke('livrable_fichiers'), 'les fichiers livrés répondent, fût-ce à vide');
 });
 
 /* ---------- Tout regénérer ---------- */
@@ -1311,7 +1316,10 @@ test('un dos qui tient n\'affiche aucune alerte', async () => {
  * seule la composition a vu : la planche, ses fichiers, ses avertissements.
  */
 test('le compte rendu ne redit pas les chiffres que la ligne porte déjà', async () => {
-  const { els } = await ouvre([LULU], { packages: [compteRendu()] });
+  const { els } = await ouvre([LULU], {
+    packages: [compteRendu()],
+    fichiers: { 'lulu-108x175-broche-standard': ['/livres/LHC/lulu/couverture-lulu.pdf'] },
+  });
   await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
 
   assert.deepStrictEqual(els.get('livrables').textes('dt'), ['Planche']);
@@ -1378,8 +1386,11 @@ test('le dos du compte rendu reparaît quand la ligne ne le mesure plus', async 
 
   const t = els.get('livrables').textContent;
   assert.match(t, /non composé/, 'la mesure est bien partie');
-  assert.match(t, /Composé sur 262 pages · gouttière 25,0 mm · dos 16,51 mm\./,
-    'les chiffres figés du package sont les seuls qui restent, et ils doivent se lire');
+  assert.match(
+    t,
+    /Composé sur 262 pages · gouttière 25,0 mm · dos 16,51 mm · planche 238,86 × 181,35 mm\./,
+    'les chiffres figés du package sont les seuls qui restent, et ils doivent se lire'
+  );
 });
 
 /**
@@ -1392,8 +1403,8 @@ test('le fond perdu de la planche ne se redit que s\'il contredit le catalogue',
     packages: [compteRendu({ package: paquet({ fond_perdu: 5 }) })],
   });
   await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
-  assert.deepStrictEqual(els.get('livrables').textes('dd'),
-    ['238,86 × 181,35 mm, FP 5,000 mm']);
+  assert.match(els.get('livrables').textContent, /FP 5,000 mm/);
+  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
 });
 
 /**
@@ -1409,7 +1420,7 @@ test('le fond perdu reparaît là où le catalogue n\'en publie aucun', async ()
     })],
   }, { livrables: [{ ...chez(COOLLIBRI), dos_mm: 16.513 }] });
   await els.get('liv-regenerer-coollibri-148x210-broche-mesure').declenche('click');
-  assert.match(els.get('livrables').textes('dd')[0], /FP 3,175 mm/);
+  assert.match(els.get('livrables').textContent, /FP 3,175 mm/);
 });
 
 /**
@@ -1440,11 +1451,12 @@ test('la finition retenue se lit sur la ligne du livrable', async () => {
  */
 test('les fichiers d\'un package nomment leur répertoire une seule fois', async () => {
   const { els } = await ouvre([LULU], {
-    packager: () => [{
-      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null,
-    }],
+    fichiers: {
+      'lulu-108x175-broche-standard': [
+        '/livres/LHC/lulu/interieur-lulu.pdf', '/livres/LHC/lulu/couverture-lulu.pdf',
+      ],
+    },
   });
-  await els.get('btToutRegenerer').declenche('click');
 
   const lignes = chemins(els.get('livrables'));
   assert.deepStrictEqual(lignes, [
@@ -1459,16 +1471,59 @@ test('les fichiers d\'un package nomment leur répertoire une seule fois', async
  * raccourci de travers se suit jusqu'à un fichier qui n'existe pas.
  */
 test('des fichiers dispersés gardent chacun leur chemin entier', async () => {
-  const disperses = { ...paquet(), chemins: ['/a/interieur.pdf', '/b/couverture.pdf'] };
   const { els } = await ouvre([LULU], {
-    packager: () => [{
-      cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: disperses, vignette: null, erreur: null,
-    }],
+    fichiers: {
+      'lulu-108x175-broche-standard': ['/a/interieur.pdf', '/b/couverture.pdf'],
+    },
   });
-  await els.get('btToutRegenerer').declenche('click');
 
   assert.deepStrictEqual(chemins(els.get('livrables')),
     ['/a/interieur.pdf', '/b/couverture.pdf']);
+});
+
+/**
+ * Les deux tests ci-dessus valent aussi pour ce qu'ils ne font pas : ils ne génèrent rien.
+ * Les fichiers livrés ne viennent plus du compte rendu de la session mais du disque, relus
+ * comme la vignette l'est — ils sont donc là à la réouverture d'un projet fermé la veille,
+ * ce qui est le seul moment où l'on cherche vraiment où sont ses PDF.
+ *
+ * Et une seule source, pas deux : un package composé dans la session écrit ses fichiers,
+ * que la relecture ramène aussitôt. Les prendre aussi du compte rendu les afficherait deux
+ * fois — la redite qu'on vient de retirer partout ailleurs.
+ */
+test('un livrable généré dans la session ne nomme pas ses fichiers deux fois', async () => {
+  const { els } = await ouvre([LULU], {
+    packages: [compteRendu()],
+    fichiers: {
+      'lulu-108x175-broche-standard': [
+        '/livres/LHC/lulu/interieur-lulu.pdf', '/livres/LHC/lulu/couverture-lulu.pdf',
+      ],
+    },
+  });
+  await els.get('liv-regenerer-lulu-108x175-broche-standard').declenche('click');
+
+  const t = els.get('livrables').textContent;
+  assert.equal((t.match(/interieur-lulu\.pdf/g) ?? []).length, 1);
+});
+
+/**
+ * La planche se recalcule côté Rust à chaque vue — elle n'est qu'une addition du format, du
+ * dos et du fond perdu. Elle arrive donc avec la mesure, et non plus avec le compte rendu
+ * de la session : le livrable ci-dessous n'en a aucun, et ses dimensions doivent se lire.
+ * C'est le chiffre qu'on cherche quand on rouvre un projet pour commander.
+ */
+test('les dimensions de la planche se lisent à la réouverture', async () => {
+  const { els } = await ouvre([LULU], {}, {
+    livrables: [{
+      ...chez(LULU),
+      compose: {
+        pages: 262, gouttiere: 25, blanche: true, dos: 16.513, planche: [238.863, 181.35],
+      },
+      etat: { etat: 'ajour' },
+    }],
+  });
+  assert.deepStrictEqual(els.get('livrables').textes('dt'), ['Planche']);
+  assert.deepStrictEqual(els.get('livrables').textes('dd'), ['238,86 × 181,35 mm']);
 });
 
 /**
@@ -1964,14 +2019,24 @@ test('un dos calculé sur un autre manuscrit ne vaut plus rien', async () => {
 
 /**
  * Le dos n'est pas seul à sortir du texte, et il est le seul qui ne se lise nulle part :
- * la pagination, les chemins des fichiers composés et les envois déjà écrits en parlent
- * aussi, sous les yeux et en chiffres. Une application dont l'objet est que le nombre de
- * pages soit vrai ne peut pas afficher celui d'un manuscrit qu'on vient de remplacer.
+ * la pagination, ce que la composition a relevé et les envois déjà écrits en parlent aussi,
+ * sous les yeux et en chiffres. Une application dont l'objet est que le nombre de pages soit
+ * vrai ne peut pas afficher celui d'un manuscrit qu'on vient de remplacer.
+ *
+ * Le témoin a changé de nature, et la frontière avec lui. Il était les chemins des fichiers
+ * écrits ; ceux-là viennent maintenant du disque, où les PDF de l'ancien texte sont
+ * toujours — la même règle que la vignette, qui survit à ce geste depuis le lot 3 et pour la
+ * même raison : elle décrit un fichier qui existe, et c'est l'état de la ligne qui dit qu'il
+ * est périmé. Cacher les deux ferait croire qu'ils ne sont plus là.
+ *
+ * Ce qui doit partir est ce qu'aucun fichier ne porte : les avertissements relevés à la
+ * composition, qui ne valent que pour le texte qui les a provoqués.
  */
 test('réimporter le manuscrit efface ce que l\'ancien texte avait fait afficher', async () => {
+  const vu = paquet({ avertissements: ['Photo à 210 ppp : sous le seuil de l\'imprimeur.'] });
   const { els } = await ouvre([LULU], {
     composer: COMPOSITION,
-    packager: [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: paquet(), vignette: null, erreur: null }],
+    packager: [{ cle: 'lulu-108x175-broche-standard', libelle: 'Lulu', package: vu, vignette: null, erreur: null }],
     epreuve_tirer: '/livres/LHC/epreuve.pdf',
   }, { couverture: {} });
 
@@ -1982,20 +2047,16 @@ test('réimporter le manuscrit efface ce que l\'ancien texte avait fait afficher
   // liste de dédicataires que ce projet-là n'a pas, et c'est ce qu'il laisse qui compte.
   els.get('resultatEnvois').textContent = 'Rex — envois/rex/ — 262 pages, dos 16,51 mm';
   els.get('resultatEnvois').hidden = false;
-  assert.ok(chemins(els.get('livrables')).length > 0, 'rien à effacer, test sans objet');
+  assert.match(els.get('livrables').textContent, /210 ppp/, 'rien à effacer, test sans objet');
 
   await els.get('btReimporter').declenche('click');
 
   // La pagination, elle, n'est plus à l'écran mais dans le projet : c'est le Rust qui
   // l'efface au geste qui l'a rendue fausse, et le pied dit alors « dos périmé ». Ce
-  // test ne garde que les canaux qui appartiennent en propre à l'écran.
-  // Le compte rendu vit dans la ligne depuis le lot 3 : ce qu'on vérifie est qu'elle ne
-  // le porte plus. Les chemins des fichiers écrits, et non le dos : celui-là vient de la
-  // mesure que le projet retient, pas du compte rendu, et il est légitime qu'il reste
-  // tant que le Rust ne l'a pas périmé. La ligne, elle, reste — le livrable n'a pas
-  // disparu, seul ce qu'une composition avait vu s'efface.
-  assert.deepStrictEqual(chemins(els.get('livrables')), [],
-    'les packages de l\'ancien texte restent à lire');
+  // test ne garde que les canaux qui appartiennent en propre à l'écran. La ligne, elle,
+  // reste — le livrable n'a pas disparu, seul ce qu'une composition avait vu s'efface.
+  assert.doesNotMatch(els.get('livrables').textContent, /210 ppp/,
+    'ce que la composition de l\'ancien texte avait relevé reste à lire');
   assert.strictEqual(els.get('resultatEnvois').hidden, true,
     'les envois de l\'ancien texte restent à lire');
   assert.strictEqual(els.get('cheminEpreuve').textContent, '',

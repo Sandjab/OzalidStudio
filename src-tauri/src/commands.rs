@@ -2523,6 +2523,59 @@ fn vignettes_du_disque(racine: &Path, cles: &[String]) -> BTreeMap<String, Strin
         .collect()
 }
 
+/// Les fichiers d'un package présents sur le disque, par clé de livrable.
+///
+/// Les trois que `packager` livre, et eux seuls : les deux PDF et la fiche de téléversement.
+/// Ni les sources Typst, ni le PNG de la planche — les premières n'intéressent personne, le
+/// second est déjà la vignette, et aucun des deux ne part chez l'imprimeur. C'est la liste
+/// que `Package::chemins` portait, reconstruite là où elle est vérifiable.
+///
+/// Testés un à un plutôt que listés : le répertoire porte aussi les sources, et un
+/// `read_dir` obligerait à trier au nom ce que `package::nom` sait déjà fabriquer. Un
+/// fichier absent est absent de la liste — un chemin calculé et non vérifié mentirait sur un
+/// fichier effacé à la main, et c'est un chemin qu'on emporte chez l'imprimeur.
+fn fichiers_du_disque(racine: &Path, cles: &[String]) -> BTreeMap<String, Vec<String>> {
+    cles.iter()
+        .filter_map(|cle| {
+            let dossier = racine.join(cle);
+            let livres: Vec<String> = [
+                package::nom(cle, "interieur", "pdf"),
+                package::nom(cle, "couverture", "pdf"),
+                "televersement.txt".to_string(),
+            ]
+            .into_iter()
+            .map(|nom| dossier.join(nom))
+            .filter(|c| c.is_file())
+            .map(|c| c.display().to_string())
+            .collect();
+            (!livres.is_empty()).then(|| (cle.clone(), livres))
+        })
+        .collect()
+}
+
+/// Les fichiers livrés des livrables du livre, pour l'affichage de l'étape Livraison.
+///
+/// Hors de `vue` et sans cache, comme `livrable_vignettes` et pour la même raison : la vue
+/// est rendue par toute commande qui écrit, et statter trois fichiers par livrable à chaque
+/// frappe se paierait pour rien.
+#[tauri::command]
+pub fn livrable_fichiers(atelier: State<Atelier>) -> Result<BTreeMap<String, Vec<String>>, String> {
+    let garde = atelier.ouvert.lock().unwrap();
+    let o = garde.as_ref().ok_or_else(aucun_projet)?;
+    let Ok(racine) = sorties_racine(o) else {
+        return Ok(BTreeMap::new());
+    };
+    let cles: Vec<String> = o
+        .projet
+        .meta
+        .livraison
+        .livrables
+        .iter()
+        .map(|l| l.cle())
+        .collect();
+    Ok(fichiers_du_disque(&racine, &cles))
+}
+
 /// Les vignettes de planche des livrables du livre, pour l'affichage de l'étape Livraison.
 ///
 /// Aucun cache, et **hors de `vue`** : `vue` est rendue par toute commande qui écrit dans le
@@ -2637,6 +2690,12 @@ pub struct MesureVue {
     /// Recalculé ici, jamais retenu : c'est ce qui laisse deux papiers partager une
     /// mesure, et un `dos` de formule corrigée se corriger tout seul à la vue.
     dos: Option<f64>,
+    /// Les dimensions de la planche, en mm — largeur puis hauteur. Recalculées pour la même
+    /// raison que le dos, dont elles ne sont qu'une addition avec le format et le fond
+    /// perdu : les retenir dans le `.ozalid` en ferait une troisième copie à tenir d'accord.
+    /// `None` quand l'imprimeur ne publie ni dos ni fond perdu et qu'aucun relevé ne les
+    /// remplace — une planche sur des mesures inventées se voit au massicot, jamais avant.
+    planche: Option<(f64, f64)>,
     polices_introuvables: Vec<String>,
 }
 
@@ -2654,14 +2713,30 @@ fn livraison_vue(projet: &Projet) -> LivraisonVue {
         let compose = l.mesure(&gabarit).map(|m| {
             // Le papier du **livrable**, jamais celui d'office du POD : c'est toute la
             // différence entre deux lignes qui se comparent et deux lignes qui mentent.
-            let dos = catalogue::resout(f)
+            let resolu = catalogue::resout(f).ok();
+            let dos = resolu.and_then(|r| r.papier.dos.mm(m.pages));
+            // Le gabarit de la planche prend les relevés du **livrable** : chez un imprimeur
+            // qui ne publie ni dos ni fond perdu, ce sont eux ou rien. Son refus devient ici
+            // une absence — la vue décrit ce qu'on sait, elle ne se plaint pas.
+            let planche = resolu.and_then(|r| {
+                planche::Gabarit::pour(
+                    &r.provider(),
+                    r.papier,
+                    m.pages,
+                    planche::Releve {
+                        dos: liv.dos_mm,
+                        fond_perdu: liv.fond_perdu_mm,
+                    },
+                )
                 .ok()
-                .and_then(|r| r.papier.dos.mm(m.pages));
+                .map(|g| (g.largeur(), g.hauteur()))
+            });
             MesureVue {
                 pages: m.pages,
                 gouttiere: m.gouttiere,
                 blanche: m.blanche,
                 dos,
+                planche,
                 polices_introuvables: m.polices_introuvables.clone(),
             }
         });
@@ -3174,6 +3249,113 @@ nom = "Pelliculage mat"
         assert_ne!(
             creme, blanc,
             "les deux papiers rendent le même dos : le dos ne suit pas le papier du livrable"
+        );
+    }
+
+    /// La planche se recalcule à la vue, comme le dos, et pour la même raison : elle n'est
+    /// qu'une addition du format, du dos et du fond perdu, tous trois connus sans rien
+    /// composer. Retenue dans le `.ozalid`, elle survivrait à la formule qui l'a produite ;
+    /// recalculée, elle suit le catalogue — et une ligne rouverte demain montre enfin les
+    /// dimensions de sa planche sans avoir à régénérer.
+    ///
+    /// Deux papiers d'un même gabarit en sont la preuve : ils partagent la pagination et le
+    /// format, donc la hauteur, mais leur dos diffère — et c'est la largeur de la planche
+    /// qui l'accuse. Une planche calculée sur le gabarit au lieu du livrable rendrait ici
+    /// deux fois le même couple, et le fond perdu partirait chez l'imprimeur avec le dos du
+    /// voisin.
+    #[test]
+    fn la_planche_se_recalcule_par_livrable_et_suit_le_dos() {
+        let creme = Livrable::pour(fabrication("kdp", "6x9", "broche", "creme"));
+        let blanc = Livrable::pour(fabrication("kdp", "6x9", "broche", "blanc"));
+        let empreinte = catalogue::resout(&creme.fabrication).unwrap().empreinte();
+        let mut l = Livraison {
+            courant: creme.cle(),
+            livrables: vec![creme, blanc],
+            deja_compose: false,
+            mesures: BTreeMap::new(),
+        };
+        l.retenir_mesure(
+            "kdp-6x9-broche",
+            Mesure {
+                pages: 262,
+                gouttiere: 25.0,
+                blanche: true,
+                empreinte: Some(empreinte),
+                polices_introuvables: vec![],
+            },
+        );
+        let mut projet = Projet::nouveau(Livre::vide(), String::new());
+        projet.meta.livraison = l;
+
+        let v = livraison_vue(&projet);
+        let planche = |i: usize| {
+            v.livrables[i]
+                .compose
+                .as_ref()
+                .expect("la mesure vaut pour les deux papiers")
+                .planche
+                .expect("KDP publie sa formule de dos et son fond perdu")
+        };
+
+        assert_ne!(
+            planche(0).0,
+            planche(1).0,
+            "deux dos différents donnent la même largeur de planche : elle ne suit pas le \
+             papier du livrable"
+        );
+        assert_eq!(
+            planche(0).1,
+            planche(1).1,
+            "le dos ne change que la largeur : la hauteur est celle du format"
+        );
+    }
+
+    /// Sans mesure, pas de planche : ses trois termes sont le format, le fond perdu et le
+    /// dos, et le dos se tire de la pagination. Un couple de zéros se lirait comme une
+    /// planche mesurée — exactement l'erreur que le refus de `Gabarit::pour` existe pour
+    /// empêcher.
+    #[test]
+    fn un_livrable_sans_mesure_n_a_pas_de_planche() {
+        let projet = Projet::nouveau(Livre::vide(), String::new());
+        assert!(livraison_vue(&projet).livrables[0].compose.is_none());
+    }
+
+    /// Les fichiers livrés se retrouvent à la réouverture, comme la vignette et par le même
+    /// chemin : ils sont à un endroit que la clé détermine, et leurs noms sont fabriqués par
+    /// `package::nom`. Rien n'a donc à être retenu dans le `.ozalid` — mais rien ne doit non
+    /// plus être **annoncé** sans être là : un chemin calculé mentirait sur un fichier
+    /// effacé à la main entre deux ouvertures, et c'est un chemin qu'on emporte chez
+    /// l'imprimeur.
+    #[test]
+    fn les_fichiers_livres_se_relisent_du_disque_et_les_absents_ne_mentent_pas() {
+        let tmp = tempfile::tempdir().unwrap();
+        let racine = tmp.path().join("sorties");
+        let cle = "lulu-108x175-broche-standard";
+        let dossier = racine.join(cle);
+        std::fs::create_dir_all(&dossier).unwrap();
+        std::fs::write(dossier.join(package::nom(cle, "interieur", "pdf")), "%PDF").unwrap();
+        std::fs::write(dossier.join("televersement.txt"), "fiche").unwrap();
+
+        let f = fichiers_du_disque(&racine, &[cle.to_string(), "absent-du-disque".to_string()]);
+
+        let livres = &f[cle];
+        assert!(
+            livres
+                .iter()
+                .any(|c| c.ends_with("interieur-lulu-108x175-broche-standard.pdf")),
+            "l'intérieur écrit sur le disque doit se lire, vu : {livres:?}"
+        );
+        assert!(
+            livres.iter().any(|c| c.ends_with("televersement.txt")),
+            "la fiche de téléversement est un fichier livré, vu : {livres:?}"
+        );
+        assert!(
+            !livres.iter().any(|c| c.contains("couverture")),
+            "la planche n'a pas été écrite : l'annoncer ferait chercher un fichier absent"
+        );
+        assert!(
+            !f.contains_key("absent-du-disque"),
+            "un livrable sans fichier est absent, pas vide"
         );
     }
 

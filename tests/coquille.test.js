@@ -308,6 +308,7 @@ function atelier({
           nettoyage: { absents: [], etrangers: [], dossier_retire: true },
         };
       case 'livrable_vignettes': return {};
+      case 'livrable_fichiers': return {};
       case 'composer':
         livraison = {
           ...livraison,
