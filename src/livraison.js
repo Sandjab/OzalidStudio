@@ -225,48 +225,168 @@ function afficherLivrables() {
     box.append(ligne);
   }
 
-  afficherCascade();
+  afficherFormulaire();
 }
 
 /**
- * Les deux listes de l'ajout : le POD, puis **ses** formats.
+ * Le formulaire d'un livrable : les cinq axes, puis les relevés que l'imprimeur exige.
  *
- * Aucun filtre sur ce qui est déjà déclaré : c'est ce qui permet de déclarer deux fois
- * le même gabarit pour comparer deux papiers. Le vrai doublon — les quatre axes
- * identiques — est refusé par le Rust, avec sa raison.
+ * Aucun filtre sur ce qui est déjà déclaré : c'est ce qui permet de déclarer deux fois le
+ * même gabarit pour comparer deux papiers. Le vrai doublon — les quatre axes identiques —
+ * est refusé par le Rust, avec sa raison.
  *
- * La liste des POD se reconstruit à chaque affichage, celle des formats la suit : elles
- * ne dépendent que du catalogue, qui ne bouge pas de la vie du processus, mais les
- * reconstruire coûte deux boucles sur six entrées et évite d'avoir à se demander qui les
- * a laissées dans quel état.
+ * Les listes se reconstruisent à chaque affichage : elles ne dépendent que du catalogue,
+ * qui ne bouge pas de la vie du processus, mais les reconstruire coûte cinq boucles sur
+ * quelques entrées et évite d'avoir à se demander qui les a laissées dans quel état.
  */
-function afficherCascade() {
+function afficherFormulaire() {
   const sel = $('inAjoutPod');
   const choisi = sel.value;
   sel.replaceChildren();
   for (const p of pods) sel.append(new Option(p.nom, p.cle));
-  // Le POD retenu survit à un réaffichage : ajouter un livrable ne doit pas ramener la
+  // Le POD retenu survit à un réaffichage : générer un livrable ne doit pas ramener la
   // liste sur son premier, alors qu'on en ajoute souvent deux de suite chez le même.
   if (pods.some((p) => p.cle === choisi)) sel.value = choisi;
   sel.disabled = pods.length === 0;
-  $('btAjouterLivrable').disabled = pods.length === 0;
-  afficherFormatsDuPod();
+  $('btLivrableGenerer').disabled = pods.length === 0;
+  afficherAxesDuPod();
 }
 
-/** Les formats du POD choisi. Vidée et refaite : un format d'un autre POD ne veut rien dire. */
-function afficherFormatsDuPod() {
+/**
+ * Les quatre axes qui dépendent du POD choisi, et les relevés qui dépendent du papier.
+ *
+ * Chaque liste garde sa valeur si le POD neuf la porte encore, et la perd sinon : changer
+ * de POD emporte de lui-même un format que le nouveau ne connaît pas. C'est ce qui laisse
+ * intact le geste pour lequel cet écran existe — déclarer deux fois le même couple
+ * imprimeur × format, puis changer le papier sur l'un des deux.
+ *
+ * La reliure non outillée reste **visible et grisée** : le Rust la refuse déjà en citant
+ * sa raison (`catalogue::resout`), et l'écran ne fait que rendre ce refus lisible avant le
+ * clic. Le grisé ne se glose pas — la réserve est au README, « Limites connues » : c'est
+ * une limite de l'application, pas un fait du livrable.
+ */
+function afficherAxesDuPod() {
   const p = pods.find((x) => x.cle === $('inAjoutPod').value);
-  const sel = $('inAjoutFormat');
-  const choisi = sel.value;
-  sel.replaceChildren();
-  for (const f of p?.formats ?? []) sel.append(new Option(f.nom, f.cle));
-  // Le format retenu survit, comme le POD. Comparer deux papiers d'un même livre —
-  // le geste pour lequel cet écran existe — c'est déclarer deux fois le même couple
-  // imprimeur × format, puis changer le papier sur l'une des deux lignes. Reperdre le
-  // format entre les deux ajouts ferait payer deux clics à ce geste-là. Changer de POD
-  // l'emporte de lui-même : un format que le nouveau ne porte pas ne se retrouve pas.
-  if (p?.formats.some((f) => f.cle === choisi)) sel.value = choisi;
-  sel.disabled = !p || p.formats.length < 2;
+  const garde = (sel, valeurs) => {
+    const choisi = sel.value;
+    sel.replaceChildren();
+    for (const [cle, nom, grise] of valeurs) {
+      const o = new Option(nom, cle);
+      o.disabled = grise;
+      sel.append(o);
+    }
+    // La valeur retenue si le POD la porte encore ; sinon la première **composable**, et
+    // non la première tout court. Un select se pose d'office sur sa première option, et
+    // celle de KDP est une reliure grisée : le formulaire proposerait alors, dès son
+    // ouverture, exactement ce que le Rust refuse en citant sa raison.
+    const composable = valeurs.find(([, , grise]) => !grise);
+    if (valeurs.some(([c]) => c === choisi)) sel.value = choisi;
+    else if (composable) sel.value = composable[0];
+    // Éteint seulement quand il n'y a qu'une valeur, toutes confondues : un select éteint
+    // ne s'ouvre pas, et l'éteindre dès qu'il n'y a qu'une valeur composable cacherait
+    // justement le grisé qu'on vient de poser.
+    sel.disabled = valeurs.length < 2;
+  };
+  garde($('inAjoutFormat'), (p?.formats ?? []).map((f) => [f.cle, f.nom, false]));
+  garde($('inAjoutReliure'),
+    (p?.reliures ?? []).map((r) => [r.cle, r.nom, r.non_outille !== null]));
+  garde($('inAjoutPapier'), (p?.papiers ?? []).map((pa) => [pa.cle, pa.libelle, false]));
+  afficherFinition(p);
+  afficherRelevesDuFormulaire(p);
+}
+
+/**
+ * Le pelliculage, s'il y en a.
+ *
+ * Absent du DOM chez un POD qui n'en déclare aucun : un contrôle vide se lit comme un
+ * choix qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Cinq des six POD
+ * fournis sont dans ce cas.
+ */
+function afficherFinition(p) {
+  const box = $('ajoutFinition');
+  const choisi = $('inAjoutFinition')?.value;
+  box.replaceChildren();
+  if (!p?.finitions.length) return;
+  const sel = h('select');
+  sel.id = 'inAjoutFinition';
+  sel.setAttribute('aria-label', 'Pelliculage');
+  // Le vide en tête : aucune finition est le cas courant, et il doit rester choisissable
+  // après en avoir pris une.
+  sel.append(new Option('—', ''));
+  for (const fi of p.finitions) sel.append(new Option(fi.nom, fi.cle));
+  if (p.finitions.some((fi) => fi.cle === choisi)) sel.value = choisi;
+  box.append(sel);
+}
+
+/**
+ * Les relevés que l'imprimeur exige, sous les cinq listes.
+ *
+ * Le dos se réclame d'après **le papier retenu**, jamais d'après le POD : un POD peut
+ * publier une formule pour l'un de ses papiers et pas pour l'autre. Le fond perdu, lui,
+ * suit le gabarit — c'est la table plate qui seule sait le dire.
+ *
+ * Aucun des six POD fournis n'en exige : ce bloc reste vide sur un poste ordinaire, et ne
+ * paraît que pour un catalogue déposé à la main.
+ */
+function afficherRelevesDuFormulaire(p) {
+  const box = $('ajoutReleves');
+  box.replaceChildren();
+  const papier = p?.papiers.find((pa) => pa.cle === $('inAjoutPapier').value);
+  const gabarit = providers.find((x) => x.cle === `${$('inAjoutPod').value}`
+    + `-${$('inAjoutFormat').value}-${$('inAjoutReliure').value}`);
+  if (papier && !papier.dos_publie) {
+    box.append(champReleve('inAjoutDos', 'Dos relevé (mm)', null));
+  }
+  if (gabarit && gabarit.fond_perdu === null) {
+    box.append(champReleve('inAjoutFp', 'FP (mm)', null));
+  }
+}
+
+/**
+ * Le livrable que le formulaire décrit, dans la forme exacte que les verbes attendent.
+ *
+ * Un champ vide est une absence de relevé, pas un zéro : composer sur un dos nul
+ * produirait une planche fausse au lieu d'un refus. Un contrôle absent — le pelliculage
+ * chez un POD qui n'en déclare aucun — vaut `null`, jamais une chaîne vide.
+ */
+function lireFormulaire() {
+  const lu = (id) => {
+    const v = $(id)?.value.trim();
+    return v ? Number(v) : null;
+  };
+  return {
+    pod: $('inAjoutPod').value,
+    format: $('inAjoutFormat').value,
+    reliure: $('inAjoutReliure').value,
+    papier: $('inAjoutPapier').value,
+    // La chaîne vide du choix « — » est une absence, pas une finition nommée.
+    finition: $('inAjoutFinition')?.value || null,
+    dos_mm: lu('inAjoutDos'),
+    fond_perdu_mm: lu('inAjoutFp'),
+  };
+}
+
+/**
+ * Générer : pose le livrable et compose, d'un seul geste.
+ *
+ * L'attente garde le dispositif de `packager` — bouton éteint et ligne d'état — parce que
+ * le temps de composition ne disparaît pas, il se répartit sur chaque ajout (spec § 8).
+ */
+async function genererLivrable() {
+  const bt = $('btLivrableGenerer');
+  bt.disabled = true;
+  $('etatLivraison').className = 'etat';
+  $('etatLivraison').textContent = 'composition du package…';
+  try {
+    const r = await invoke('livrable_generer', { livrable: lireFormulaire() });
+    afficherProjet(r.projet);
+    $('etatLivraison').textContent = '';
+  } catch (e) {
+    $('etatLivraison').textContent = String(e);
+    $('etatLivraison').className = 'etat erreur';
+  } finally {
+    bt.disabled = false;
+  }
 }
 
 /**

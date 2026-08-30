@@ -878,8 +878,8 @@ function oublierLaComposition() {
   // un message rouge appartient au texte qui l'a provoqué autant que le chiffre qu'il
   // commente. Effacer le chemin de l'épreuve en laissant l'erreur qui disait pourquoi
   // elle avait échoué donnerait à lire l'échec de l'ancien texte sous le nouveau.
-  for (const id of ['etatEpreuve', 'etatPackages', 'etatEbooks', 'etatEnvois',
-    'etatMaquettes']) {
+  for (const id of ['etatEpreuve', 'etatLivraison', 'etatPackages', 'etatEbooks',
+    'etatEnvois', 'etatMaquettes']) {
     $(id).textContent = '';
     $(id).className = 'etat';
   }
@@ -1459,25 +1459,17 @@ $('inLivrable').addEventListener('change', () => tente(async () => {
   afficherProjet(await invoke('livrable_viser', { cle: $('inLivrable').value }));
   oublierPages();
 }));
-// La cascade parle en POD puis en format ; la reliure et le papier d'office viennent du
-// catalogue, et se règlent ensuite sur la ligne. C'est le Rust qui refuse le vrai
-// doublon.
-$('inAjoutPod').addEventListener('change', afficherFormatsDuPod);
-$('btAjouterLivrable').addEventListener('click', () => tente(async () => {
-  const p = pods.find((x) => x.cle === $('inAjoutPod').value);
-  // La première reliure **composable** : une reliure grisée porte une raison de ne pas
-  // l'être, et le Rust la refuserait en la citant. Proposer d'office ce qu'on sait
-  // refuser serait un piège tendu au premier clic.
-  const reliure = p.reliures.find((r) => r.non_outille === null);
-  afficherProjet(await invoke('livrable_ajouter', {
-    fabrication: {
-      pod: p.cle,
-      format: $('inAjoutFormat').value,
-      reliure: reliure.cle,
-      papier: p.papiers[0].cle,
-    },
-  }));
-}));
+// Le formulaire parle des cinq axes d'un coup. Le POD commande les quatre autres listes ;
+// le papier commande les relevés, parce qu'un POD peut publier une formule de dos pour
+// l'un de ses papiers et pas pour l'autre. C'est le Rust qui refuse le vrai doublon.
+$('inAjoutPod').addEventListener('change', afficherAxesDuPod);
+$('inAjoutFormat').addEventListener('change', () => afficherRelevesDuFormulaire(
+  pods.find((x) => x.cle === $('inAjoutPod').value)));
+$('inAjoutReliure').addEventListener('change', () => afficherRelevesDuFormulaire(
+  pods.find((x) => x.cle === $('inAjoutPod').value)));
+$('inAjoutPapier').addEventListener('change', () => afficherRelevesDuFormulaire(
+  pods.find((x) => x.cle === $('inAjoutPod').value)));
+$('btLivrableGenerer').addEventListener('click', genererLivrable);
 $('btEnvoyer').addEventListener('click', envoyer);
 // Un envoi neuf n'a pas encore de mot : c'est le nom qui l'ouvre, et le mot se saisit
 // dans la ligne. Un dédicataire vide n'ajoute rien plutôt que d'ajouter un anonyme.

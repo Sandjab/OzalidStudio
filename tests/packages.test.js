@@ -319,7 +319,17 @@ async function ouvre(
       const f = args.livrable;
       const cle = `${f.pod}-${f.format}-${f.reliure}-${f.papier}`;
       const p = providers.find((x) => x.cle === `${f.pod}-${f.format}-${f.reliure}`);
-      const neuf = { ...chez(p ?? providers[0], f.papier), ...f, cle, etat: { etat: 'ajour' } };
+      // Comme pour l'ajout d'avant : le faux ne sait rendre que ce que sa table plate
+      // porte, et l'arbre est plus riche. Un couple que le formulaire offre sans ligne
+      // plate lèverait plus loin, sur le symptôme même d'un vrai refus du Rust.
+      if (!p) throw new Error(`fixture : aucune ligne plate pour ${f.pod}-${f.format}-${f.reliure}`);
+      // La règle du Rust : le refus du doublon porte sur les quatre axes, et sur eux
+      // seuls. Remplacer, lui, ne se refuse pas au titre du doublon qu'il est lui-même.
+      if (cmd === 'livrable_generer'
+        && projet.livraison.livrables.some((d) => d.cle === cle)) {
+        throw new Error(`${p.libelle} en ${f.papier} est déjà un livrable de ce livre.`);
+      }
+      const neuf = { ...chez(p, f.papier), ...f, cle, etat: { etat: 'ajour' } };
       maj({
         livrables: cmd === 'livrable_generer'
           ? [...projet.livraison.livrables, neuf]
@@ -390,10 +400,13 @@ const dernier = (appels, cmd) => appels.filter(([c]) => c === cmd).pop();
  * échouer les tests d'écran loin de leur cause.
  */
 test('le faux backend sert les quatre verbes et l\'état de chaque livrable', async () => {
-  const { invoke, projet } = await ouvre([LULU]);
+  const { invoke, projet } = await ouvre([LULU, KDP]);
   assert.strictEqual(projet().livraison.livrables[0].etat.etat, 'jamais');
 
-  const r = await invoke('livrable_generer', { livrable: chez(LULU, 'standard') });
+  // Chez KDP, et non chez Lulu : le livrable de départ est un Lulu, et le regénérer se
+  // heurterait au refus du doublon — la règle marche, mais ce n'est pas elle qu'on éprouve
+  // ici.
+  const r = await invoke('livrable_generer', { livrable: chez(KDP, 'creme') });
   assert.ok(r.projet, 'générer rend la vue du projet');
   assert.ok(Array.isArray(r.packages), 'et les packages composés');
   assert.strictEqual(
@@ -404,6 +417,129 @@ test('le faux backend sert les quatre verbes et l\'état de chaque livrable', as
   const s = await invoke('livrable_supprimer', { cle: 'lulu-108x175-broche-standard' });
   assert.deepStrictEqual(s.nettoyage.etrangers, [], 'la suppression rend son nettoyage');
   assert.ok(await invoke('livrable_vignettes'), 'les vignettes répondent, fût-ce à vide');
+});
+
+/* ---------- le formulaire d'un livrable ---------- */
+
+/** Un POD à deux papiers, l'un à formule et l'autre à relever : le seul couple qui rend
+ * le test du relevé capable d'échouer. Déclaré ici comme le test de la ligne le fait déjà
+ * pour lui-même — hisser la fixture toucherait un test qui n'a rien demandé. */
+const MIXTE = {
+  cle: 'mixte', nom: 'Mixte',
+  formats: [{ cle: 'a5', nom: 'A5' }],
+  reliures: [{ cle: 'broche', nom: 'Broché', non_outille: null }],
+  finitions: [],
+  papiers: [
+    { cle: 'formule', libelle: 'Papier à formule', teinte: '#ffffff', dos_publie: true },
+    { cle: 'gabarit', libelle: 'Papier à relever', teinte: '#ffffff', dos_publie: false },
+  ],
+};
+const MIXTE_PLAT = {
+  cle: 'mixte-a5-broche', pod: 'mixte', format: 'a5', reliure: 'broche',
+  libelle: 'Mixte — A5', largeur: 148, hauteur: 210, fond_perdu: 3,
+};
+
+/**
+ * Les cinq axes du § 5, et l'ordre dans lequel ils se lisent : l'imprimeur commande tout
+ * le reste — un format, une reliure ou un papier ne veulent rien dire sans lui, et les
+ * mêmes 13,5 × 21,5 n'ont pas les mêmes marges chez deux POD.
+ */
+test('le formulaire offre les cinq axes du POD choisi', async () => {
+  const { els } = await ouvre([LULU, KDP, KDP_5X8]);
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  assert.deepStrictEqual(
+    els.get('inAjoutFormat').textes('option'), ['6 × 9 po', '5 × 8 po']
+  );
+  assert.deepStrictEqual(
+    els.get('inAjoutReliure').textes('option'),
+    ['Couverture rigide', 'Broché — dos carré collé']
+  );
+  assert.deepStrictEqual(
+    els.get('inAjoutPapier').textes('option'), ['Crème', 'Blanc']
+  );
+});
+
+/**
+ * La reliure non outillée reste **visible et grisée** : le Rust la refuse déjà en citant sa
+ * raison, et l'écran ne fait que rendre ce refus lisible avant le clic. La masquer ferait
+ * croire que l'imprimeur ne la propose pas.
+ */
+test('le formulaire grise la reliure que l\'application n\'outille pas', async () => {
+  const { els } = await ouvre([KDP]);
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  // Dans l'ordre du fichier, non outillée comprise : `PODS` déclare la rigide **avant**
+  // la brochée chez KDP, et réordonner à l'affichage inventerait une règle que rien ne
+  // demande.
+  const [rigide, broche] = els.get('inAjoutReliure').children;
+  assert.strictEqual(rigide.disabled, true, 'le casewrap n\'est pas composable');
+  assert.strictEqual(broche.disabled, false);
+});
+
+/**
+ * Le pelliculage ne paraît que là où il y en a : un contrôle vide se lit comme un choix
+ * qu'on n'a pas su faire, alors qu'il n'y en avait aucun à faire. Cinq POD fournis sur six
+ * sont dans ce cas.
+ */
+test('le pelliculage ne paraît que chez un POD qui en déclare', async () => {
+  const { els } = await ouvre([LULU, KDP]);
+  els.get('inAjoutPod').value = 'lulu';
+  await els.get('inAjoutPod').declenche('change');
+  assert.ok(!els.get('inAjoutFinition'), 'Lulu n\'en déclare aucun');
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  assert.ok(els.get('inAjoutFinition'), 'KDP en déclare un');
+});
+
+/**
+ * Le relevé de dos suit **le papier retenu**, jamais le POD : un POD peut publier une
+ * formule pour l'un de ses papiers et pas pour l'autre. C'est la règle que la ligne tenait
+ * avant le lot 3, et que le formulaire reprend telle quelle.
+ */
+test('le relevé de dos du formulaire suit le papier choisi, pas l\'imprimeur', async () => {
+  const { els } = await ouvre([MIXTE_PLAT], {}, {
+    pods: [MIXTE], livrables: [chez(MIXTE_PLAT, 'formule')],
+  });
+  assert.ok(!els.get('inAjoutDos'), 'le papier à formule ne réclame pas de relevé');
+  els.get('inAjoutPapier').value = 'gabarit';
+  await els.get('inAjoutPapier').declenche('change');
+  assert.ok(els.get('inAjoutDos'), 'le papier à relever réclame son dos');
+});
+
+/**
+ * Générer envoie les quatre axes, la finition et les relevés — la forme exacte que
+ * `livrable_generer` attend. Un champ de relevé vide est une **absence**, jamais un zéro :
+ * composer sur un dos nul produirait une planche fausse au lieu d'un refus.
+ */
+test('générer envoie le livrable entier, et un relevé vide reste une absence', async () => {
+  const { els, appels } = await ouvre([COOLLIBRI]);
+  els.get('inAjoutPod').value = 'coollibri';
+  await els.get('inAjoutPod').declenche('change');
+  await els.get('btLivrableGenerer').declenche('click');
+  // Étalé : le livrable vient du contexte du front, et `deepStrictEqual` compare aussi
+  // les prototypes — c'est le piège que les tests de l'ajout notaient déjà.
+  const [, args] = dernier(appels, 'livrable_generer');
+  assert.deepStrictEqual({ ...args.livrable }, {
+    pod: 'coollibri', format: '148x210', reliure: 'broche', papier: 'mesure',
+    finition: null, dos_mm: null, fond_perdu_mm: null,
+  });
+});
+
+/**
+ * Le POD et le format retenus survivent à un ajout : on en ajoute souvent deux de suite
+ * chez le même imprimeur, et comparer deux papiers d'un même livre est le geste pour
+ * lequel cet écran existe. Reperdre le choix entre les deux ferait payer deux clics à
+ * ce geste-là.
+ */
+test('le formulaire garde son imprimeur et son format d\'un ajout au suivant', async () => {
+  const { els } = await ouvre([LULU, KDP, KDP_5X8]);
+  els.get('inAjoutPod').value = 'kdp';
+  await els.get('inAjoutPod').declenche('change');
+  els.get('inAjoutFormat').value = '5x8';
+  await els.get('btLivrableGenerer').declenche('click');
+  assert.strictEqual(els.get('inAjoutPod').value, 'kdp');
+  assert.strictEqual(els.get('inAjoutFormat').value, '5x8');
 });
 
 /* ---------- la liste des livrables ---------- */
@@ -452,17 +588,18 @@ test('la liste d\'ajout garde les gabarits déjà déclarés', async () => {
 
   els.get('inAjoutPod').value = 'coollibri';
   await els.get('inAjoutPod').declenche('change');
-  await els.get('btAjouterLivrable').declenche('click');
+  await els.get('btLivrableGenerer').declenche('click');
   assert.ok(els.get('liv-papier-coollibri-148x210-broche-mesure'), 'ajout sans effet à l\'écran');
-  // La fabrication entière part au Rust, pas une clé à découper : les trois axes du
-  // gabarit viennent de l'arbre du catalogue, le papier est celui d'office du POD.
-  assert.deepStrictEqual({ ...dernier(appels, 'livrable_ajouter')[1].fabrication }, {
+  // Le livrable entier part au Rust, pas une clé à découper : les quatre axes viennent
+  // des quatre listes, et le formulaire les porte tous depuis le lot 3.
+  const { dos_mm, fond_perdu_mm, finition, ...axes } = { ...dernier(appels, 'livrable_generer')[1].livrable };
+  assert.deepStrictEqual(axes, {
     pod: 'coollibri', format: '148x210', reliure: 'broche', papier: 'mesure',
   });
   assert.strictEqual(
-    els.get('btAjouterLivrable').disabled,
+    els.get('btLivrableGenerer').disabled,
     false,
-    'ajouter s\'est éteint : la table n\'est jamais épuisée'
+    'générer s\'est éteint : la table n\'est jamais épuisée'
   );
 });
 
@@ -476,9 +613,9 @@ test('le même livrable deux fois est refusé, et le refus se lit', async () => 
 
   els.get('inAjoutPod').value = 'lulu';
   await els.get('inAjoutPod').declenche('change');
-  await els.get('btAjouterLivrable').declenche('click');
+  await els.get('btLivrableGenerer').declenche('click');
 
-  assert.match(els.get('alerte').textContent, /déjà un livrable/);
+  assert.match(els.get('etatLivraison').textContent, /déjà un livrable/);
   assert.strictEqual(els.get('livrables').children.length, 1,
     'le doublon s\'est ajouté malgré le refus');
 });
@@ -504,20 +641,21 @@ test('la cascade offre les formats du POD choisi, et eux seuls', async () => {
   );
 });
 
-test('l\'ajout envoie les quatre axes, la reliure composable et le premier papier', async () => {
+test('générer prend la reliure composable d\'office, et le premier papier', async () => {
   const { els, appels } = await ouvre([LULU, KDP, KDP_5X8, COOLLIBRI], {}, { pods: PODS });
 
   els.get('inAjoutPod').value = 'kdp';
   await els.get('inAjoutPod').declenche('change');
   els.get('inAjoutFormat').value = '5x8';
-  await els.get('btAjouterLivrable').declenche('click');
+  await els.get('btLivrableGenerer').declenche('click');
 
-  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_ajouter');
-  // Étalé : la fabrication vient du contexte du front, et `deepStrictEqual` compare
-  // aussi les prototypes — c'est ce que fait déjà l'autre test de l'ajout, plus haut.
-  assert.deepStrictEqual({ ...args.fabrication }, {
-    // La reliure d'office est la première **composable** : la rigide de KDP porte une
-    // raison de ne pas l'être, et le Rust la refuserait.
+  const [, args] = appels.findLast(([cmd]) => cmd === 'livrable_generer');
+  const { dos_mm, fond_perdu_mm, finition, ...axes } = { ...args.livrable };
+  assert.deepStrictEqual(axes, {
+    // **Le test qui protège le formulaire de lui-même.** Un `select` se pose d'office sur
+    // sa première option, et la première de KDP est la couverture rigide, que
+    // l'application n'outille pas : sans le choix explicite de la première composable, le
+    // formulaire proposerait dès son ouverture ce que le Rust refuse en citant sa raison.
     pod: 'kdp', format: '5x8', reliure: 'broche', papier: 'creme',
   });
   // L'ajout doit **aboutir**, pas seulement partir. Sans cette ligne, le test lisait le
@@ -525,7 +663,7 @@ test('l\'ajout envoie les quatre axes, la reliure composable et le premier papie
   // le Rust refuse, l'exception étant avalée par `tente()`.
   assert.ok(
     els.get('liv-papier-kdp-5x8-broche-creme'),
-    'le livrable ajouté ne paraît pas à l\'écran'
+    'le livrable généré ne paraît pas à l\'écran'
   );
   // Le format retenu survit à l'ajout, comme le POD : comparer deux papiers d'un même
   // livre, ce que cet écran existe pour permettre, c'est ajouter deux fois le même
