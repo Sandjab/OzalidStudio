@@ -282,8 +282,28 @@ Trois mutations, une à la fois, à annuler après chaque lecture :
 | Mutation | Test qui doit tomber |
 |---|---|
 | remplacer `if !marqueur.is_file()` par `if false` | `sans_marqueur_la_racine_reste_celle_du_systeme` |
-| remplacer le `format!` par `dossier.join(format!("x.{MARQUEUR}"))` | `un_marqueur_qui_ne_porte_pas_le_nom_de_l_executable_ne_compte_pas` |
+| accepter **n'importe quel** `*.portable` du dossier (code ci-dessous) | `un_marqueur_qui_ne_porte_pas_le_nom_de_l_executable_ne_compte_pas` |
 | dans la branche `PortableLectureSeule`, rendre `racine: None` | `un_dossier_de_donnees_impossible_laisse_en_lecture_seule` |
+
+La deuxième mutation, en entier — il faut viser la propriété « le marqueur porte le nom
+de l'exécutable », et non « il existe un marqueur ». Remplacer les quatre lignes du
+marqueur par :
+
+```rust
+    let marqueur = std::fs::read_dir(dossier).ok().and_then(|mut entrees| {
+        entrees.find_map(|e| {
+            let c = e.ok()?.path();
+            (c.extension()?.to_str()? == MARQUEUR).then_some(c)
+        })
+    });
+    if marqueur.is_none() {
+        return installe;
+    }
+```
+
+Une mutation qui pose un nom fixe (`x.portable`) ne dit rien de cette propriété : elle
+casse les tests qui posent un marqueur valide, et laisse vert celui dont le marqueur
+n'était de toute façon pas reconnu.
 
 Lancer `cargo test --lib emplacement` après chaque mutation, **lire le rouge**, puis
 rétablir. Une mutation qui laisse tout vert est un test à réécrire, pas une mutation à
