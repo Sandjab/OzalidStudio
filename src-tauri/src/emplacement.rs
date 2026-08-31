@@ -99,6 +99,38 @@ fn inscriptible(racine: &Path) -> bool {
     true
 }
 
+/// Le fichier de rapport demandé par `--emplacement <fichier>`, s'il l'est.
+///
+/// Reçoit les arguments plutôt que de lire `std::env::args` : sans quoi cette fonction
+/// ne se testerait qu'en modifiant l'environnement du processus de test.
+pub fn sortie_demandee(args: impl IntoIterator<Item = String>) -> Option<PathBuf> {
+    let mut args = args.into_iter();
+    while let Some(a) = args.next() {
+        if a == "--emplacement" {
+            return args.next().map(PathBuf::from);
+        }
+    }
+    None
+}
+
+/// Ce que `--emplacement` écrit : le mode, puis la racine.
+///
+/// Dans un fichier et non sur la sortie standard — `main.rs` pose
+/// `windows_subsystem = "windows"` en release, l'exécutable n'a aucune console où
+/// écrire. C'est aussi la façon dont `examples/temoin.rs` prend sa sortie.
+pub fn rapport(e: &Emplacement) -> String {
+    let mode = match e.mode {
+        Mode::Installe => "installe",
+        Mode::Portable => "portable",
+        Mode::PortableLectureSeule => "portable-lecture-seule",
+    };
+    let racine = match &e.racine {
+        Some(r) => r.display().to_string(),
+        None => "répertoire de configuration du système".to_owned(),
+    };
+    format!("mode = {mode}\nracine = {racine}\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +202,52 @@ mod tests {
             Some(d.path().join("donnees")),
             "la racine reste servie : lire ce qui est déjà là doit rester possible"
         );
+    }
+
+    /// L'argument est reconnu, et le chemin qui le suit est celui du rapport.
+    #[test]
+    fn le_drapeau_donne_le_fichier_de_sortie() {
+        let args = ["--emplacement", "rapport.txt"].map(String::from);
+        assert_eq!(sortie_demandee(args), Some(PathBuf::from("rapport.txt")));
+    }
+
+    /// Un lancement ordinaire — et un lancement où Windows ajoute ses propres
+    /// arguments — n'en demande aucun. Le drapeau ne fait pas de cet exécutable une
+    /// commande : ce qu'il ne reconnaît pas, il l'ignore.
+    #[test]
+    fn sans_le_drapeau_aucun_rapport_n_est_demande() {
+        assert_eq!(sortie_demandee(Vec::<String>::new()), None);
+        assert_eq!(
+            sortie_demandee(["/un/chemin.ozalid"].map(String::from)),
+            None
+        );
+        // Le drapeau sans son chemin ne rend rien plutôt que d'écrire n'importe où.
+        assert_eq!(sortie_demandee(["--emplacement"].map(String::from)), None);
+    }
+
+    /// Le format que la CI relit. Il nomme le mode, et la racine quand elle existe.
+    #[test]
+    fn le_rapport_nomme_le_mode_et_la_racine() {
+        let e = Emplacement {
+            racine: Some(PathBuf::from("/cle/Ozalid/donnees")),
+            mode: Mode::Portable,
+        };
+        let r = rapport(&e);
+        assert!(r.contains("mode = portable\n"), "rapport : {r}");
+        assert!(r.contains("/cle/Ozalid/donnees"), "rapport : {r}");
+    }
+
+    /// En mode installé, le rapport ne ment pas sur un chemin qu'il n'a pas : le
+    /// drapeau s'exécute avant que Tauri n'ait résolu quoi que ce soit. Il dit le mode,
+    /// et renvoie au système.
+    #[test]
+    fn le_rapport_installe_ne_fabrique_pas_de_chemin() {
+        let e = Emplacement {
+            racine: None,
+            mode: Mode::Installe,
+        };
+        let r = rapport(&e);
+        assert!(r.contains("mode = installe\n"), "rapport : {r}");
+        assert!(r.contains("système"), "rapport : {r}");
     }
 }
