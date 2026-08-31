@@ -323,8 +323,9 @@ faire une fois, sur une vraie clé :
 - `README.md`, section **Windows** (`README.md:38`) : l'archive à côté de l'installeur,
   ce qu'elle apporte, le dossier `donnees/`, et les deux réserves — WebView2, marque de
   provenance.
-- `README.md:42` mentionne aujourd'hui `%LOCALAPPDATA%\Ozalid Studio` comme l'endroit des
-  réglages : la phrase devient conditionnelle au mode.
+- `README.md:42` donne `%LOCALAPPDATA%\Ozalid Studio` comme lieu d'**installation**, et
+  le README ne dit nulle part où vont les réglages. Il n'y a donc aucune phrase à
+  rendre conditionnelle — seulement un manque à combler, pour les deux modes à la fois.
 - Les notes de la release draft (`.github/workflows/windows.yml`, étape *Release draft*)
   gagnent le paragraphe WebView2.
 
