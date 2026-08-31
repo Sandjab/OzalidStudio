@@ -41,6 +41,37 @@ L'installeur `.exe` se télécharge depuis les **releases** du dépôt. L'instal
 demande aucun droit administrateur : elle se fait pour l'utilisateur courant, dans
 `%LOCALAPPDATA%\Ozalid Studio`.
 
+Une **archive portable** (`-portable.zip`) est publiée à côté de l'installeur. On la
+déplie où l'on veut — un disque, un dossier partagé, une clé USB —, elle n'installe rien
+et ne laisse rien sur la machine : elle garde ses réglages dans le dossier `donnees`
+qu'elle crée à côté de l'exécutable, et la même clé rouvre ses maquettes sur un autre
+poste. La version installée, elle, les range là où le système les met.
+
+Ce qui l'en distingue tient à un fichier vide, `ozalid-studio.portable`, livré dans
+l'archive : c'est sa seule présence qui fait descendre les réglages dans `donnees`. Le
+supprimer rend le comportement de la version installée.
+
+Deux réserves, dans cet ordre d'importance :
+
+- L'archive ne peut pas installer le composant **WebView2**, dont l'application a besoin
+  pour afficher son interface. Il est présent d'origine sur Windows 11 et sur un
+  Windows 10 à jour ; sur un poste plus ancien, l'application ne s'ouvrira pas, et il
+  faut passer par l'installeur, qui sait le télécharger.
+- Windows marque les fichiers extraits d'une archive téléchargée. Faire **Propriétés**
+  puis **Débloquer** sur le `.zip` *avant* de l'extraire, sans quoi le lancement peut
+  être bloqué sans explication.
+
+Et une limite connue : les projets récents sont mémorisés en chemins absolus. Sur une
+clé USB dont la lettre de lecteur change d'un poste à l'autre, la liste se vide — rien
+n'est perdu, elle se repeuple au premier projet rouvert.
+
+Pour savoir où une copie donnée range ses réglages, sans ouvrir l'application :
+
+    ozalid-studio.exe --emplacement rapport.txt
+
+écrit le mode et le chemin dans `rapport.txt`, puis s'arrête. Dans un fichier et non à
+l'écran : l'exécutable est compilé sans console.
+
 Au premier lancement, Windows affiche « Windows a protégé votre PC ». C'est SmartScreen,
 qui ne reconnaît pas encore l'éditeur. Choisissez **Informations complémentaires**, puis
 **Exécuter quand même**.
