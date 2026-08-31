@@ -225,6 +225,50 @@ mod tests {
         assert_eq!(sortie_demandee(["--emplacement"].map(String::from)), None);
     }
 
+    /// Gèle la sérialisation kebab-case de `Mode` : `src/app.js` compare à la chaîne
+    /// littérale `'portable-lecture-seule'`, et rien d'autre ne tient ce contrat. Si
+    /// `#[serde(rename_all = "kebab-case")]` disparaissait, `emplacement_mode` rendrait
+    /// `"PortableLectureSeule"`, le bandeau de lecture seule ne s'afficherait plus jamais
+    /// — et ni les tests Rust ni les tests front ne rougiraient. Même motif que
+    /// `commands.rs::l_etat_se_serialise_comme_le_front_le_lit`.
+    #[test]
+    fn le_mode_se_serialise_comme_le_front_le_lit() {
+        assert_eq!(
+            serde_json::to_string(&Mode::Installe).unwrap(),
+            r#""installe""#
+        );
+        assert_eq!(
+            serde_json::to_string(&Mode::Portable).unwrap(),
+            r#""portable""#
+        );
+        assert_eq!(
+            serde_json::to_string(&Mode::PortableLectureSeule).unwrap(),
+            r#""portable-lecture-seule""#
+        );
+    }
+
+    /// La forme lecture-seule de `rapport()`, que `le_rapport_nomme_le_mode_et_la_racine`
+    /// ne couvre pas. C'est justement celle que la regex ancrée de la CI
+    /// (`^mode = portable$`) existe pour rejeter : un test qui affirmerait seulement la
+    /// présence de `portable-lecture-seule` sans nier la ligne `mode = portable` seule ne
+    /// protégerait pas contre une archive en lecture seule acceptée à tort.
+    #[test]
+    fn le_rapport_lecture_seule_ne_se_confond_pas_avec_portable() {
+        let e = Emplacement {
+            racine: Some(PathBuf::from("/cle/Ozalid/donnees")),
+            mode: Mode::PortableLectureSeule,
+        };
+        let r = rapport(&e);
+        assert!(
+            r.contains("mode = portable-lecture-seule\n"),
+            "rapport : {r}"
+        );
+        assert!(
+            !r.lines().any(|l| l == "mode = portable"),
+            "la ligne « mode = portable » seule ne doit pas apparaître : {r}"
+        );
+    }
+
     /// Le format que la CI relit. Il nomme le mode, et la racine quand elle existe.
     #[test]
     fn le_rapport_nomme_le_mode_et_la_racine() {
