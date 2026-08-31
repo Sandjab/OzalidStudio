@@ -27,8 +27,13 @@ parole.
 - **Français** dans l'interface, les commentaires et les commits ; termes techniques
   anglais conservés tels quels.
 - **Avant chaque commit** : `cargo fmt --check` et `cargo clippy --all-targets -- -D
-  warnings` propres, `cargo test` depuis `src-tauri/`, `node --test "tests/*.test.js"`
+  warnings` propres, `cargo test` depuis `src-tauri/`, `node --test tests/*.test.js`
   depuis la racine.
+- **Le glob des tests front se donne sans guillemets.** `node --test "tests/*.test.js"`
+  — la forme du CLAUDE.md et de la CI — rend **0 test** en silence sur le Node de ce
+  poste (v26). Vérifié le 31/08/2026 : 331 tests sans guillemets, 0 avec. Un compte de
+  tests à zéro n'est jamais un succès : le lire comme tel est le seul moyen de commiter
+  un front cassé en croyant l'avoir testé.
 - **Tout test neuf doit avoir été vu échouer.** Les tâches ci-dessous nomment
   l'échec attendu à chaque fois ; ne pas passer à l'implémentation sans l'avoir lu.
 - **Le marqueur** : nom de l'exécutable privé de son extension, suffixé `.portable`.
@@ -617,7 +622,7 @@ avant, et l'étape Livraison liste les imprimeurs. Un panic au démarrage signal
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test --lib
-cd .. && node --test "tests/*.test.js"
+cd .. && node --test tests/*.test.js
 git add src-tauri/src/lib.rs src-tauri/src/commands.rs src-tauri/src/menu.rs
 git commit -m "Un seul endroit demande encore son répertoire au système"
 ```
@@ -684,7 +689,7 @@ return [];` :
 - [ ] **Étape 2 : voir l'échec**
 
 ```bash
-node --test "tests/contrats.test.js"
+node --test tests/contrats.test.js
 ```
 
 Attendu : les deux tests neufs échouent — `els.get('reglagesLectureSeule')` rend
@@ -759,7 +764,7 @@ et l'appeler dans `afficherAucunProjet`, juste après `await afficherRecents();`
 - [ ] **Étape 6 : voir passer**
 
 ```bash
-node --test "tests/*.test.js"
+node --test tests/*.test.js
 ```
 
 Attendu : tout vert, y compris « chaque commande appelée par le front est déclarée au
@@ -795,7 +800,7 @@ cd src-tauri && rm target/debug/ozalid-studio.portable target/debug/donnees
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings
-cd .. && node --test "tests/*.test.js"
+cd .. && node --test tests/*.test.js
 git add src-tauri/src/commands.rs src-tauri/src/lib.rs src/index.html src/app.js tests/contrats.test.js
 git commit -m "L'accueil prévient quand rien ne sera enregistré"
 ```
@@ -978,7 +983,10 @@ l'étape « Release draft » :
           Write-Host $lu
 
           $attendue = Join-Path $racine "donnees"
-          if ($lu -notmatch "mode = portable\b") {
+          # La ligne entière, ancrée. « portable\b » passerait sur
+          # « mode = portable-lecture-seule » — le tiret est une frontière de mot — et la
+          # CI validerait une archive qui n'enregistre rien.
+          if ($lu -notmatch "(?m)^mode = portable$") {
             Write-Error "l'archive ne se reconnaît pas portable : $lu"
             exit 1
           }
