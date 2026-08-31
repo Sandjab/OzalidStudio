@@ -222,11 +222,11 @@ jobs:
           # Les deux mêmes contrôles que sur l'installation silencieuse : le sidecar à
           # côté de l'exécutable, les polices dans leur sous-dossier.
           if (-not (Test-Path (Join-Path $racine "typst.exe"))) {
-            Write-Error "typst.exe absent de $racine"
+            Write-Error "typst.exe absent de $racine : commands.rs::binaire_typst() le cherche à côté de l'exécutable, l'archive ne l'y a pas posé."
             exit 1
           }
           if (-not (Get-ChildItem (Join-Path $racine "fonts") -Filter "*.ttf" -ErrorAction SilentlyContinue)) {
-            Write-Error "aucun .ttf dans $racine\fonts"
+            Write-Error "aucun .ttf dans $racine\fonts : commands.rs::typst() n'y trouvera pas de polices."
             exit 1
           }
 
