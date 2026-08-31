@@ -67,10 +67,16 @@ n'est perdu, elle se repeuple au premier projet rouvert.
 
 Pour savoir où une copie donnée range ses réglages, sans ouvrir l'application :
 
-    ozalid-studio.exe --emplacement rapport.txt
+```
+ozalid-studio.exe --emplacement rapport.txt
+```
 
-écrit le mode et le chemin dans `rapport.txt`, puis s'arrête. Dans un fichier et non à
-l'écran : l'exécutable est compilé sans console.
+écrit le mode dans `rapport.txt`, puis s'arrête — le chemin aussi, sauf en mode installé,
+où le drapeau s'exécute avant que Tauri n'ait rien résolu et où `rapport.txt` renvoie
+simplement au « répertoire de configuration du système ». Dans un fichier et non à
+l'écran : l'exécutable est compilé sans console. Sur une copie portable, le lancer crée
+`donnees` s'il n'existe pas encore, et y écrit puis efface un fichier témoin : le
+diagnostic touche réellement le dossier qu'il rapporte.
 
 Au premier lancement, Windows affiche « Windows a protégé votre PC ». C'est SmartScreen,
 qui ne reconnaît pas encore l'éditeur. Choisissez **Informations complémentaires**, puis
@@ -422,7 +428,8 @@ résultats. Tout le reste se teste sans fenêtre.
 | `epreuve` | Source Typst de l'épreuve de relecture |
 | `epub` / `ebook` | L'archive EPUB 3, et le couple PDF + EPUB à côté du projet |
 | `police` | Ce qu'un fichier de police déclare, et ce qu'il porte vraiment |
-| `preferences` | Projets récents, et ce qui appartient à la machine |
+| `preferences` | Projets récents, et ce qui n'appartient pas à un livre |
+| `emplacement` | Où écrire ce qui n'appartient pas à un livre : machine hôte, ou `donnees` de l'archive portable |
 | `menu` / `commands` | Le menu natif et la frontière avec l'interface |
 
 ### Le catalogue
