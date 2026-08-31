@@ -159,9 +159,9 @@ pub fn poser(app: &AppHandle) -> tauri::Result<()> {
 /// Les récents à porter au sous-menu. Même source que l'écran d'accueil, et même
 /// élagage : un projet effacé n'y figure pas.
 fn liste_recents(app: &AppHandle) -> Vec<String> {
-    app.path()
-        .app_config_dir()
-        .ok()
-        .map(|d| preferences::charger(&d).recents_existants())
+    app.state::<crate::emplacement::Emplacement>()
+        .racine
+        .as_deref()
+        .map(|d| preferences::charger(d).recents_existants())
         .unwrap_or_default()
 }

@@ -2605,8 +2605,14 @@ pub fn livrable_vignettes(atelier: State<Atelier>) -> Result<BTreeMap<String, St
 }
 
 /// Répertoire de configuration de l'application, s'il est atteignable.
+///
+/// Résolu une fois au démarrage par `emplacement::resoudre`, et relu ici : selon qu'un
+/// marqueur voisine l'exécutable, c'est celui du système ou le `donnees/` de l'archive
+/// portable. Ce fichier n'a pas à savoir lequel.
 fn config(app: &tauri::AppHandle) -> Option<PathBuf> {
-    app.path().app_config_dir().ok()
+    app.state::<crate::emplacement::Emplacement>()
+        .racine
+        .clone()
 }
 
 /// Mémorise un projet dans les récents.
