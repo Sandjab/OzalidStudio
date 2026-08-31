@@ -195,13 +195,80 @@ jobs:
 
           Write-Host "sidecar et polices trouvés à leur emplacement attendu"
 
+      - name: Construire l'archive portable
+        run: outils/portable.sh
+
+      # Une archive qui se déplie n'est pas une archive qui range ses réglages à côté
+      # d'elle. On interroge le binaire réellement livré, par son propre code, plutôt
+      # que de faire confiance à un test qui simulerait la même logique ailleurs.
+      #
+      # `--emplacement` écrit dans un fichier et non sur la sortie standard : l'exécutable
+      # est compilé en `windows_subsystem = "windows"`, il n'a aucune console rattachée
+      # et un `println!` ne serait lu par personne.
+      - name: Vérifier que l'archive est portable
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $zip = Get-ChildItem "src-tauri/target/portable" -Filter "*-portable.zip" |
+            Select-Object -First 1
+          if (-not $zip) { Write-Error "aucune archive portable produite"; exit 1 }
+
+          $depliage = Join-Path $env:RUNNER_TEMP "portable"
+          Expand-Archive -Path $zip.FullName -DestinationPath $depliage -Force
+          $racine = (Get-ChildItem $depliage -Directory | Select-Object -First 1).FullName
+          Write-Host "déplié dans $racine"
+          Get-ChildItem $racine -Recurse -Depth 1 | ForEach-Object { $_.FullName }
+
+          # Les deux mêmes contrôles que sur l'installation silencieuse : le sidecar à
+          # côté de l'exécutable, les polices dans leur sous-dossier.
+          if (-not (Test-Path (Join-Path $racine "typst.exe"))) {
+            Write-Error "typst.exe absent de $racine"
+            exit 1
+          }
+          if (-not (Get-ChildItem (Join-Path $racine "fonts") -Filter "*.ttf" -ErrorAction SilentlyContinue)) {
+            Write-Error "aucun .ttf dans $racine\fonts"
+            exit 1
+          }
+
+          $rapport = Join-Path $env:RUNNER_TEMP "emplacement.txt"
+          $p = Start-Process -FilePath (Join-Path $racine "ozalid-studio.exe") `
+            -ArgumentList "--emplacement", $rapport -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            Write-Error "le drapeau --emplacement a rendu $($p.ExitCode)"
+            exit 1
+          }
+          $lu = Get-Content $rapport -Raw
+          Write-Host $lu
+
+          $attendue = Join-Path $racine "donnees"
+          # La ligne entière, ancrée. « portable\b » passerait sur
+          # « mode = portable-lecture-seule » — le tiret est une frontière de mot — et la
+          # CI validerait une archive qui n'enregistre rien.
+          if ($lu -notmatch "(?m)^mode = portable$") {
+            Write-Error "l'archive ne se reconnaît pas portable : $lu"
+            exit 1
+          }
+          if ($lu -notmatch [regex]::Escape($attendue)) {
+            Write-Error "racine attendue « $attendue », rapport : $lu"
+            exit 1
+          }
+          Write-Host "l'archive range ses réglages dans $attendue"
+
       - name: Release draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           exe=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
           [ -n "$exe" ] || { echo "aucun installeur produit" >&2; exit 1; }
-          gh release create "$GITHUB_REF_NAME" "$exe" \
+          zip=$(find src-tauri/target/portable -name "*-portable.zip" | head -1)
+          [ -n "$zip" ] || { echo "aucune archive portable produite" >&2; exit 1; }
+          gh release create "$GITHUB_REF_NAME" "$exe" "$zip" \
             --draft \
             --title "Ozalid Studio $GITHUB_REF_NAME" \
-            --notes "L'installeur n'est pas signé : au premier lancement, Windows affiche « Windows a protégé votre PC ». Choisir « Informations complémentaires », puis « Exécuter quand même ». L'installation ne demande pas de droits administrateur."
+            --notes "Deux façons de l'installer.
+
+          **L'installeur \`.exe\`** — la voie normale. L'installation ne demande pas de droits administrateur.
+
+          **L'archive \`-portable.zip\`** — à déplier où l'on veut, y compris sur une clé USB. Elle n'installe rien et garde ses réglages dans le dossier « donnees » qu'elle crée à côté d'elle ; deux postes différents y retrouvent les mêmes maquettes. Deux réserves : elle ne peut pas installer le composant **WebView2** dont l'application a besoin — présent d'origine sur Windows 11 et sur un Windows 10 à jour, à défaut de quoi il faut passer par l'installeur — et Windows marque les fichiers extraits d'une archive téléchargée : faire « Propriétés » puis « Débloquer » sur le zip **avant** de l'extraire.
+
+          Rien n'est signé : au premier lancement, Windows affiche « Windows a protégé votre PC ». Choisir « Informations complémentaires », puis « Exécuter quand même »."
