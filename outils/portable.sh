@@ -45,15 +45,45 @@ cp "$POLICES"/* "$SORTIE/$NOM/fonts/"
 : > "$SORTIE/$NOM/ozalid-studio.portable"
 
 ARCHIVE="$SORTIE/ozalid-studio_${VERSION}_x64-portable.zip"
-# `tar` et non `zip` : `zip` n'est pas garanti dans le Git Bash des runners Windows,
-# où ce script tourne — la même raison qui fait passer `typst.sh` par `tar` pour
-# l'extraction. Le `-a` prend le format sur l'extension, et deflate.
-(cd "$SORTIE" && tar -a -cf "$ARCHIVE" "$NOM")
 
-# `-a` ne garantit le zip que si le `tar` du PATH est bsdtar : un GNU tar écrirait un
-# tar nommé `.zip`, qu'`Expand-Archive` refuserait — loin d'ici, côté CI. Une archive
-# zip commence par la signature « PK » : le vérifier ici rend l'ambiguïté bruyante
-# à la source plutôt que de la laisser remonter comme un échec de dépliage.
-[ "$(head -c2 "$ARCHIVE")" = "PK" ] || { echo "l'archive n'est pas un zip : le tar du PATH ne sait pas en écrire" >&2; exit 1; }
+# Écrire un zip demande un archiveur qui sache en écrire, et « tar » n'est pas le même
+# programme partout. Sur macOS c'est bsdtar, qui le sait. Dans le Git Bash des runners
+# Windows c'est GNU tar, qui ne le sait pas : il écrit un *tar* nommé `.zip`, et le
+# constat s'est fait en release (run 33409871203). Windows fournit pourtant bsdtar
+# depuis la 1803, sous System32 — mais le tar de Git Bash le masque dans le PATH. On va
+# donc le chercher là où il est, avec `Compress-Archive` en dernier recours : PowerShell
+# est présent partout où Git Bash tourne.
+#
+# `zip` n'est candidat nulle part : il n'est pas garanti dans ce Git Bash, la même raison
+# qui fait passer `typst.sh` par `tar` pour l'extraction.
+zippe() {
+  local candidat
+  for candidat in tar /c/Windows/System32/tar.exe; do
+    if "$candidat" --version 2>/dev/null | grep -qi bsdtar; then
+      (cd "$SORTIE" && "$candidat" -a -cf "$ARCHIVE" "$NOM") && return 0
+    fi
+  done
+  if command -v cygpath >/dev/null 2>&1 && command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -Command \
+      "Compress-Archive -Path '$(cygpath -w "$SORTIE/$NOM" 2>/dev/null)' -DestinationPath '$(cygpath -w "$ARCHIVE" 2>/dev/null)' -Force" \
+      && return 0
+  fi
+  return 1
+}
+
+if ! zippe; then
+  # Le diagnostic sur place : sans lui, un poste où aucun candidat ne convient rendrait
+  # le même message que le précédent échec sans dire lequel a été essayé.
+  echo "aucun archiveur capable d'écrire un zip sur ce poste." >&2
+  echo "  tar du PATH  : $(tar --version 2>&1 | head -1)" >&2
+  echo "  System32     : $(/c/Windows/System32/tar.exe --version 2>&1 | head -1)" >&2
+  echo "  powershell   : $(command -v powershell || echo absent)" >&2
+  exit 1
+fi
+
+# Une archive zip commence par la signature « PK ». Le vérifier ici garde l'ambiguïté
+# bruyante à la source, quel que soit le candidat retenu : c'est ce contrôle, et non le
+# dépliage côté CI, qui a nommé le GNU tar de Git Bash.
+[ "$(head -c2 "$ARCHIVE")" = "PK" ] || { echo "l'archive produite n'est pas un zip malgré $(tar --version 2>&1 | head -1)" >&2; exit 1; }
 
 echo "$ARCHIVE"
