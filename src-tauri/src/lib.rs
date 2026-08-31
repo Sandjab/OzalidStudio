@@ -118,6 +118,7 @@ pub fn run() {
             commands::providers_liste,
             commands::pods_liste,
             commands::catalogue_refus,
+            commands::emplacement_mode,
             commands::projet_importer,
             commands::projet_ouvrir,
             commands::projet_enregistrer_sous,

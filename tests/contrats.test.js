@@ -56,6 +56,7 @@ const invoke = async (cmd) => {
     papiers: [{ cle: 'standard', libelle: 'Papier standard', teinte: '#ffffff', dos_publie: true }],
   }];
   if (cmd === 'catalogue_refus') return [];
+  if (cmd === 'emplacement_mode') return 'installe';
   if (cmd === 'polices_liste') return ['Archivo'];
   if (cmd === 'polices_texte_liste') return ['Alegreya'];
   if (cmd === 'jetons_liste') return ['%TITRE%', '%AUTEUR%', '%GENRE%', '%EDITEUR%', '%COLLECTION%', '%MONOGRAMME%'];
@@ -704,6 +705,34 @@ test('chaque fichier refusé garde son chemin entier au survol', async () => {
     const nom = els.get('refusCatalogue').children[i].children[0].children[0].textContent;
     assert.ok(nom.endsWith(path.basename(chemin)), `nom absent ou rogné : ${nom}`);
     assert.ok(!nom.includes(path.dirname(chemin)), `répertoire dans le nom : ${nom}`);
+  }
+});
+
+/**
+ * Une archive portable dépliée sur un support qui refuse l'écriture doit le dire, et le
+ * dire à l'accueil. Sans ce mot, l'utilisateur travaille une heure et perd ses
+ * maquettes à la fermeture — sans jamais savoir qu'elles n'ont pas été écrites.
+ */
+test('le mode portable en lecture seule s\'annonce à l\'accueil', async () => {
+  const bloque = async (cmd, args) =>
+    cmd === 'emplacement_mode' ? 'portable-lecture-seule' : invoke(cmd, args);
+  const { els } = await charge({ invoke: bloque, open: async () => null });
+  const p = els.get('reglagesLectureSeule');
+  assert.equal(p.hidden, false);
+  // Le dossier est nommé : c'est la seule information qui permette d'agir.
+  assert.match(p.textContent, /donnees/);
+});
+
+/**
+ * Les deux autres modes ne disent rien. Une application qui fonctionne n'a pas à
+ * s'expliquer — et un bandeau permanent en mode portable serait relu par personne.
+ */
+test('les modes qui enregistrent restent muets', async () => {
+  for (const mode of ['installe', 'portable']) {
+    const dit = async (cmd, args) =>
+      cmd === 'emplacement_mode' ? mode : invoke(cmd, args);
+    const { els } = await charge({ invoke: dit, open: async () => null });
+    assert.equal(els.get('reglagesLectureSeule').hidden, true, `mode ${mode}`);
   }
 });
 
