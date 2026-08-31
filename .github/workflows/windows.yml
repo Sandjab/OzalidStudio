@@ -78,8 +78,11 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib
 
+      # Sans guillemets, délibérément : entre guillemets, le glob est laissé à Node, qui
+      # rend « 0 test » sans le dire dès la v26 — l'étape passerait au vert sur zéro test
+      # le jour où l'on relève `node-version` ci-dessus. Un échec muet, pas bruyant.
       - name: Tests du front
-        run: node --test "tests/*.test.js"
+        run: node --test tests/*.test.js
 
       # L'assertion centrale du volet : la pagination ne dépend pas de la plateforme.
       - name: Témoin de pagination

@@ -30,8 +30,8 @@ parole.
   warnings` propres, `cargo test` depuis `src-tauri/`, `node --test tests/*.test.js`
   depuis la racine.
 - **Le glob des tests front se donne sans guillemets.** `node --test "tests/*.test.js"`
-  — la forme du CLAUDE.md et de la CI — rend **0 test** en silence sur le Node de ce
-  poste (v26). Vérifié le 31/08/2026 : 331 tests sans guillemets, 0 avec. Un compte de
+  — la forme que portait la CI ; le CLAUDE.md, lui, a toujours eu la bonne — rend **0
+  test** en silence sur le Node de ce poste (v26). Vérifié le 31/08/2026 : 331 tests sans guillemets, 0 avec. Un compte de
   tests à zéro n'est jamais un succès : le lire comme tel est le seul moyen de commiter
   un front cassé en croyant l'avoir testé.
 - **Tout test neuf doit avoir été vu échouer.** Les tâches ci-dessous nomment
