@@ -3,6 +3,11 @@
 Date : 2026-08-23
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 L'identité d'un livre est aujourd'hui écrite à deux endroits qui s'ignorent. `Livre`
@@ -140,11 +145,13 @@ Un module `gabarit.rs`, une fonction :
 
 ```rust
 /// Remplace les jetons %CLE% par la valeur du champ clé correspondant.
-pub fn substituer(texte: &str, livre: &Livre) -> String
+pub fn substituer(texte: &str, ctx: &Contexte) -> String
 ```
 
-Six jetons : `%TITRE%`, `%AUTEUR%`, `%GENRE%`, `%EDITEUR%`, `%COLLECTION%`,
-`%MONOGRAMME%`.
+Six jetons pour ce chantier : `%TITRE%`, `%AUTEUR%`, `%GENRE%`, `%EDITEUR%`,
+`%COLLECTION%`, `%MONOGRAMME%`. La table en porte **onze** aujourd'hui — s'y sont
+ajoutés `%ISBN%` et `%DEPOT_LEGAL%` aux liminaires, puis `%IMPRIMEUR%`, `%FORMAT%`
+et `%PAPIER%` avec les marques d'exemplaire (`gabarit.rs:80`).
 
 **Aucun cycle n'est possible**, et rien n'est à écrire pour s'en garder : un jeton ne
 désigne qu'une clé, une clé n'est jamais substituée, donc aucune chaîne de références
@@ -171,11 +178,11 @@ coexistent aujourd'hui :
 
 ```rust
 impl Livre {
-    pub fn titre_page(&self) -> String
-    pub fn copyright(&self) -> String
-    pub fn dedicace(&self) -> Option<String>
-    pub fn prix(&self) -> String
-    pub fn mention(&self) -> String
+    pub fn titre_page(&self, marques: Marques) -> String
+    pub fn copyright(&self, marques: Marques) -> String
+    pub fn dedicace(&self, marques: Marques) -> Option<String>
+    pub fn prix(&self, marques: Marques) -> String
+    pub fn mention(&self, marques: Marques) -> String
 }
 ```
 

@@ -3,6 +3,12 @@
 Date : 2026-08-23
 Statut : validé (brainstorming du 23/08)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+
 ## Objectif
 
 Aujourd'hui l'envoi autographe est un mot posé au bas de la page de titre, à

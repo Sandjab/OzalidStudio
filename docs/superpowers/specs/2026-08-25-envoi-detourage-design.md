@@ -3,6 +3,12 @@
 Date : 2026-08-25
 Statut : validé (brainstorming du 25/08)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+
 ## Objectif
 
 Un envoi en « image écrite à la main » est presque toujours la photo d'un mot

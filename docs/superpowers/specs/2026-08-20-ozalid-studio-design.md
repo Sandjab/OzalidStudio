@@ -3,6 +3,12 @@
 Date : 2026-08-20
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+
 ## Objectif
 
 Faire tenir dans une seule application de bureau, macOS et Windows, la chaîne

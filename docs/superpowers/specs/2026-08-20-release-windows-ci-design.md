@@ -3,6 +3,19 @@
 Date : 2026-08-20
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+>
+> Lulu a depuis reçu ses tranches de gouttière sous 151 pages
+> (`src-tauri/pods/lulu.toml`) : l'obstacle qui écarte un livre court ci-dessous
+> n'existe plus, et seule la décision qu'il a motivée subsiste.
+
 ## Objectif
 
 Jalon 5, second volet. La spec Ozalid Studio annonce une application « macOS +
@@ -60,21 +73,21 @@ Deux contraintes découvertes en chiffrant, et qui commandent la taille du
 témoin :
 
 - `package::assembler` refuse un livre hors des bornes du prestataire
-  (`package.rs:77`), et une page tient environ 350 mots au corps du projet
+  (`package.rs:391`), et une page tient environ 350 mots au corps du projet
   (9,5 pt, interligne 1,42). Le minimum de 24 pages d'un prestataire impose donc
   **de l'ordre de 8 000 mots**, liminaires déduits.
-- **Lulu n'a aucune tranche de gouttière sous 151 pages** (`providers.rs:244` :
-  `&[(151, 400, 25.0)]`). Un livre court y échoue sur « tranche de gouttière
-  absente » avant même la borne des pages. Compléter la table pour satisfaire le
-  témoin serait inventer une valeur que le guide Lulu ne donne pas, et laisser
-  le test dicter la production : écarté.
+- **Lulu n'a aucune tranche de gouttière sous 151 pages** (alors `providers.rs`,
+  `&[(151, 400, 25.0)]` ; aujourd'hui `src-tauri/pods/lulu.toml`). Un livre court y
+  échoue sur « tranche de gouttière absente » avant même la borne des pages.
+  Compléter la table pour satisfaire le témoin serait inventer une valeur que le
+  guide Lulu ne donne pas, et laisser le test dicter la production : écarté.
 
 ### Ce qui est décidé
 
 `app/src-tauri/temoin/manuscrit.md` : **Candide** (Voltaire, 1759), texte du
 domaine public, ses trente chapitres, environ 35 000 mots — de l'ordre de cent
 pages au gabarit `bod`, dont la tranche de gouttière unique couvre 24 à 900
-pages (`providers.rs:262`).
+pages (alors `providers.rs`, aujourd'hui `src-tauri/pods/bod.toml`).
 
 Il n'est pas là pour se lire mais pour porter ce qui casse en traversant une
 plateforme, et il le porte sans qu'on ait à le fabriquer :

@@ -3,6 +3,15 @@
 Date : 2026-08-21
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 Le livre composé par Ozalid Studio porte quatre pages liminaires — faux-titre,
@@ -78,7 +87,7 @@ fonction cesserait de se lire d'un coup d'œil.
 `source()` cède ses pages liminaires à une fonction :
 
 ```rust
-fn liminaires(livre: &Livre) -> String
+fn liminaires(ctx: &Contexte, int: &Interieur, pieces: &[Piece]) -> String
 ```
 
 qui rend le faux-titre, la blanche, la page de titre, le copyright et — le cas

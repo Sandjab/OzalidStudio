@@ -3,6 +3,15 @@
 Date : 2026-08-20
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 Jalon 5, premier volet : le module `epreuve` de la spec Ozalid Studio, resté à
@@ -203,8 +212,8 @@ propre passage, avec le témoin rejoué et comparé. À consigner dans `NOTES.md
 ```rust
 pub fn source(
     livre: &Livre,
-    interieur: &Interieur,   // la police du projet
-    chapitres: &[Chapitre],
+    int: &Interieur,         // la police du projet
+    pieces: &[Piece],
     corps_pt: f64,
 ) -> String
 ```

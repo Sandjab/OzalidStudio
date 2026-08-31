@@ -3,6 +3,11 @@
 Date : 2026-08-23
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 Trois maquettes de couverture existent, écrites en dur dans `maquettes.rs` : Folio,
@@ -118,7 +123,12 @@ pub struct Maquette {
 
 pub fn toutes(config: Option<&Path>) -> Vec<Maquette>
 pub fn par_cle(config: Option<&Path>, cle: &str) -> Option<Maquette>
-pub fn ecrire(config: &Path, nom: &str, m: &Maquette) -> Result<(), String>
+pub fn ecrire(
+    config: &Path,
+    nom: &str,
+    couverture: &Couverture,
+    images: &BTreeMap<String, Vec<u8>>,
+) -> Result<(), String>
 pub fn renommer(config: &Path, cle: &str, nom: &str) -> Result<(), String>
 pub fn effacer(config: &Path, cle: &str) -> Result<(), String>
 ```

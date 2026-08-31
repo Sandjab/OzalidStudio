@@ -3,6 +3,15 @@
 Date : 2026-08-21
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 Ozalid Studio tient la chaîne entière, mais elle se présente comme une page
@@ -196,11 +205,11 @@ il vient du compte de pages, qui vient des marges et de la gouttière du gabarit
 réel. Un format générique devrait, pour en produire un, **inventer une formule** —
 ce que le projet s'interdit explicitement à deux endroits :
 
-> « Seules les tranches vérifiées dans le guide du prestataire figurent ici.
-> Hors tranche, on refuse plutôt qu'inventer. » — `providers.rs:63`
+> « Seules les tranches vérifiées dans le guide de l'imprimeur figurent ici. Hors
+> tranche, on refuse plutôt qu'inventer. » — `catalogue.rs:156`
 
 > « Une planche composée sur un dos inventé se voit au massicot, jamais
-> avant. » — `planche.rs:39`
+> avant. » — `planche.rs:42`
 
 Et le dos n'est pas qu'une largeur : l'auteur, le titre et l'éditeur s'y
 composent élément par élément, chacun avec sa taille, sa place et son rang. Les

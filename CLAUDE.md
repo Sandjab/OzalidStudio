@@ -47,7 +47,7 @@ anglais conservés tels quels (`fond perdu` reste `fond perdu`, mais `viewport`,
   conclure à une régression du témoin.
 - **Les icônes sont le cas le plus retors des trois**, parce qu'aucune date ne peut le
   sauver : `tauri-build` déclare ses `rerun-if-changed` sur `tauri.conf.json`, sur
-  `capabilities`, sur le sidecar et sur les 34 polices de `fonts/` — **jamais sur
+  `capabilities`, sur le sidecar et sur les 32 polices de `fonts/` — **jamais sur
   `icons/`**. Toucher une icône ne donne donc à cargo aucune raison de régénérer le
   contexte, et le binaire garde celle de sa dernière compilation aussi longtemps que rien
   d'autre ne bouge. Le symptôme trompe : l'installeur montre la bonne icône, puisqu'il est

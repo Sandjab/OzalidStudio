@@ -3,6 +3,15 @@
 Date : 2026-08-22
 Statut : validé (brainstorming)
 
+> **Depuis ce chantier.** Ce document décrit l'état du jour de sa validation.
+>
+> Le mot « prestataire » y est resté tel quel : il a été remplacé par « imprimeur »
+> au chantier du catalogue, et le code dit « POD » pour une entrée de la table. L'état
+> courant des imprimeurs se lit dans `src-tauri/pods/`, la mécanique dans `catalogue.rs`.
+>
+> Les signatures et les renvois qu'il cite ont été actualisés sur le code courant :
+> le raisonnement est celui du chantier, les références pointent le dépôt d'aujourd'hui.
+
 ## Objectif
 
 La chaîne sait produire des packages prestataires : un intérieur composé, une planche
@@ -139,7 +148,7 @@ pub fn source_ebook(
     livre: &Livre,
     int: &Interieur,
     pr: &Provider,
-    chapitres: &[Chapitre],
+    pieces: &[Piece],
     couverture: &str,
 ) -> String
 ```
