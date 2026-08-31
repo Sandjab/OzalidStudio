@@ -5,6 +5,7 @@ pub mod detourage;
 pub mod diffusion;
 pub mod ean;
 pub mod ebook;
+pub mod emplacement;
 pub mod empreinte;
 pub mod envoi;
 pub mod epreuve;
