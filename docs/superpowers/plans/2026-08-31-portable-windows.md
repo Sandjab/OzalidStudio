@@ -596,16 +596,17 @@ tranche.
 - [ ] **Étape 4 : la vérification qui tient tout le chantier**
 
 ```bash
-grep -rn "app_config_dir" src-tauri/src | wc -l
+grep -rn "app_config_dir" src-tauri/src | grep -v '^\S*:[0-9]*:///'
 ```
 
-Attendu : **exactement 1**, et cette occurrence est dans le `setup` de `lib.rs`.
+Attendu : **une seule ligne**, celle du `setup` de `lib.rs` :
+`src-tauri/src/lib.rs:` … `emplacement::resoudre(app.path().app_config_dir().ok())`.
 
-```bash
-grep -rn "app_config_dir" src-tauri/src
-```
-
-Attendu : `src-tauri/src/lib.rs:` … `emplacement::resoudre(app.path().app_config_dir().ok())`.
+Le filtre sur `///` n'est pas de la complaisance : `emplacement.rs` cite le nom de
+`app_config_dir` dans le doc-commentaire de `resoudre`, pour dire d'où vient l'argument
+qu'il reçoit. Ce qu'on compte ici, ce sont les **appels** — un quatrième appelant qui
+ouvrirait un chemin parallèle —, pas les mentions en prose. Un compte brut sur tout le
+mot rendrait 2 et ne dirait rien.
 
 C'est la propriété qui empêche un quatrième appelant d'ouvrir un chemin parallèle sans
 qu'on le voie. Si le compte est supérieur à 1, la tâche n'est pas finie.
@@ -749,13 +750,13 @@ et **dans** le même `<div class="bloc">` :
 ```html
       <!-- Version portable sur un support qui n'accepte pas l'écriture. À l'accueil et
            non à une étape : l'avertissement vaut pour tout ce qui suit, et c'est l'écran
-           où l'on arrive. Le texte est ici et non dans le JS — il ne varie pas, et
-           `app.js` n'a qu'à lever ou baisser le `hidden`. -->
-      <p id="reglagesLectureSeule" class="note alerte" hidden>Version portable en
-        lecture seule : le dossier « donnees », à côté de l'application, n'accepte pas
-        l'écriture. Rien ne sera enregistré — ni les projets récents, ni les maquettes,
-        ni les réglages de diffusion. Déplier l'archive sur un support inscriptible
-        pour les retrouver.</p>
+           où l'on arrive. Balise vide, texte posé par `app.js` — c'est la convention du
+           dépôt pour cette famille de messages : `repliPolices`, `echantillonAbsent` et
+           `livrablesElagues` sont tous trois des `<p class="note alerte" hidden></p>`
+           vides. `tests/dom_shim.js::depuisHtml` n'extrait d'ailleurs que la balise
+           ouvrante — tag, disabled, hidden, value —, jamais le texte interne : un texte
+           écrit ici serait invisible au test qui le cherche. -->
+      <p id="reglagesLectureSeule" class="note alerte" hidden></p>
 ```
 
 - [ ] **Étape 5 : le câblage dans `app.js`**
@@ -765,11 +766,18 @@ Ajouter la fonction à la suite de `afficherRecents` :
 ```js
 /**
  * Le seul mot que l'emplacement adresse à l'utilisateur, et il ne le dit que sous
- * contrainte : le texte vit dans `index.html`, ici on ne fait que le montrer.
+ * contrainte. Texte et `hidden` posés ensemble, comme `repliPolices` et
+ * `livrablesElagues` : la balise reste vide dans `index.html`.
  */
 async function afficherEmplacement() {
-  const mode = await invoke('emplacement_mode');
-  $('reglagesLectureSeule').hidden = mode !== 'portable-lecture-seule';
+  const bloque = (await invoke('emplacement_mode')) === 'portable-lecture-seule';
+  $('reglagesLectureSeule').textContent = bloque
+    ? 'Version portable en lecture seule : le dossier « donnees », à côté de '
+      + "l'application, n'accepte pas l'écriture. Rien ne sera enregistré — ni les "
+      + 'projets récents, ni les maquettes, ni les réglages de diffusion. Déplier '
+      + "l'archive sur un support inscriptible pour les retrouver."
+    : '';
+  $('reglagesLectureSeule').hidden = !bloque;
 }
 ```
 
