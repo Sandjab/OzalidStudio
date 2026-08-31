@@ -182,6 +182,12 @@ PowerShell, ni par l'utilisateur qui l'appelle depuis un terminal. Rattacher la 
 du parent demanderait une dépendance Windows ; passer le chemin de sortie en argument
 n'en demande aucune, et c'est déjà la façon dont `examples/temoin.rs:62` prend la sienne.
 
+En mode installé, le rapport nomme le mode et renvoie au répertoire de configuration
+du système sans en écrire le chemin : le drapeau s'exécute **avant** que Tauri ne
+construise l'application, et le résolveur de chemins de Tauri n'existe pas encore. Ce
+n'est pas une lacune — la question à laquelle ce drapeau répond est « suis-je portable,
+et où écrit-on alors ? », et le § 11 documente l'autre cas.
+
 Le traitement se fait dans `run()`, avant que Tauri ne construise quoi que ce soit. Un
 argument inconnu est ignoré, comme aujourd'hui : ce drapeau ne fait pas de cet
 exécutable une commande.
