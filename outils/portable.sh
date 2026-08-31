@@ -22,7 +22,12 @@ ls "$POLICES"/*.ttf >/dev/null 2>&1 || { echo "aucune police dans $POLICES" >&2;
 
 # La même source de vérité que le contrôle de tag du job `publier` : la version de
 # l'application est celle de tauri.conf.json, et rien d'autre ne la porte.
-VERSION="$(node -p "require('$ICI/src-tauri/tauri.conf.json').version")"
+# En relatif et non en absolu : dans le Git Bash des runners Windows, `$ICI` est un
+# chemin MSYS (`/d/a/...`) que le runtime ne convertit que pour un argument qui
+# ressemble à un chemin — pas celui-ci, qui commence par `require(`. Node, binaire
+# natif, le résoudrait alors depuis la racine du lecteur courant : `MODULE_NOT_FOUND`.
+# `.github/workflows/windows.yml` fait déjà ce `node -p` en relatif pour la même raison.
+VERSION="$(cd "$ICI" && node -p "require('./src-tauri/tauri.conf.json').version")"
 NOM="Ozalid Studio $VERSION"
 
 rm -rf "$SORTIE"
@@ -44,5 +49,11 @@ ARCHIVE="$SORTIE/ozalid-studio_${VERSION}_x64-portable.zip"
 # où ce script tourne — la même raison qui fait passer `typst.sh` par `tar` pour
 # l'extraction. Le `-a` prend le format sur l'extension, et deflate.
 (cd "$SORTIE" && tar -a -cf "$ARCHIVE" "$NOM")
+
+# `-a` ne garantit le zip que si le `tar` du PATH est bsdtar : un GNU tar écrirait un
+# tar nommé `.zip`, qu'`Expand-Archive` refuserait — loin d'ici, côté CI. Une archive
+# zip commence par la signature « PK » : le vérifier ici rend l'ambiguïté bruyante
+# à la source plutôt que de la laisser remonter comme un échec de dépliage.
+[ "$(head -c2 "$ARCHIVE")" = "PK" ] || { echo "l'archive n'est pas un zip : le tar du PATH ne sait pas en écrire" >&2; exit 1; }
 
 echo "$ARCHIVE"
