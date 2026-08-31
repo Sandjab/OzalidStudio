@@ -283,6 +283,17 @@ pub fn catalogue_refus(refus: State<CatalogueRefus>) -> Vec<catalogue::Refus> {
     refus.0.clone()
 }
 
+/// Sous quel régime l'application écrit ce qui n'appartient pas à un livre.
+///
+/// L'accueil ne s'en sert que pour un cas — la lecture seule —, mais la commande rend
+/// les trois : un front qui n'aurait que le booléen « ça bloque » ne pourrait pas
+/// distinguer une archive portable d'une installation, et c'est la question suivante
+/// que pose quiconque cherche ses maquettes.
+#[tauri::command]
+pub fn emplacement_mode(e: State<crate::emplacement::Emplacement>) -> crate::emplacement::Mode {
+    e.mode
+}
+
 /// Importe un répertoire de travail de l'ancienne chaîne (son `livre.toml`).
 /// Le projet devient le projet ouvert, sans être enregistré : l'utilisateur choisit
 /// où poser le `.ozalid`.
@@ -2605,8 +2616,14 @@ pub fn livrable_vignettes(atelier: State<Atelier>) -> Result<BTreeMap<String, St
 }
 
 /// Répertoire de configuration de l'application, s'il est atteignable.
+///
+/// Résolu une fois au démarrage par `emplacement::resoudre`, et relu ici : selon qu'un
+/// marqueur voisine l'exécutable, c'est celui du système ou le `donnees/` de l'archive
+/// portable. Ce fichier n'a pas à savoir lequel.
 fn config(app: &tauri::AppHandle) -> Option<PathBuf> {
-    app.path().app_config_dir().ok()
+    app.state::<crate::emplacement::Emplacement>()
+        .racine
+        .clone()
 }
 
 /// Mémorise un projet dans les récents.

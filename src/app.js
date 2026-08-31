@@ -985,7 +985,24 @@ async function afficherAucunProjet() {
   $('etatEnregistrement').className = 'etat';
   majEtapes();
   await afficherRecents();
+  await afficherEmplacement();
   majPied();
+}
+
+/**
+ * Le seul mot que l'emplacement adresse à l'utilisateur, et il ne le dit que sous
+ * contrainte.
+ */
+async function afficherEmplacement() {
+  const mode = await invoke('emplacement_mode');
+  const bloque = mode === 'portable-lecture-seule';
+  $('reglagesLectureSeule').textContent = bloque
+    ? 'Version portable en lecture seule : le dossier « donnees », à côté de '
+      + 'l\'application, n\'accepte pas l\'écriture. Rien ne sera enregistré — ni les '
+      + 'projets récents, ni les maquettes, ni les réglages de diffusion. Déplier '
+      + 'l\'archive sur un support inscriptible pour les retrouver.'
+    : '';
+  $('reglagesLectureSeule').hidden = !bloque;
 }
 
 async function afficherRecents() {

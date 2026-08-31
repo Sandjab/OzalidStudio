@@ -5,6 +5,7 @@ pub mod detourage;
 pub mod diffusion;
 pub mod ean;
 pub mod ebook;
+pub mod emplacement;
 pub mod empreinte;
 pub mod envoi;
 pub mod epreuve;
@@ -25,6 +26,21 @@ pub mod projet;
 pub mod typst;
 
 pub fn run() {
+    // Avant Tauri, délibérément : ce drapeau répond sans ouvrir de fenêtre, et c'est
+    // par lui que la CI interroge l'archive réellement livrée. En mode installé il ne
+    // peut pas nommer le répertoire du système — le résolveur de Tauri n'existe pas
+    // encore — et le rapport le dit plutôt que de l'inventer.
+    if let Some(sortie) = emplacement::sortie_demandee(std::env::args().skip(1)) {
+        let rapport = emplacement::rapport(&emplacement::resoudre(None));
+        if let Err(e) = std::fs::write(&sortie, rapport) {
+            // Sans console sous Windows, personne ne lira ce message ; le code de
+            // sortie, lui, se lit — et c'est sur lui que la CI s'arrête.
+            eprintln!("rapport d'emplacement ({}) : {e}", sortie.display());
+            std::process::exit(1);
+        }
+        return;
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         // Ouvrir un PDF dans le lecteur du poste. La fenêtre n'affiche aucun document :
@@ -34,13 +50,17 @@ pub fn run() {
         .manage(commands::Atelier::default())
         .manage(commands::Interface::default())
         .setup(|app| {
-            // Première ligne du démarrage, et elle doit le rester : `providers()`
-            // initialiserait `PLATS` sur les seuls fournis, et les fichiers du poste
-            // seraient ignorés en silence. Le `expect` est ce qui le dirait tout haut.
             use tauri::Manager;
-            let refus = catalogue::initialiser(app.path().app_config_dir().ok().as_deref())
+            // Première ligne du démarrage, et elle doit le rester : le catalogue,
+            // les préférences et les récents du menu descendent tous de cette racine,
+            // et `providers()` initialiserait `PLATS` sur les seuls fournis si le
+            // catalogue était chargé avant qu'elle ne soit connue.
+            let emplacement = emplacement::resoudre(app.path().app_config_dir().ok());
+            let refus = catalogue::initialiser(emplacement.racine.as_deref())
                 .expect("le catalogue doit être chargé avant toute commande");
             app.manage(commands::CatalogueRefus(refus));
+            // Avant `menu::poser`, qui lit déjà cet état pour bâtir les récents.
+            app.manage(emplacement);
             menu::poser(app.handle())?;
             Ok(())
         })
@@ -98,6 +118,7 @@ pub fn run() {
             commands::providers_liste,
             commands::pods_liste,
             commands::catalogue_refus,
+            commands::emplacement_mode,
             commands::projet_importer,
             commands::projet_ouvrir,
             commands::projet_enregistrer_sous,
