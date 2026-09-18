@@ -173,6 +173,16 @@ impl Typst {
     fn lance(&self, args: &[&str]) -> Result<(String, String), String> {
         let mut cmd = Command::new(&self.binaire);
         cmd.args(args);
+        // `main.rs` pose `windows_subsystem = "windows"` en release : l'exécutable n'a
+        // pas de console, et Windows en alloue une à chaque enfant console qu'il
+        // lance — une fenêtre noire par appel de Typst. `CREATE_NO_WINDOW` l'en
+        // dispense ; `output()` capture de toute façon les deux sorties.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
         if !self.polices.is_empty() {
             for p in &self.polices {
                 cmd.arg("--font-path").arg(p);
